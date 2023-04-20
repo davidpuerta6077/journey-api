@@ -1,0 +1,29 @@
+{
+  "name": "sbs_api",
+  "version": "1.0.0",
+  "description": "Api Base Arquitecture",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon run api/index.js",
+    "BD": "nodemon run postgresql/index.js",
+    "PM2_API_USERS": "pm2 start api/index.js --name api-users",
+    "PM2_BD": "pm2 start postgresql/index.js --name bbdd"
+  },
+  "author": "David Santiago Puerta B.",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^5.1.0",
+    "body-parser": "^1.20.2",
+    "cheerio": "*",
+    "jsonwebtoken": "^9.0.0",
+    "node-fetch": "^3.3.0",
+    "pg": "^8.9.0",
+    "pm2": "^5.2.2",
+    "postgresql": "^0.0.1",
+    "request": "^2.88.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.20"
+  }
+}
