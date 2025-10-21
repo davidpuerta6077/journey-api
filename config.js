@@ -15,4 +15,7 @@ module.exports = {
         password: process.env.POSTGRESQL_PASSWORD || 'contraseña',
         database: process.env.POSTGRESQL_DB || 'sb-data'
     },
+    domain: {
+        url_base: process.env.URL_BASE || 'https://localhost:3001'
+    }
 }
