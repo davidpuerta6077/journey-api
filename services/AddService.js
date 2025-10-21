@@ -1,15 +1,15 @@
 import axios from 'axios';
-import config from '../config';
-
-const domain = config.domain.url_base;
 
 const AddService = async (endpoint, data) => {
   try {
-    const url = `${domain}/${endpoint}`;
+    const url = `${endpoint}`;
     const res = await axios.post(url, data, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json', 
+        'wstoken': '296ff6f74da897b46aeba8b5b533e92a', 
+      },
     });
-    return res.data.body;
+    return res;
 
   } catch (error) {
     console.error(error);
