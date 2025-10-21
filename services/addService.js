@@ -1,14 +1,14 @@
 import axios from 'axios';
 
-const AddService = async (endpoint, data) => {
+const addService = async (endpoint, data) => {
   try {
     const url = `${endpoint}`;
     const res = await axios.post(url, data, {
       headers: { 
-        'Content-Type': 'application/json', 
-        'wstoken': '296ff6f74da897b46aeba8b5b533e92a', 
+        'Content-Type': 'application/x-www-form-urlencoded'
       },
     });
+    console.log(res.data.message)
     return res;
 
   } catch (error) {
@@ -17,4 +17,4 @@ const AddService = async (endpoint, data) => {
   }
 };
 
-export default AddService;
+export default addService
