@@ -17,5 +17,6 @@ module.exports = {
     },
     domain: {
         url_base: process.env.URL_BASE || 'https://localhost:3001'
-    }
+    }, 
+    moodle_token: '296ff6f74da897b46aeba8b5b533e92a'
 }

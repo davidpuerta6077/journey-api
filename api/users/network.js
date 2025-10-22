@@ -3,25 +3,27 @@ const response = require('../../network/response')
 const router = Router();
 const ctrl = require('./index');
 const { default: addService } = require('../../services/addService');
+const config = require('../../config');
 const tableInjected = 'test';
-
-
 
 router.post('/add_user', async (req, res) => {
     const data = {
-        'wstoken': '296ff6f74da897b46aeba8b5b533e92a', 
+        'wstoken': config.moodle_token, 
         'wsfunction': 'core_user_create_users', 
         'moodlewsrestformat': 'json', 
-        'users[0][username]': 'programador.digital3@pascualbravo.edu.co',
-        'users[0][lastname]': 'Arango',
-        'users[0][email]': 'programador.digital3@pascualbravo.edu.co',
-        'users[0][password]': 'Eve_0996',
-        'users[0][city]': 'Medellín',
-        'users[0][country]': 'CO'
+
+        'users[0][username]': req.body.username,
+        'users[0][firstname]': req.body.firstname,
+        'users[0][lastname]': req.body.lastname,
+        'users[0][email]': req.body.email,
+        'users[0][password]': req.body.password,
+        'users[0][city]': req.body.city,
+        'users[0][country]': req.body.coutry
     }
     try {
-        const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
-        response.success(req, res, result, 200);    
+        // const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
+        console.log(data)
+        response.success(req, res, "result", 200);    
     } catch (error) {
         response.error(req, res, error.message, 500);
     }

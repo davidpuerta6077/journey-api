@@ -9,7 +9,7 @@ const addService = async (endpoint, data) => {
       },
     });
     console.log(res.data.message)
-    return res;
+    return res.data;
 
   } catch (error) {
     console.error(error);
