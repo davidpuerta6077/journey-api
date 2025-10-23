@@ -6,29 +6,6 @@ const { default: addService } = require('../../services/addService');
 const config = require('../../config');
 const tableInjected = 'test';
 
-router.post('/add_user', async (req, res) => {
-    const data = {
-        'wstoken': config.moodle_token, 
-        'wsfunction': 'core_user_create_users', 
-        'moodlewsrestformat': 'json', 
-
-        'users[0][username]': req.body.username,
-        'users[0][firstname]': req.body.firstname,
-        'users[0][lastname]': req.body.lastname,
-        'users[0][email]': req.body.email,
-        'users[0][password]': req.body.password,
-        'users[0][city]': req.body.city,
-        'users[0][country]': req.body.coutry
-    }
-    try {
-        // const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
-        console.log(data)
-        response.success(req, res, "result", 200);    
-    } catch (error) {
-        response.error(req, res, error.message, 500);
-    }
-});
-
 router.post('/add_course', async (req, res) => {
     const data = {
         'wstoken': config.moodle_token, 
@@ -75,25 +52,7 @@ router.post('/add_category', async (req, res) => {
     }
 });
 
-router.post('/enroll_users', async (req, res) => {
-    const data = {
-        'wstoken': config.moodle_token, 
-        'wsfunction': 'enrol_manual_enrol_users', 
-        'moodlewsrestformat': 'json', 
 
-        'enrolments[0][roleid]': req.body.roleid,
-        'enrolments[0][userid]': req.body.userid,
-        'enrolments[0][courseid]': req.body.courseid
-             
-    }
-    try {
-        const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
-        console.log(data)
-        response.success(req, res, result, 200);    
-    } catch (error) {
-        response.error(req, res, error.message, 500);
-    }
-});
 
 
 router.get('/list', async (req, res) => {

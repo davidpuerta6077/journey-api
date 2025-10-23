@@ -6,19 +6,15 @@ const { default: addService } = require('../../services/addService');
 const config = require('../../config');
 const tableInjected = 'test';
 
-router.post('/add_user', async (req, res) => {
+router.post('/grades_user', async (req, res) => {
     const data = {
         'wstoken': config.moodle_token, 
-        'wsfunction': 'core_user_create_users', 
+        'wsfunction': 'gradereport_user_get_grade_items', 
         'moodlewsrestformat': 'json', 
 
-        'users[0][username]': req.body.username,
-        'users[0][firstname]': req.body.firstname,
-        'users[0][lastname]': req.body.lastname,
-        'users[0][email]': req.body.email,
-        'users[0][password]': req.body.password,
-        'users[0][city]': req.body.city,
-        'users[0][country]': req.body.coutry
+        'courseid': req.body.username,
+        'userid': req.body.firstname
+    
     }
     try {
         // const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
@@ -29,72 +25,7 @@ router.post('/add_user', async (req, res) => {
     }
 });
 
-router.post('/add_course', async (req, res) => {
-    const data = {
-        'wstoken': config.moodle_token, 
-        'wsfunction': 'core_course_create_courses', 
-        'moodlewsrestformat': 'json', 
-
-        'courses[0][fullname]': req.body.fullname,
-        'courses[0][shortname]': req.body.shortname,
-        'courses[0][categoryid]': req.body.categoryid,
-        'courses[0][idnumber]': req.body.idnumber,
-        'courses[0][summary]': req.body.summary,
-        'courses[0][visible]': req.body.visible,
-        'courses[0][format]': req.body.format,
-        'courses[0][numsections]': req.body.numsections,
-        
-    }
-    try {
-        //const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
-        console.log(data)
-        response.success(req, res, "result", 200);    
-    } catch (error) {
-        response.error(req, res, error.message, 500);
-    }
-});
-
-router.post('/add_category', async (req, res) => {
-    const data = {
-        'wstoken': config.moodle_token, 
-        'wsfunction': 'core_course_create_categories', 
-        'moodlewsrestformat': 'json', 
-
-        'categories[0][name]': req.body.name,
-        'categories[0][parent]': req.body.parent,
-        'categories[0][idnumber]': req.body.idnumber,
-        'categories[0][description]': req.body.description,
-        'categories[0][descriptionformat]': req.body.descriptionformat        
-    }
-    try {
-        //const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
-        console.log(data)
-        response.success(req, res, "result", 200);    
-    } catch (error) {
-        response.error(req, res, error.message, 500);
-    }
-});
-
-router.post('/enroll_users', async (req, res) => {
-    const data = {
-        'wstoken': config.moodle_token, 
-        'wsfunction': 'enrol_manual_enrol_users', 
-        'moodlewsrestformat': 'json', 
-
-        'enrolments[0][roleid]': req.body.roleid,
-        'enrolments[0][userid]': req.body.userid,
-        'enrolments[0][courseid]': req.body.courseid
-             
-    }
-    try {
-        const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
-        console.log(data)
-        response.success(req, res, result, 200);    
-    } catch (error) {
-        response.error(req, res, error.message, 500);
-    }
-});
-
++
 
 router.get('/list', async (req, res) => {
     try {
