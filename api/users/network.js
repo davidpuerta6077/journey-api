@@ -72,4 +72,12 @@ router.put('/update', async (req, res) => {
     }
 });
 
+router.get('/test', async (req, res) => {
+    try {
+        response.success(req, res, "API Users Working!", 200);    
+    } catch (error) {
+        response.error(req, res, error.message, 500); 
+    }
+})
+
 module.exports = router ;
