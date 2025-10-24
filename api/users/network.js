@@ -29,7 +29,64 @@ router.post('/add_user', async (req, res) => {
     }
 });
 
+router.post('/update_user', async (req, res) => {
+    const data = {
+        'wstoken': config.moodle_token, 
+        'wsfunction': 'core_user_update_users', 
+        'moodlewsrestformat': 'json', 
 
+        'users[0][id]': req.body.id,
+        'users[0][firstname]': req.body.firstname,
+        'users[0][lastname]': req.body.lastname,
+        'users[0][email]': req.body.email,
+        'users[0][password]': req.body.password,
+        'users[0][city]': req.body.city
+        
+    }
+    try {
+        //const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
+        console.log(data)
+        response.success(req, res, "result", 200);    
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+router.post('/delete_user', async (req, res) => {
+    const data = {
+        'wstoken': config.moodle_token, 
+        'wsfunction': 'core_user_delete_users', 
+        'moodlewsrestformat': 'json', 
+
+        'userids[0]': req.body.userids
+       
+        
+    }
+    try {
+        //const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
+        console.log(data)
+        response.success(req, res, "result", 200);    
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
+router.post('/search_user', async (req, res) => {
+    const data = {
+        'wstoken': config.moodle_token, 
+        'wsfunction': 'core_user_get_users', 
+        'moodlewsrestformat': 'json', 
+
+        'criteria[0][key]': req.body.key,
+        'criteria[0][value]	': req.body.value
+    }
+    try {
+        const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
+        console.log(data)
+        response.success(req, res, result, 200);    
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
 
 
 router.get('/list', async (req, res) => {

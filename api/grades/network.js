@@ -12,8 +12,8 @@ router.post('/grades_user', async (req, res) => {
         'wsfunction': 'gradereport_user_get_grade_items', 
         'moodlewsrestformat': 'json', 
 
-        'courseid': req.body.username,
-        'userid': req.body.firstname
+        'courseid': req.body.courseid,
+        'userid': req.body.userid
     
     }
     try {
