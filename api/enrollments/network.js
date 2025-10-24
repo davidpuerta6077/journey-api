@@ -20,9 +20,47 @@ router.post('/enroll_users', async (req, res) => {
              
     }
     try {
+        //const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
+        console.log(data)
+        response.success(req, res, "result", 200);    
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
+router.post('/unenroll_users', async (req, res) => {
+    const data = {
+        'wstoken': config.moodle_token, 
+        'wsfunction': 'enrol_manual_unenrol_users', 
+        'moodlewsrestformat': 'json', 
+
+        'enrolments[0][roleid]': req.body.roleid,
+        'enrolments[0][userid]': req.body.userid,
+        'enrolments[0][courseid]': req.body.courseid
+             
+    }
+    try {
         const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
         console.log(data)
         response.success(req, res, result, 200);    
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
+router.post('/list_enroll', async (req, res) => {
+    const data = {
+        'wstoken': config.moodle_token, 
+        'wsfunction': 'core_enrol_get_enrolled_users', 
+        'moodlewsrestformat': 'json', 
+
+        'enrolments[0][courseid]': req.body.courseid
+             
+    }
+    try {
+        //const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
+        console.log(data)
+        response.success(req, res, "result", 200);    
     } catch (error) {
         response.error(req, res, error.message, 500);
     }
