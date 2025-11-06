@@ -1,10 +1,18 @@
 const { Router } = require('express');
+const multer = require('multer');
+const XLSX = require('xlsx');
+const fs = require('fs');
+const axios = require('axios');
+const path = require('path');
 const response = require('../../network/response')
 const router = Router();
 const ctrl = require('./index');
 const { default: addService } = require('../../services/addService');
 const config = require('../../config');
-const tableInjected = 'test';
+const controller = require('./controller');
+
+
+
 
 router.post('/add_user', async (req, res) => {
     const data = {
@@ -21,9 +29,9 @@ router.post('/add_user', async (req, res) => {
         'users[0][country]': req.body.coutry
     }
     try {
-        // const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
+        const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
         console.log(data)
-        response.success(req, res, "result", 200);    
+        response.success(req, res, result, 200);    
     } catch (error) {
         response.error(req, res, error.message, 500);
     }
@@ -80,61 +88,65 @@ router.post('/search_user', async (req, res) => {
         'criteria[0][value]	': req.body.value
     }
     try {
-        const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
+        //const result = await addService("https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php", data)
         console.log(data)
-        response.success(req, res, result, 200);    
+        response.success(req, res, "result", 200);    
     } catch (error) {
         response.error(req, res, error.message, 500);
     }
 });
 
-
-router.get('/list', async (req, res) => {
-    try {
-        const id = req.params.id
-        const list = await ctrl.list(tableInjected, id);
-        response.success(req, res, list, 200);    
-    } catch (error) {
-        response.error(req, res, error.message, 500); 
+// Endpoint para cargar el archivo Excel
+router.post('/upload-excel', async (req, res) => {
+    if (!req.files || Object.keys(req.files).length === 0) {
+        return response.error(req, res, 'No se ha subido ningún archivo.', 400);
     }
-})
 
+    let excelFile = req.files.excel;
+    const uploadPath = path.join(__dirname, '../../uploads', excelFile.name);
 
-router.post('/add', async (req, res) => {
     try {
-        await ctrl.addElement(tableInjected, data = {
-            "data": req.body.data,
-        });
-        response.success(req, res, `Item Created`, 200);    
+        await excelFile.mv(uploadPath);
+        response.success(req, res, { message: 'Archivo subido con éxito', filePath: uploadPath }, 200);
+    } catch (err) {
+        console.error(err);
+        response.error(req, res, 'Error al subir el archivo.', 500);
+    }
+});
+
+// Endpoint para procesar el archivo Excel y crear usuarios en Moodle
+router.post('/process-excel', async (req, res) => {
+    const { filePath } = req.body;
+
+    if (!filePath) {
+        return response.error(req, res, 'No se ha especificado la ruta del archivo a procesar.', 400);
+    }
+
+    try {
+        // Ahora, el controller manejará la llamada a Moodle directamente
+        const result = await controller.processExcelAndCreateUsers(filePath, config.moodle_token);
+
+        if (result.errors.length > 0) {
+            const errorExcelPath = await controller.generateErrorExcel(result.errors);
+            response.success(req, res, {
+                message: 'Proceso completado con errores. Descargue el archivo de errores.',
+                successCount: result.successCount,
+                errorCount: result.errorCount,
+                errorFileUrl: `/uploads/${path.basename(errorExcelPath)}`
+            }, 200);
+        } else {
+            response.success(req, res, { message: 'Usuarios cargados con éxito.', successCount: result.successCount }, 200);
+        }
     } catch (error) {
-        response.error(req, res, error.message, 500);
+        console.error("Error al procesar el archivo Excel:", error);
+        response.error(req, res, `Error interno al procesar el archivo Excel: ${error.message}`, 500);
+    } finally {
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
     }
 });
 
 
-
-
-
-
-router.put('/update', async (req, res) => {
-    try {
-        let { id, data } = req.body;
-        await ctrl.updateElement(tableInjected, data = {
-            "id": id,
-            "data": data,
-        });
-        response.success(req, res, `Item updated`, 200);     
-    } catch (error) {
-        response.error(req, res, error.message, 500);
-    }
-});
-
-router.get('/test', async (req, res) => {
-    try {
-        response.success(req, res, "API Users Working!", 200);    
-    } catch (error) {
-        response.error(req, res, error.message, 500); 
-    }
-})
 
 module.exports = router ;
