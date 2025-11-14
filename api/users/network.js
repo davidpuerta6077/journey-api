@@ -123,7 +123,6 @@ router.post('/process-excel', async (req, res) => {
     }
 
     try {
-        // Ahora, el controller manejará la llamada a Moodle directamente
         const result = await controller.processExcelAndCreateUsers(filePath, config.moodle_token);
 
         if (result.errors.length > 0) {
