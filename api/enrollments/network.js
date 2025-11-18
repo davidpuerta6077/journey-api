@@ -6,6 +6,8 @@ const { default: addService } = require('../../services/addService');
 const config = require('../../config');
 const tableInjected = 'test';
 const axios = require('axios');
+const path = require('path');  
+const fs = require('fs');
 
 
 router.post('/enroll_users', async (req, res) => {
@@ -96,10 +98,10 @@ router.post('/process-excel', async (req, res) => {
 
     try {
         // Pasa moodleToken y la función addService (si se define aquí o se inyecta) al controlador
-        const result = await controller.processExcelAndEnrolUsers(filePath, config.moodle_token, addService);
+        const result = await ctrl.processExcelAndEnrolUsers(filePath, config.moodle_token, addService);
 
         if (result.errors.length > 0) {
-            const errorExcelPath = await controller.generateErrorExcel(result.errors);
+            const errorExcelPath = await ctrl.generateErrorExcel(result.errors);
             response.success(req, res, {
                 message: 'Proceso de matrículas completado con errores. Descargue el archivo de errores.',
                 successCount: result.successCount,

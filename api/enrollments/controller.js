@@ -1,28 +1,29 @@
-module.exports = (injectedDB) => {
-    
-    
-    let data = injectedDB
 
-    function list(TABLA) {
-        return data.listAllRemote(TABLA);
-    };
+// module.exports = (injectedDB) => {
+    
+    
+//     let data = injectedDB
+
+//     function list(TABLA) {
+//         return data.listAllRemote(TABLA);
+//     };
 
  
     
-    async function addElement (TABLA, datas) {
-        return data.insertItem(TABLA, datas)
-    };
+//     async function addElement (TABLA, datas) {
+//         return data.insertItem(TABLA, datas)
+//     };
 
-    async function updateElement (TABLA, datas) {
-        return data.updateItem(TABLA, datas)
-    };
+//     async function updateElement (TABLA, datas) {
+//         return data.updateItem(TABLA, datas)
+//     };
 
-    return {
-        list,
-        addElement, 
-        updateElement
-    };
-};
+//     return {
+//         list,
+//         addElement, 
+//         updateElement
+//     };
+// };
 
 // api/enrollments/controller.js
 const xlsx = require('xlsx');
@@ -115,19 +116,43 @@ async function getCourseIdByCode(code, moodleToken, addServiceFunction) {
 async function getRoleIdByName(roleName, moodleToken, addServiceFunction) {
     const params = {
         'wstoken': moodleToken,
-        'wsfunction': 'core_role_get_roles',
+        'wsfunction': 'core_role_get_roles_by_capability',
         'moodlewsrestformat': 'json',
+        //'capabilities[0]': 'moodle/course:view'  Esto obtendrá todos los roles con capacidad de ver cursos
     };
+
     try {
-        const roles = await addServiceFunction(MOODLE_WEBSERVICE_URL, params);
-        const role = roles.find(r => r.shortname === roleName || r.name === roleName);
-        return role ? role.id : null;
+        const response = await addServiceFunction(MOODLE_WEBSERVICE_URL, params);
+        console.log("Respuesta completa de Moodle al obtener roles:", JSON.stringify(response, null, 2)); // Agrega esto
+
+        const roles = response?.roles || [];
+
+        if (!Array.isArray(roles)) {
+            console.error("Respuesta inesperada al obtener roles:", response);
+            return null;
+        }
+
+        const targetRoleName = roleName.trim().toLowerCase();
+        console.log("Buscando el rol con nombre:", targetRoleName); // Agrega esto
+
+        const foundRole = roles.find(r =>
+            r.shortname.toLowerCase() === targetRoleName ||
+            r.name.toLowerCase() === targetRoleName
+        );
+
+        if (foundRole) {
+            console.log("Rol encontrado:", foundRole);
+            return foundRole.id;
+        } else {
+            console.log("No se encontró el rol con el nombre o nombre corto:", targetRoleName, "en la lista de roles devuelta.");
+            return null;
+        }
+
     } catch (error) {
         console.error(`Error al obtener ID de rol para ${roleName}:`, error.message);
         return null;
     }
 }
-
 
 // Función para validar una matrícula
 async function validateEnrollment(enrollmentData, moodleToken, addServiceFunction) {

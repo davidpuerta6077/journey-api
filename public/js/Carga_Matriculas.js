@@ -1,4 +1,3 @@
-// public/Carga_Matriculas.js
 const fileInput = document.getElementById('fileInput');
 const resultBox = document.getElementById('resultBox');
 let uploadedFilePath = null;
@@ -81,7 +80,7 @@ async function process_excel() {
 }
 
 function descargarPlantillaCorta() {
-    const headers = [['email', 'code', 'rol']]; // 'code' para código de curso
+    const headers = [['email', 'code', 'rol','state','period']];
     const ws = XLSX.utils.aoa_to_sheet(headers);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Plantilla Matriculas Corta');
@@ -89,7 +88,7 @@ function descargarPlantillaCorta() {
 }
 
 function descargarPlantillaExtendida() {
-    const headers = [['email', 'code', 'rol', 'timestart', 'timeend', 'suspend', 'period', 'state']];
+    const headers = [['email', 'code', 'rol', 'state', 'period', 'name', 'last_name', 'document','personalMail', 'phone', 'cellPhone', 'Fecha_de_Nacimiento', 'jornada', 'departamento', 'plan_estudios']];
     const ws = XLSX.utils.aoa_to_sheet(headers);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Plantilla Matriculas Extendida');
