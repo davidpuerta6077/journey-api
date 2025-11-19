@@ -17,4 +17,4 @@ const DeleteService = async (endpoint, id) => {
   }
 };
 
-export default DeleteService;
+module.exports= {DeleteService};

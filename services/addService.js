@@ -17,4 +17,4 @@ const addService = async (endpoint, data) => {
   }
 };
 
-export default addService
+module.exports= {addService};

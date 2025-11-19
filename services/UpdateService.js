@@ -17,4 +17,4 @@ const UpdateService = async (endpoint, id, data) => {
   }
 };
 
-export default UpdateService;
+module.exports= {UpdateService};
