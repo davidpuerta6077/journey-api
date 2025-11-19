@@ -1,5 +1,5 @@
-import axios from 'axios';
-import config from '../config';
+const axios = require('axios');
+const config = require('../config');
 
 const domain = config.domain.url_base;
 
