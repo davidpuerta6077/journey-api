@@ -26,10 +26,11 @@
 // };
 
 // api/enrollments/controller.js
+// api/enrollments/controller.js
 const xlsx = require('xlsx');
 const path = require('path');
 const fs = require('fs');
-const axios = require('axios'); 
+const axios = require('axios');
 
 // URL de tu Moodle 
 const MOODLE_WEBSERVICE_URL = "https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php";
@@ -40,24 +41,20 @@ async function addService(url, data) {
         const response = await axios.post(url, null, { params: data });
         return response.data;
     } catch (error) {
-        console.error('Error en addService para matrículas:', error.response ? error.response.data : error.message);
-        throw new Error(error.response ? (error.response.data.error || 'Error en el servicio externo') : 'Error de conexión');
+        console.error('Error en addService:', error.response ? error.response.data : error.message);
+        throw new Error(error.response ? (error.response.data.error || 'Error externo') : 'Error de conexión');
     }
 }
 
-// Función para leer el archivo Excel
+// Función para leer Excel
 function readExcel(filePath) {
     const workbook = xlsx.readFile(filePath);
-    const sheetName = workbook.SheetNames[0]; 
+    const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    // Asegurarse de limpiar espacios en blanco de las claves si es necesario
-    const data = xlsx.utils.sheet_to_json(worksheet, { defval: '' }); 
-    return data;
+    return xlsx.utils.sheet_to_json(worksheet, { defval: '' });
 }
 
-// -----------------------------------------------------------------
-// CAMBIO 1: Eliminado el tercer argumento 'addServiceFunction'
-// -----------------------------------------------------------------
+// --- BUSCADORES ---
 
 async function getUserIdByEmail(email, moodleToken) {
     const params = {
@@ -68,169 +65,134 @@ async function getUserIdByEmail(email, moodleToken) {
         'values[0]': email
     };
     try {
-        // CAMBIO: Llamamos directamente a addService
         const result = await addService(MOODLE_WEBSERVICE_URL, params);
         if (result && Array.isArray(result) && result.length > 0) {
-            return result[0].id; 
+            return result[0].id;
         }
         return null;
     } catch (error) {
-        console.error(`Error al obtener ID de usuario para ${email}:`, error.message);
+        console.error(`Error buscando usuario ${email}:`, error.message);
         return null;
     }
 }
 
 async function getCourseIdByCode(code, moodleToken) {
+    // Nota: Para optimizar, en producción deberías cachear la lista de cursos si son muchos.
     const params = {
         'wstoken': moodleToken,
-        'wsfunction': 'core_course_get_courses', 
+        'wsfunction': 'core_course_get_courses',
         'moodlewsrestformat': 'json',
     };
-
     try {
-        // CAMBIO: Llamamos directamente a addService
         const allCourses = await addService(MOODLE_WEBSERVICE_URL, params);
-        // Asegúrate que tu Excel tiene 'code' y en Moodle coincida con idnumber o shortname
+        // Busca coincidencia en idnumber (recomendado) o shortname
         const course = allCourses.find(c => String(c.idnumber) === String(code) || String(c.shortname) === String(code));
         return course ? course.id : null;
     } catch (error) {
-        console.error(`Error al obtener ID de curso para ${code}:`, error.message);
+        console.error(`Error buscando curso ${code}:`, error.message);
         return null;
     }
 }
-
 
 async function getRoleIdByName(roleName, moodleToken) {
-    // 1. Normalizamos el nombre (todo a minúsculas y sin espacios extra)
-    const inputName = roleName.trim().toLowerCase();
-
-
+    const inputName = roleName ? String(roleName).trim().toLowerCase() : 'student';
+    
+    // Mapa estático para evitar llamadas innecesarias a la API
     const staticRoleMap = {
-        'manager': 1,
-        'gestor': 1,
-        'coursecreator': 2,
-        'creador': 2,
-        'editingteacher': 3,
-        'profesor': 3,
-        'docente': 3,
-        'teacher': 4,
-        'profesor sin permisos': 4,
-        'student': 5,
-        'estudiante': 5,
-        'alumno': 5,
-        'aprendiz': 5,
-        'guest': 6,
-        'invitado': 6
+        'manager': 1, 'gestor': 1,
+        'coursecreator': 2, 'creador': 2,
+        'editingteacher': 3, 'profesor': 3, 'docente': 3,
+        'teacher': 4, 'profesor sin permisos': 4,
+        'student': 5, 'estudiante': 5, 'alumno': 5, 'aprendiz': 5,
+        'guest': 6, 'invitado': 6
     };
 
-    if (staticRoleMap[inputName]) {
-        console.log(`Rol encontrado en mapa fijo: "${inputName}" -> ID: ${staticRoleMap[inputName]}`);
-        return staticRoleMap[inputName];
+    if (staticRoleMap[inputName]) return staticRoleMap[inputName];
+
+    // Fallback a API si es un rol raro
+    try {
+        const params = {
+            'wstoken': moodleToken,
+            'wsfunction': 'core_role_get_assignable_roles',
+            'moodlewsrestformat': 'json',
+            'contextid': 1
+        };
+        const roles = await addService(MOODLE_WEBSERVICE_URL, params);
+        if (Array.isArray(roles)) {
+            const found = roles.find(r => r.shortname.toLowerCase() === inputName || r.name.toLowerCase() === inputName);
+            return found ? found.id : 5; // Retorna 5 (estudiante) por defecto si no encuentra nada
+        }
+        return 5;
+    } catch (e) {
+        return 5; // Default seguro
     }
+}
 
-   
-    console.log(`El rol "${inputName}" no es estándar, buscando en API...`);
-
+// --- NUEVA FUNCIÓN: CREAR USUARIO ---
+async function createUserInMoodle(userData, moodleToken) {
     const params = {
         'wstoken': moodleToken,
-        'wsfunction': 'core_role_get_assignable_roles', // Función diferente, más fiable
+        'wsfunction': 'core_user_create_users',
         'moodlewsrestformat': 'json',
-        'contextid': 1 // Contexto del sistema
+        
+        // Datos obligatorios
+        'users[0][username]': userData.email.toLowerCase(), // Usamos email como username
+        'users[0][password]': 'Pascual2025*', // Contraseña por defecto (cámbiala si quieres)
+        'users[0][firstname]': userData.name || 'Sin Nombre',
+        'users[0][lastname]': userData.last_name || 'Sin Apellido',
+        'users[0][email]': userData.email,
+        'users[0][auth]': 'manual',
+        
+        // Datos opcionales (mapeados desde tu Excel extendido)
+        'users[0][idnumber]': userData.document || '', // Cédula/Documento
+        'users[0][phone1]': userData.phone || userData.cellPhone || '',
+        'users[0][city]': userData.departamento || 'Medellín',
+        'users[0][country]': 'CO'
     };
 
     try {
+        console.log(`Intentando crear usuario: ${userData.email}`);
         const response = await addService(MOODLE_WEBSERVICE_URL, params);
         
-        // Esta función devuelve un array directo, no un objeto { roles: ... }
-        const roles = Array.isArray(response) ? response : [];
-
-        if (roles.length === 0) {
-            console.error("La API devolvió una lista de roles vacía. Verifica los permisos del Token.");
-            return null;
+        // Si hay error (ej: username ya existe, aunque ya lo verificamos antes)
+        if (response.exception) {
+            throw new Error(response.message);
         }
 
-        const foundRole = roles.find(r => 
-            r.shortname.toLowerCase() === inputName || 
-            r.name.toLowerCase() === inputName // El nombre visible (ej: "Estudiante")
-        );
-
-        if (foundRole) {
-            console.log(`Rol encontrado por API: ${foundRole.shortname} (ID: ${foundRole.id})`);
-            return foundRole.id;
+        // Moodle devuelve un array con los usuarios creados [{id: 123, username: "..."}]
+        if (Array.isArray(response) && response.length > 0) {
+            return response[0].id;
         } else {
-            console.log(`No se encontró el rol "${inputName}" en la API.`);
-            return null;
+            throw new Error("Moodle no devolvió el ID del usuario creado.");
         }
-
     } catch (error) {
-        console.error(`Error al consultar API de roles:`, error.message);
-        return null;
+        throw new Error(`Error creando usuario: ${error.message}`);
     }
 }
 
-// Función para validar una matrícula
-async function validateEnrollment(enrollmentData, moodleToken) {
-    const errors = [];
+// --- FUNCIONES PRINCIPALES ---
 
-    enrollmentData.code = (enrollmentData.code != null) ? String(enrollmentData.code).trim() : ''; 
-    enrollmentData.email = (enrollmentData.email != null) ? String(enrollmentData.email).trim() : ''; 
-    enrollmentData.rol = (enrollmentData.rol != null) ? String(enrollmentData.rol).trim() : ''; 
-
-    if (!enrollmentData.code) errors.push('El código del curso es obligatorio.');
-    if (!enrollmentData.email) errors.push('El email del usuario es obligatorio.');
-    if (!enrollmentData.rol) errors.push('El rol es obligatorio.');
-
-    // Si faltan datos básicos, no intentamos buscar en Moodle para ahorrar peticiones
-    if (errors.length > 0) return errors;
-
-    // CAMBIO: Ya no pasamos addServiceFunction
-    let userId = await getUserIdByEmail(enrollmentData.email, moodleToken);
-    let courseId = await getCourseIdByCode(enrollmentData.code, moodleToken);
-    let roleId = await getRoleIdByName(enrollmentData.rol, moodleToken);
-
-    if (!userId) errors.push(`No se encontró el usuario con email: ${enrollmentData.email}.`);
-    if (!courseId) errors.push(`No se encontró el curso con código: ${enrollmentData.code}.`);
-    if (!roleId) errors.push(`No se encontró el rol con nombre: ${enrollmentData.rol}.`);
-
-    enrollmentData.userid = userId;
-    enrollmentData.courseid = courseId;
-    enrollmentData.roleid = roleId;
-
-    return errors;
-}
-
-// Función para matricular un usuario en Moodle
-async function enrolUserInMoodle(enrollmentData, moodleToken) {
-    const FUNCTION_NAME = 'enrol_manual_enrol_users';
-
+async function enrolUserInMoodle(userId, courseId, roleId, moodleToken) {
     const params = {
         'wstoken': moodleToken,
-        'wsfunction': FUNCTION_NAME,
+        'wsfunction': 'enrol_manual_enrol_users',
         'moodlewsrestformat': 'json',
-        'enrolments[0][userid]': enrollmentData.userid,
-        'enrolments[0][courseid]': enrollmentData.courseid,
-        'enrolments[0][roleid]': enrollmentData.roleid,
-        'enrolments[0][timestart]': enrollmentData.timestart || 0, 
-        'enrolments[0][timeend]': enrollmentData.timeend || 0,   
-        'enrolments[0][suspend]': enrollmentData.suspend || 0,   
+        'enrolments[0][userid]': userId,
+        'enrolments[0][courseid]': courseId,
+        'enrolments[0][roleid]': roleId
     };
 
     try {
-        // CAMBIO: Llamamos directamente a addService
         const response = await addService(MOODLE_WEBSERVICE_URL, params);
-        
         if (response && response.exception) {
-            console.error('Error de Moodle al matricular:', response);
-            return { success: false, error: response.message || 'Error desconocido de Moodle' };
+            return { success: false, error: response.message };
         }
         return { success: true };
     } catch (error) {
-        console.error('Error en la llamada a la API de Moodle para matrícula:', error.message);
         return { success: false, error: error.message };
     }
 }
 
-// Función principal (Nota: quité addServiceFunction de los argumentos)
 async function processExcelAndEnrolUsers(filePath, moodleToken) {
     const excelData = readExcel(filePath);
     const errors = [];
@@ -238,48 +200,92 @@ async function processExcelAndEnrolUsers(filePath, moodleToken) {
     let errorCount = 0;
 
     for (const row of excelData) {
-        // CAMBIO: Llamada simplificada
-        const validationErrors = await validateEnrollment(row, moodleToken);
+        const rowErrors = [];
         
-        if (validationErrors.length > 0) {
-            errors.push({ ...row, errors: validationErrors.join(', ') });
+        // 1. Validar datos mínimos obligatorios
+        if (!row.email) rowErrors.push('Falta email');
+        if (!row.code) rowErrors.push('Falta código curso');
+        
+        // Limpieza básica
+        const email = String(row.email || '').trim();
+        const code = String(row.code || '').trim();
+        const roleName = String(row.rol || 'estudiante').trim();
+
+        if (rowErrors.length > 0) {
+            errors.push({ ...row, errors: rowErrors.join(', ') });
             errorCount++;
-        } else {
-            // CAMBIO: Llamada simplificada
-            const moodleResult = await enrolUserInMoodle(row, moodleToken);
-            if (moodleResult.success) {
+            continue;
+        }
+
+        try {
+            // 2. Obtener IDs (Curso y Rol)
+            const courseId = await getCourseIdByCode(code, moodleToken);
+            const roleId = await getRoleIdByName(roleName, moodleToken);
+
+            if (!courseId) {
+                errors.push({ ...row, errors: `Curso no encontrado: ${code}` });
+                errorCount++;
+                continue;
+            }
+
+            // 3. Gestionar Usuario (Buscar o Crear)
+            let userId = await getUserIdByEmail(email, moodleToken);
+
+            if (!userId) {
+                // El usuario NO existe. Verificamos si podemos crearlo.
+                // ¿Tenemos datos mínimos para crear? (Nombre y Apellido)
+                if (row.name && row.last_name) {
+                    try {
+                        userId = await createUserInMoodle(row, moodleToken);
+                        console.log(`Usuario creado exitosamente: ${email} (ID: ${userId})`);
+                    } catch (createError) {
+                        errors.push({ ...row, errors: `No existe y falló al crear: ${createError.message}` });
+                        errorCount++;
+                        continue; 
+                    }
+                } else {
+                    // No existe y faltan datos en el Excel para crearlo
+                    errors.push({ ...row, errors: 'Usuario no existe y faltan datos (name, last_name) para crearlo.' });
+                    errorCount++;
+                    continue;
+                }
+            }
+
+            // 4. Matricular
+            const enrolResult = await enrolUserInMoodle(userId, courseId, roleId, moodleToken);
+            
+            if (enrolResult.success) {
                 successCount++;
             } else {
-                errors.push({ ...row, errors: `Error al matricular en Moodle: ${moodleResult.error}` });
+                errors.push({ ...row, errors: `Fallo al matricular: ${enrolResult.error}` });
                 errorCount++;
             }
+
+        } catch (generalError) {
+            errors.push({ ...row, errors: `Error inesperado: ${generalError.message}` });
+            errorCount++;
         }
     }
+
     return { successCount, errorCount, errors };
 }
 
-// ... Resto del código (generateErrorExcel y module.exports) igual ...
 async function generateErrorExcel(errors) {
-    if (errors.length === 0) {
-        return null;
-    }
+    if (errors.length === 0) return null;
 
     const ws = xlsx.utils.json_to_sheet(errors);
     const wb = xlsx.utils.book_new();
-    xlsx.utils.book_append_sheet(wb, ws, 'Errores de Matrícula');
+    xlsx.utils.book_append_sheet(wb, ws, 'Errores');
 
-    const fileName = `errores_carga_matriculas_${Date.now()}.xlsx`;
-    // Asegurate que esta ruta exista o usa /tmp si es serverless
-    const outputPath = path.join(__dirname, '../../uploads', fileName); 
+    const fileName = `errores_matriculas_${Date.now()}.xlsx`;
+    const outputPath = path.join(__dirname, '../../uploads', fileName);
     
-    // Crear carpeta si no existe (opcional)
+    // Asegurar que la carpeta existe
     const dir = path.dirname(outputPath);
-    if (!fs.existsSync(dir)){
-        fs.mkdirSync(dir, { recursive: true });
-    }
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
     xlsx.writeFile(wb, outputPath);
-    return outputPath;
+    return outputPath; // Devuelve la ruta absoluta (o relativa según tu configuración de rutas en Express)
 }
 
 module.exports = {
