@@ -16,4 +16,4 @@ const GetService = async (endpoint) => {
     return detail
 }
 
-export default GetService;
+module.exports={GetService};
