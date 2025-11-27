@@ -270,6 +270,80 @@ async function processExcelAndEnrolUsers(filePath, moodleToken) {
     return { successCount, errorCount, errors };
 }
 
+async function suspendUserInMoodle(userId, courseId, moodleToken) {
+    const params = {
+        'wstoken': moodleToken,
+        'wsfunction': 'enrol_manual_enrol_users',
+        'moodlewsrestformat': 'json',
+        'enrolments[0][userid]': userId,
+        'enrolments[0][courseid]': courseId,
+        'enrolments[0][roleid]': 5, // Asumimos rol de estudiante (ID 5) para suspender
+        'enrolments[0][suspend]': 1 // <--- 1 significa SUSPENDIDO (Activo es 0)
+    };
+
+    try {
+        const response = await addService(MOODLE_WEBSERVICE_URL, params);
+        if (response && response.exception) {
+            return { success: false, error: response.message };
+        }
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Función principal que procesa el Excel de novedades
+async function processExcelAndSuspendUsers(filePath, moodleToken) {
+    const excelData = readExcel(filePath);
+    const errors = [];
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const row of excelData) {
+        // Aceptamos columnas 'usuario'/'email' y 'curso'/'code'
+        const email = String(row.usuario || row.email || '').trim();
+        const code = String(row.curso || row.code || '').trim();
+
+        if (!email || !code) {
+            errors.push({ ...row, errors: 'Faltan datos (usuario o curso)' });
+            errorCount++;
+            continue;
+        }
+
+        try {
+            // Reutilizamos las funciones de búsqueda que ya tenías
+            const userId = await getUserIdByEmail(email, moodleToken);
+            const courseId = await getCourseIdByCode(code, moodleToken);
+
+            if (!userId) {
+                errors.push({ ...row, errors: `Usuario no encontrado: ${email}` });
+                errorCount++;
+                continue;
+            }
+            if (!courseId) {
+                errors.push({ ...row, errors: `Curso no encontrado: ${code}` });
+                errorCount++;
+                continue;
+            }
+
+            // Llamamos a la función de suspender
+            const result = await suspendUserInMoodle(userId, courseId, moodleToken);
+
+            if (result.success) {
+                successCount++;
+            } else {
+                errors.push({ ...row, errors: `Error Moodle: ${result.error}` });
+                errorCount++;
+            }
+
+        } catch (err) {
+            errors.push({ ...row, errors: `Error interno: ${err.message}` });
+            errorCount++;
+        }
+    }
+    return { successCount, errorCount, errors };
+}
+
 async function generateErrorExcel(errors) {
     if (errors.length === 0) return null;
 
@@ -290,5 +364,6 @@ async function generateErrorExcel(errors) {
 
 module.exports = {
     processExcelAndEnrolUsers,
-    generateErrorExcel,
+    processExcelAndSuspendUsers,
+    generateErrorExcel
 };
