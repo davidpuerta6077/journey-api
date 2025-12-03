@@ -11,9 +11,11 @@ module.exports = {
     },
     postgresql: {
         host: process.env.POSTGRESQL_HOST || 'localhost',
-        user: process.env.POSTGRESQL_USER || 'postgres',
-        password: process.env.POSTGRESQL_PASSWORD || 'contraseña',
-        database: process.env.POSTGRESQL_DB || 'sb-data'
+        user: process.env.POSTGRESQL_USER || 'journey',
+        password: process.env.POSTGRESQL_PASSWORD || '655HVycyfc579ihbi',
+        database: process.env.POSTGRESQL_DB || 'sb-data',
+        schema: process.env.SCHEMA || 'test',
+        port: process.env.PORT || 5433
     },
     domain: {
         url_base: process.env.URL_BASE || 'https://localhost:3001'

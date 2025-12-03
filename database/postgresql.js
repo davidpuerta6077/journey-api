@@ -32,8 +32,8 @@ function insertItem(table, data){
 
 function updateItem(table, data){
     return new Promise((resolve, reject) => {
-        const query = updateData(table, data)
-        pool.query(query, (err, data) =>{
+        const {query, values} = updateData(table, data)
+        pool.query(query, values, (err, data) =>{
             if (err) return reject(err); 
             resolve(data.rows);
         });
