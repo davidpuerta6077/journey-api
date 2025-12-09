@@ -10,12 +10,21 @@ module.exports = {
         secret: process.env.JWT_SECRET || 'ConfSecret',
     },
     postgresql: {
-        host: process.env.POSTGRESQL_HOST || 'localhost',
+        host: process.env.POSTGRESQL_HOST || 'postgrespascualbravo.cygtmjsaacoj.us-east-1.rds.amazonaws.com',
         user: process.env.POSTGRESQL_USER || 'journey',
         password: process.env.POSTGRESQL_PASSWORD || '655HVycyfc579ihbi',
-        database: process.env.POSTGRESQL_DB || 'sb-data',
+        database: process.env.POSTGRESQL_DB || 'journey',
         schema: process.env.SCHEMA || 'test',
-        port: process.env.PORT || 5433
+        port: process.env.DB_PORT || 5432, 
+
+    // CAMBIO 2: AWS RDS casi siempre requiere esto para conexiones externas/seguras
+        ssl: {
+            rejectUnauthorized: false 
+        },
+
+    // CAMBIO 3: Define un timeout explícito (opcional, ayuda a no esperar infinitamente)
+        connectionTimeoutMillis: 5000 
+        
     },
     domain: {
         url_base: process.env.URL_BASE || 'https://localhost:3001'

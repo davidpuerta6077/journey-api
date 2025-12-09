@@ -3,7 +3,10 @@ body {
   font-family: "Segoe UI", sans-serif;
 }
 
-
+.card-button{
+  text-decoration: none;
+  color: #333;
+}
 .sidebar {
   width: 220px;
   background: #fff;

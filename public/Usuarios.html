@@ -104,183 +104,152 @@
     <main class="container-fluid px-4 py-4">
       <h4 class="mb-4">Usuarios</h4>
 
-      <!-- Barra de búsqueda y Botones -->
       <div class="row mb-4 align-items-center">
-        <div class="col-md-6">
-          <div class="input-group search-bar rounded-3">
-            <span class="input-group-text bg-white border-0"><i class="bi bi-search"></i></span>
-            <input type="text" class="form-control border-0 bg-light" placeholder="Buscar..." id="globalSearch">
-          </div>
-        </div>
-        <div class="col-md-6 text-end">
-          <button class="btn btn-outline-secondary me-2 custom-btn-outline">
-            Nuevo usuario del sistema <i class="bi bi-plus-lg ms-2"></i>
-          </button>
-          <button class="btn btn-outline-primary custom-btn-outline" data-bs-toggle="modal"
-            data-bs-target="#modalNuevoUsuario">
-            Nuevo usuario plataforma <i class="bi bi-plus-lg ms-2"></i>
-          </button>
-        </div>
-      </div>
-
-      <!-- Stats Cards -->
-      <div class="row g-3 mb-4">
-        <div class="col-md-3">
-          <div class="p-3 bg-white shadow-sm d-flex justify-content-between align-items-center rounded">
-            <div>Total de usuarios</div>
-            <h3 class="fs-4 text-muted">1456</h3>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="p-3 bg-white shadow-sm d-flex justify-content-between align-items-center rounded">
-            <div>Activos</div>
-            <h3 class="fs-4 text-success">1400</h3>
-          </div>
-        </div>
-        <div class="col-md-2">
-          <div class="p-3 bg-white shadow-sm d-flex justify-content-between align-items-center rounded">
-            <div>Inactivos</div>
-            <h3 class="fs-4 text-danger">56</h3>
-          </div>
-        </div>
-        <div class="col-md-4">
-          <div class="p-3 bg-white shadow-sm d-flex justify-content-between align-items-center rounded">
-            <div>Usuarios del sistema</div>
-            <h3 class="fs-4 text-secondary">10</h3>
-          </div>
-        </div>
-      </div>
-
-      <!-- Filtros de Tabla -->
-      <div class="row g-2 mb-2">
-        <div class="col"><select class="form-select bg-light">
-            <option>Id usuario</option>
-          </select></div>
-        <div class="col"><select class="form-select bg-light">
-            <option>Nombres</option>
-          </select></div>
-        <div class="col"><select class="form-select bg-light">
-            <option>Apellidos</option>
-          </select></div>
-        <div class="col"><select class="form-select bg-light">
-            <option>Correo institucional</option>
-          </select></div>
-        <div class="col"><select class="form-select bg-light">
-            <option>Correo personal</option>
-          </select></div>
-        <div class="col"><select class="form-select bg-light">
-            <option>Celular</option>
-          </select></div>
-        <div class="col-auto" style="width: 100px;"></div> <!-- Espacio para acciones -->
-      </div>
-
-      <!-- Tabla de Datos -->
-      <div class="bg-white rounded shadow-sm">
-        <div class="table-responsive">
-          <table class="table table-hover align-middle mb-0" id="usersTable">
-            <tbody>
-              <!-- Ejemplo Estático (Se llenará dinámicamente) -->
-              <tr>
-                <td>11562548759</td>
-                <td>Brand Roger</td>
-                <td>Duque Caro</td>
-                <td>roger.caro@pascualbravo.edu.co</td>
-                <td>roger@gmail.com</td>
-                <td>3152765866</td>
-                <td class="text-end">
-                  <button class="btn btn-sm text-dark"><i class="bi bi-pencil-fill"></i></button>
-                  <button class="btn btn-sm text-dark"><i class="bi bi-arrow-counterclockwise"></i></button>
-                  <button class="btn btn-sm text-dark"><i class="bi bi-trash-fill"></i></button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </main>
+  <div class="col-md-6">
+    <div class="input-group search-bar rounded-3">
+      <span class="input-group-text bg-white border-0"><i class="bi bi-search"></i></span>
+      <!-- Ya tiene ID globalSearch, está bien -->
+      <input type="text" class="form-control border-0 bg-light" placeholder="Buscar por apellido, nombre o correo..." id="globalSearch">
+    </div>
   </div>
+  <!-- Botones (sin cambios) -->
+  <div class="col-md-6 text-end">
+    <button class="btn btn-outline-secondary me-2 custom-btn-outline">Nuevo usuario del sistema <i class="bi bi-plus-lg ms-2"></i></button>
+    <button class="btn btn-outline-primary custom-btn-outline" data-bs-toggle="modal" data-bs-target="#modalNuevoUsuario">Nuevo usuario plataforma <i class="bi bi-plus-lg ms-2"></i></button>
+  </div>
+</div>
+
+<!-- Stats Cards (AGREGADOS LOS IDs) -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="p-3 bg-white shadow-sm d-flex justify-content-between align-items-center rounded">
+      <div>Total de usuarios</div>
+      <h3 class="fs-4 text-muted" id="statTotal">0</h3>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="p-3 bg-white shadow-sm d-flex justify-content-between align-items-center rounded">
+      <div>Activos</div>
+      <h3 class="fs-4 text-success" id="statActive">0</h3>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="p-3 bg-white shadow-sm d-flex justify-content-between align-items-center rounded">
+      <div>Suspendidos</div> 
+      <h3 class="fs-4 text-danger" id="statSuspended">0</h3>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="p-3 bg-white shadow-sm d-flex justify-content-between align-items-center rounded">
+      <div>Usuarios sistema</div>
+      <h3 class="fs-4 text-secondary" id="statSystem">0</h3>
+    </div>
+  </div>
+</div>
+
+   <div class="bg-white rounded shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" id="usersTable">
+      <thead class="table-light">
+  <tr>
+    <th scope="col" style="cursor: pointer;" onclick="sortUsers('id')">
+      ID <i class="bi bi-arrow-down-up ms-1 text-muted"></i>
+    </th>
+    <th scope="col" style="cursor: pointer;" onclick="sortUsers('firstname')">
+      Nombres <i class="bi bi-arrow-down-up ms-1 text-muted"></i>
+    </th>
+    <th scope="col" style="cursor: pointer;" onclick="sortUsers('lastname')">
+      Apellidos <i class="bi bi-arrow-down-up ms-1 text-muted"></i>
+    </th>
+    <th scope="col" style="cursor: pointer;" onclick="sortUsers('email')">
+      Correo Inst. <i class="bi bi-arrow-down-up ms-1 text-muted"></i>
+    </th>
+    <th scope="col">Documento</th>
+   
+    <th scope="col">Celular</th>
+
+  
+    <th scope="col" style="cursor: pointer;" onclick="sortUsers('suspended')">
+        Estado <i class="bi bi-arrow-down-up ms-1 text-muted"></i>
+    </th>
+
+    <th scope="col" class="text-end" style="width: 150px;">Acciones</th>
+  </tr>
+</thead>
+      <tbody>
+       
+      </tbody>
+    </table>
+  </div>
+</div>
 
 
-  <!-- Modal Nuevo Usuario Plataforma -->
-  <div class="modal fade" id="modalNuevoUsuario" tabindex="-1" aria-labelledby="modalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header text-white" style="background-color: #524e7a;">
-          <h5 class="modal-title fw-bold" id="modalLabel">Nuevo usuario plataforma</h5>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body p-4">
-          <form id="formAddUser">
-            <div class="row g-4">
-              <div class="col-md-6">
-                <label class="form-label">Nombres</label>
-                <input type="text" class="form-control form-custom" name="firstname" placeholder="Escriba el nombre"
-                  required>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">Apellidos</label>
-                <input type="text" class="form-control form-custom" name="lastname" placeholder="Escriba el apellido"
-                  required>
-              </div>
+ <!-- Modal Nuevo Usuario Plataforma -->
+<div class="modal fade" id="modalNuevoUsuario" tabindex="-1" aria-labelledby="modalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header text-white" style="background-color: #524e7a;">
+        <h5 class="modal-title fw-bold" id="modalLabel">Nuevo usuario plataforma</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <form id="formAddUser">
 
-              <div class="col-md-6">
-                <label class="form-label">Documento de identidad</label>
-                <input type="text" class="form-control form-custom" name="username"
-                  placeholder="Escriba el número de documento" required>
-                <small class="text-muted" style="font-size: 0.7em;">(Se usará como usuario)</small>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">Correo institucional</label>
-                <input type="email" class="form-control form-custom" name="email" placeholder="@pascualbravo.edu.co"
-                  required>
-              </div>
+          <div class="row g-4">
 
-              <div class="col-md-6">
-                <label class="form-label">Correo (Personal)</label>
-                <input type="email" class="form-control form-custom" placeholder="Escriba el correo">
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">Estado</label>
-                <select class="form-select form-custom">
-                  <option selected>Seleccione un estado</option>
-                  <option value="1">Activo</option>
-                  <option value="0">Inactivo</option>
-                </select>
-              </div>
-
-              <div class="col-md-6">
-                <label class="form-label">Celular</label>
-                <input type="text" class="form-control form-custom" placeholder="Escriba el número de celular">
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">Teléfono fijo</label>
-                <input type="text" class="form-control form-custom" placeholder="Escriba el número de teléfono">
-              </div>
-
-              <!-- Campos ocultos requeridos por el backend pero no mostrados en el UI del pantallazo -->
-              <input type="hidden" name="password" value="Cambiar123*"> <!-- Default pass -->
-              <input type="hidden" name="city" value="Medellin">
-              <input type="hidden" name="coutry" value="CO">
+            <div class="col-md-6">
+              <label class="form-label">Nombres</label>
+              <input type="text" class="form-control form-custom" name="firstname" required>
             </div>
-          </form>
-        </div>
-        <div class="modal-footer border-0 justify-content-end">
-          <button type="button" class="btn btn-custom-save px-4" id="btnGuardar">
-            Guardar <i class="bi bi-save ms-2"></i>
-          </button>
-          <button type="button" class="btn btn-custom-cancel px-4" data-bs-dismiss="modal">
-            Cancelar <i class="bi bi-x-circle ms-2"></i>
-          </button>
-        </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Apellidos</label>
+              <input type="text" class="form-control form-custom" name="lastname" required>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Documento</label>
+              <!-- Cambiado name="username" a name="document" para ser claros -->
+              <input type="text" class="form-control form-custom" name="document" required>
+              <small class="text-muted" style="font-size: 0.7em;">Será la contraseña</small>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Correo institucional</label>
+              <input type="email" class="form-control form-custom" name="email" required>
+              <small class="text-muted" style="font-size: 0.7em;">Será el usuario en Moodle</small>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Ciudad</label>
+              <input type="text" class="form-control form-custom" name="city" placeholder="Medellín">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">País</label>
+              <input type="text" class="form-control form-custom" name="country" placeholder="CO">
+            </div>
+
+          </div>
+
+          <div class="text-end mt-4">
+            <button type="submit" class="btn btn-custom-save px-4">
+                Guardar usuario <i class="bi bi-save ms-2"></i>
+            </button>
+          </div>
+
+        </form>
+
       </div>
     </div>
   </div>
+</div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <!-- Script de Lógica -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
   <script src="./js/script.js"></script>
-  <script src="Usuarios.html"></script>
+  <script src="./js/Usuarios.js"></script>
 </body>
 
 </html>

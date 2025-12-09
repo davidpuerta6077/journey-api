@@ -155,8 +155,8 @@ async function processExcelAndCreateUsers(filePath, moodleToken) {
 // RUTAS (ENDPOINTS)
 // ======================================================================
 
-// 1. Crear usuario manual (Single)
-router.post('/add_user', async (req, res) => {
+// 1. Crear usuario manual (posman)
+router.post('/add_user_pos', async (req, res) => {
     const data = {
         'wstoken': config.moodle_token, 
         'wsfunction': 'core_user_create_users', 
@@ -180,8 +180,48 @@ router.post('/add_user', async (req, res) => {
     }
 });
 
-// 2. Actualizar usuario
-router.post('/update_user', async (req, res) => {
+// 1.1 Crear usuario manual (Single)
+router.post('/add_user', async (req, res) => {
+    // REGLA DE NEGOCIO:
+    // El correo es el usuario.
+    // El documento es la contraseña y el idnumber.
+    
+    const email = req.body.email;
+    const documento = req.body.document; 
+
+    const data = {
+        'wstoken': config.moodle_token, 
+        'wsfunction': 'core_user_create_users', 
+        'moodlewsrestformat': 'json', 
+
+        // Mapeo estricto
+        'users[0][username]': email,        // Usuario es el correo
+        'users[0][email]': email,           // Correo es el correo
+        'users[0][password]': documento,    // Contraseña es el documento
+        'users[0][idnumber]': documento,    // ID Number es el documento
+        
+        'users[0][firstname]': req.body.firstname,
+        'users[0][lastname]': req.body.lastname,
+        'users[0][city]': req.body.city || 'Medellin',
+        'users[0][country]': req.body.country || 'CO',
+    };
+
+    try {
+        const result = await callMoodle(MOODLE_WEBSERVICE_URL, data);
+        
+        // Verificar si Moodle devolvió una excepción (ej: contraseña débil)
+        if (result.exception) {
+            throw new Error(result.message);
+        }
+        
+        response.success(req, res, result, 200);    
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
+// 2. Actualizar usuario posman
+router.post('/update_user_pos', async (req, res) => {
     const data = {
         'wstoken': config.moodle_token, 
         'wsfunction': 'core_user_update_users', 
@@ -191,7 +231,6 @@ router.post('/update_user', async (req, res) => {
     
     if(req.body.firstname) data['users[0][firstname]'] = req.body.firstname;
     if(req.body.lastname) data['users[0][lastname]'] = req.body.lastname;
-    if(req.body.email) data['users[0][email]'] = req.body.email;
     if(req.body.password) data['users[0][password]'] = req.body.password;
     if(req.body.city) data['users[0][city]'] = req.body.city;
 
@@ -202,9 +241,40 @@ router.post('/update_user', async (req, res) => {
         response.error(req, res, error.message, 500);
     }
 });
+// 2.1 Actualizar usuario
+router.post('/update_user', async (req, res) => {
+    const data = {
+        'wstoken': config.moodle_token, 
+        'wsfunction': 'core_user_update_users', 
+        'moodlewsrestformat': 'json', 
+        'users[0][id]': req.body.id
+    };
+    
+    // Mapeo de campos opcionales
+    if(req.body.firstname) data['users[0][firstname]'] = req.body.firstname;
+    if(req.body.lastname) data['users[0][lastname]'] = req.body.lastname;
+    if(req.body.email) data['users[0][email]'] = req.body.email;
+    if(req.body.password) data['users[0][password]'] = req.body.password;
+    if(req.body.city) data['users[0][city]'] = req.body.city;
+    
+    // --- AGREGA ESTO AQUÍ ---
+    // Verificamos si 'suspended' viene en el body.
+    // Usamos !== undefined porque el valor puede ser 0 (que es falso en JS)
+    if(req.body.suspended !== undefined) {
+        data['users[0][suspended]'] = req.body.suspended;
+    }
+    // ------------------------
 
-// 3. Eliminar usuario
-router.post('/delete_user', async (req, res) => {
+    try {
+        const result = await callMoodle(MOODLE_WEBSERVICE_URL, data);
+        response.success(req, res, result || "Usuario actualizado", 200);    
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
+// 3. Eliminar usuario postman
+router.post('/delete_user_pos', async (req, res) => {
     const data = {
         'wstoken': config.moodle_token, 
         'wsfunction': 'core_user_delete_users', 
@@ -215,6 +285,33 @@ router.post('/delete_user', async (req, res) => {
     try {
         const result = await callMoodle(MOODLE_WEBSERVICE_URL, data);
         response.success(req, res, result || "Usuario eliminado", 200);    
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+// 3. Eliminar usuario 
+router.post('/delete_user', async (req, res) => {
+    // Obtenemos el ID. El frontend lo envía como { userids: [123] }
+    const userId = req.body.userids[0]; 
+
+    const data = {
+        'wstoken': config.moodle_token, 
+        'wsfunction': 'core_user_update_users', // CAMBIO: Usamos update en vez de delete
+        'moodlewsrestformat': 'json', 
+        
+        'users[0][id]': userId,
+        'users[0][suspended]': 1 // CAMBIO: 1 = Suspendido, 0 = Activo
+    };
+
+    try {
+        const result = await callMoodle(MOODLE_WEBSERVICE_URL, data);
+        
+        // Moodle devuelve null o vacio si actualiza bien, o una excepción
+        if (result && result.exception) {
+            throw new Error(result.message);
+        }
+
+        response.success(req, res, "Usuario suspendido correctamente", 200);    
     } catch (error) {
         response.error(req, res, error.message, 500);
     }
@@ -238,27 +335,36 @@ router.post('/search_user', async (req, res) => {
     }
 });
 
-// 5. Subir Excel (Carga temporal)
-router.post('/upload-excel', async (req, res) => {
-    if (!req.files || Object.keys(req.files).length === 0) {
-        return response.error(req, res, 'No se ha subido ningún archivo.', 400);
-    }
+// 5. Obtener usuarios (Listar / Buscar)
+// 5. Obtener usuarios
+router.get('/get_users', async (req, res) => {
+    const searchTerm = req.query.search || '%'; 
 
-    let excelFile = req.files.excel;
-    const uploadPath = path.join(__dirname, '../../uploads', `upload_${Date.now()}_${excelFile.name}`);
+    const data = {
+        'wstoken': config.moodle_token, 
+        'wsfunction': 'core_user_get_users', 
+        'moodlewsrestformat': 'json',
+        // Buscamos por apellido que contenga el término (o % para todos)
+        'criteria[0][key]': 'lastname', 
+        'criteria[0][value]': searchTerm
+    };
 
     try {
-        const dir = path.dirname(uploadPath);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        console.log("Consultando Moodle con:", data); // LOG PARA DEPURAR EN CONSOLA DEL SERVIDOR
+        const result = await callMoodle(MOODLE_WEBSERVICE_URL, data);
+        
+        // Moodle devuelve { users: [...] }
+        const users = result.users || [];
+        console.log(`Encontrados ${users.length} usuarios.`); // VERIFICAR CANTIDAD
+        
+        // Enviamos el array directo para facilitar el frontend
+        res.status(200).json({ status: 'success', body: users });
 
-        await excelFile.mv(uploadPath);
-        response.success(req, res, { message: 'Archivo subido con éxito', filePath: uploadPath }, 200);
-    } catch (err) {
-        console.error(err);
-        response.error(req, res, 'Error al subir el archivo.', 500);
+    } catch (error) {
+        console.error("Error Moodle:", error.message);
+        res.status(500).json({ status: 'error', message: error.message });
     }
 });
-
 // 6. Procesar Excel (Lógica local)
 router.post('/process-excel', async (req, res) => {
     const { filePath } = req.body;

@@ -462,4 +462,15 @@ router.put('/update', async (req, res) => {
     }
 });
 
+
+router.post('/update_log', async (req, res) => {
+    try {
+        await ctrl.updateElement("logs", req.body)
+        response.success(req, res, `Item Created`, 200);
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
+
 module.exports = router;

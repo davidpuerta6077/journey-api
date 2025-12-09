@@ -15,7 +15,7 @@ module.exports = (injectedDB) => {
     }
 
     async function updateElement(TABLA, datas) {
-        return data.update(TABLA, datas);
+        return data.updateItem(TABLA, datas);
     }
 
     return {
