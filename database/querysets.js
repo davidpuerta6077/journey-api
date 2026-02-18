@@ -19,10 +19,12 @@ const insertData = (table, jsonData) => {
 
 const updateData = (table, jsonData) => {
     const { id, type, description, username } = jsonData;
+
     const query = 
     `UPDATE ${schema}.${table} 
-    SET type = '$1', description = '$2', username = '$3' 
+    SET type = $1, description = $2, username = $3 
     WHERE id = $4`;
+    
     return {query, values: [type, description, username, id]};
 }
 

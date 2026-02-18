@@ -9,20 +9,25 @@ module.exports = {
     jwt: {
         secret: process.env.JWT_SECRET || 'ConfSecret',
     },
+    // postgresql: {
+    //     host: process.env.POSTGRESQL_HOST || 'postgrespascualbravo.cygtmjsaacoj.us-east-1.rds.amazonaws.com',
+    //     user: process.env.POSTGRESQL_USER || 'journey',
+    //     password: process.env.POSTGRESQL_PASSWORD || '655HVycyfc579ihbi',
+    //     database: process.env.POSTGRESQL_DB || 'journey',
+    //     // schema: process.env.SCHEMA || 'test',
+    //     port: process.env.DB_PORT || 5432, 
     postgresql: {
-        host: process.env.POSTGRESQL_HOST || 'postgrespascualbravo.cygtmjsaacoj.us-east-1.rds.amazonaws.com',
-        user: process.env.POSTGRESQL_USER || 'journey',
-        password: process.env.POSTGRESQL_PASSWORD || '655HVycyfc579ihbi',
+        host: process.env.POSTGRESQL_HOST || '127.0.0.1',
+        user: process.env.POSTGRESQL_USER || 'evarango',
+        password: process.env.POSTGRESQL_PASSWORD || '865ugvYTC5cygu',
         database: process.env.POSTGRESQL_DB || 'journey',
         schema: process.env.SCHEMA || 'test',
-        port: process.env.DB_PORT || 5432, 
-
-    // CAMBIO 2: AWS RDS casi siempre requiere esto para conexiones externas/seguras
+        port: process.env.DB_PORT || 5433, 
+   
         ssl: {
-            rejectUnauthorized: false 
+            require: false,
+            rejectUnauthorized: false,
         },
-
-    // CAMBIO 3: Define un timeout explícito (opcional, ayuda a no esperar infinitamente)
         connectionTimeoutMillis: 5000 
         
     },

@@ -2,8 +2,7 @@ module.exports = (injectedDB) => {
     
     let data = injectedDB;
     if (!data) {
-        // Manejo básico si no se inyecta DB, para que no rompa la app
-        data = require('../../store/mysql'); // O tu store por defecto
+        data = require('../../store/mysql'); 
     }
 
     function list(TABLA) {

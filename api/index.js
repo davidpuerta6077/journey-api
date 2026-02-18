@@ -16,9 +16,9 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(fileUpload({
-    limits: { fileSize: 50 * 1024 * 1024 }, // Límite de 50MB
+    limits: { fileSize: 50 * 1024 * 1024 },
     useTempFiles: true,
-    tempFileDir: '/tmp/' // Asegúrate de que este directorio exista o sea accesible
+    tempFileDir: '/tmp/' 
 }));
 
 app.use('/users', users);
@@ -62,5 +62,4 @@ console.log('--- INTENTANDO CONECTAR ---');
 console.log('Host:', config.postgresql.host);
 console.log('Port:', config.postgresql.port);
 console.log('User:', config.postgresql.user);
-// No imprimas la contraseña
 console.log('---------------------------');

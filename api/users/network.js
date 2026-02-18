@@ -6,32 +6,25 @@ const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 const xlsx = require('xlsx'); 
-const https = require('https'); // Importante para arreglar el error SSL
+const https = require('https'); 
 
-// Importamos el controlador genérico
+
 const ctrl = require('./index'); 
 
 const MOODLE_WEBSERVICE_URL = "https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php";
 
-// ======================================================================
-// CONFIGURACIÓN SSL (SOLUCIÓN AL ERROR)
-// ======================================================================
-// Creamos el agente para ignorar errores de certificado (self-signed)
+
 const agent = new https.Agent({  
     rejectUnauthorized: false
 });
 
-// ======================================================================
-// FUNCIONES AUXILIARES
-// ======================================================================
 
-// --- Función genérica para llamar a Moodle ---
 async function callMoodle(url, params) {
     try {
-        // AQUI AGREGAMOS EL AGENTE SSL
+       
         const res = await axios.post(url, null, { 
             params: params,
-            httpsAgent: agent // <--- Esto permite la conexión segura aunque el certificado falle
+            httpsAgent: agent 
         });
         
         if (res.data && res.data.exception) {
@@ -40,13 +33,13 @@ async function callMoodle(url, params) {
         return res.data;
     } catch (error) {
         console.error('Error en llamada a Moodle:', error.message);
-        // Mejoramos el mensaje de error para depuración
+        
         const msg = error.response ? (error.response.data.error || error.message) : error.message;
         throw new Error(msg);
     }
 }
 
-// --- Leer Excel ---
+
 function readExcel(filePath) {
     const workbook = xlsx.readFile(filePath);
     const sheetName = workbook.SheetNames[0]; 
@@ -54,7 +47,7 @@ function readExcel(filePath) {
     return xlsx.utils.sheet_to_json(worksheet, { defval: '' });
 }
 
-// --- Generar Excel de Errores ---
+
 async function generateErrorExcel(errors) {
     if (errors.length === 0) return null;
 
@@ -72,7 +65,7 @@ async function generateErrorExcel(errors) {
     return outputPath;
 }
 
-// --- Validar Usuario (Lógica de Negocio) ---
+
 function validateUser(userData) {
     const errors = [];
 
@@ -100,7 +93,7 @@ function validateUser(userData) {
     return errors;
 }
 
-// --- Procesar Excel y Crear Usuarios ---
+
 async function processExcelAndCreateUsers(filePath, moodleToken) {
     const excelData = readExcel(filePath);
     const errors = [];
@@ -151,9 +144,6 @@ async function processExcelAndCreateUsers(filePath, moodleToken) {
     return { successCount, errorCount, errors };
 }
 
-// ======================================================================
-// RUTAS (ENDPOINTS)
-// ======================================================================
 
 // 1. Crear usuario manual (posman)
 router.post('/add_user_pos', async (req, res) => {
@@ -181,11 +171,7 @@ router.post('/add_user_pos', async (req, res) => {
 });
 
 // 1.1 Crear usuario manual (Single)
-router.post('/add_user', async (req, res) => {
-    // REGLA DE NEGOCIO:
-    // El correo es el usuario.
-    // El documento es la contraseña y el idnumber.
-    
+router.post('/add_user', async (req, res) => { 
     const email = req.body.email;
     const documento = req.body.document; 
 
@@ -193,12 +179,10 @@ router.post('/add_user', async (req, res) => {
         'wstoken': config.moodle_token, 
         'wsfunction': 'core_user_create_users', 
         'moodlewsrestformat': 'json', 
-
-        // Mapeo estricto
-        'users[0][username]': email,        // Usuario es el correo
-        'users[0][email]': email,           // Correo es el correo
-        'users[0][password]': documento,    // Contraseña es el documento
-        'users[0][idnumber]': documento,    // ID Number es el documento
+        'users[0][username]': email,        
+        'users[0][email]': email,           
+        'users[0][password]': documento,    
+        'users[0][idnumber]': documento,    
         
         'users[0][firstname]': req.body.firstname,
         'users[0][lastname]': req.body.lastname,
@@ -208,8 +192,6 @@ router.post('/add_user', async (req, res) => {
 
     try {
         const result = await callMoodle(MOODLE_WEBSERVICE_URL, data);
-        
-        // Verificar si Moodle devolvió una excepción (ej: contraseña débil)
         if (result.exception) {
             throw new Error(result.message);
         }
@@ -249,22 +231,15 @@ router.post('/update_user', async (req, res) => {
         'moodlewsrestformat': 'json', 
         'users[0][id]': req.body.id
     };
-    
-    // Mapeo de campos opcionales
     if(req.body.firstname) data['users[0][firstname]'] = req.body.firstname;
     if(req.body.lastname) data['users[0][lastname]'] = req.body.lastname;
     if(req.body.email) data['users[0][email]'] = req.body.email;
     if(req.body.password) data['users[0][password]'] = req.body.password;
     if(req.body.city) data['users[0][city]'] = req.body.city;
-    
-    // --- AGREGA ESTO AQUÍ ---
-    // Verificamos si 'suspended' viene en el body.
-    // Usamos !== undefined porque el valor puede ser 0 (que es falso en JS)
+
     if(req.body.suspended !== undefined) {
         data['users[0][suspended]'] = req.body.suspended;
     }
-    // ------------------------
-
     try {
         const result = await callMoodle(MOODLE_WEBSERVICE_URL, data);
         response.success(req, res, result || "Usuario actualizado", 200);    
@@ -291,22 +266,19 @@ router.post('/delete_user_pos', async (req, res) => {
 });
 // 3. Eliminar usuario 
 router.post('/delete_user', async (req, res) => {
-    // Obtenemos el ID. El frontend lo envía como { userids: [123] }
     const userId = req.body.userids[0]; 
 
     const data = {
         'wstoken': config.moodle_token, 
-        'wsfunction': 'core_user_update_users', // CAMBIO: Usamos update en vez de delete
+        'wsfunction': 'core_user_update_users', 
         'moodlewsrestformat': 'json', 
         
         'users[0][id]': userId,
-        'users[0][suspended]': 1 // CAMBIO: 1 = Suspendido, 0 = Activo
+        'users[0][suspended]': 1 
     };
 
     try {
         const result = await callMoodle(MOODLE_WEBSERVICE_URL, data);
-        
-        // Moodle devuelve null o vacio si actualiza bien, o una excepción
         if (result && result.exception) {
             throw new Error(result.message);
         }
@@ -344,20 +316,15 @@ router.get('/get_users', async (req, res) => {
         'wstoken': config.moodle_token, 
         'wsfunction': 'core_user_get_users', 
         'moodlewsrestformat': 'json',
-        // Buscamos por apellido que contenga el término (o % para todos)
         'criteria[0][key]': 'lastname', 
         'criteria[0][value]': searchTerm
     };
 
     try {
-        console.log("Consultando Moodle con:", data); // LOG PARA DEPURAR EN CONSOLA DEL SERVIDOR
+        console.log("Consultando Moodle con:", data); 
         const result = await callMoodle(MOODLE_WEBSERVICE_URL, data);
-        
-        // Moodle devuelve { users: [...] }
         const users = result.users || [];
-        console.log(`Encontrados ${users.length} usuarios.`); // VERIFICAR CANTIDAD
-        
-        // Enviamos el array directo para facilitar el frontend
+        console.log(`Encontrados ${users.length} usuarios.`); 
         res.status(200).json({ status: 'success', body: users });
 
     } catch (error) {

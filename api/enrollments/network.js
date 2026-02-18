@@ -6,31 +6,19 @@ const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 const xlsx = require('xlsx'); 
-const https = require('https'); // Necesario para el agente SSL
+const https = require('https'); 
 
-// Importamos el controlador genérico
 const ctrl = require('./index'); 
 const tableInjected = 'test';
 
-// URL de Moodle
 const MOODLE_WEBSERVICE_URL = "https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php";
 
-// ======================================================================
-// CONFIGURACIÓN SSL (SOLUCIÓN AL ERROR)
-// ======================================================================
-// Creamos un agente que ignora la validación del certificado autofirmado
 const agent = new https.Agent({  
     rejectUnauthorized: false
 });
 
-// ======================================================================
-// FUNCIONES AUXILIARES
-// ======================================================================
-
-// --- Función para hacer peticiones a Moodle ---
 async function callMoodle(url, params) {
     try {
-        // AQUI ESTA EL CAMBIO IMPORTANTE: Agregamos httpsAgent: agent
         const res = await axios.post(url, null, { 
             params: params,
             httpsAgent: agent 
@@ -42,13 +30,11 @@ async function callMoodle(url, params) {
         return res.data;
     } catch (error) {
         console.error('Error en llamada a Moodle:', error.message);
-        // Mejor manejo del mensaje de error
         const msg = error.response ? (error.response.data.error || error.message) : error.message;
         throw new Error(msg);
     }
 }
 
-// --- Leer Excel ---
 function readExcel(filePath) {
     const workbook = xlsx.readFile(filePath);
     const sheetName = workbook.SheetNames[0];
@@ -56,7 +42,6 @@ function readExcel(filePath) {
     return xlsx.utils.sheet_to_json(worksheet, { defval: '' });
 }
 
-// --- Generar Excel de Errores ---
 async function generateErrorExcel(errors) {
     if (errors.length === 0) return null;
 
@@ -74,7 +59,6 @@ async function generateErrorExcel(errors) {
     return outputPath;
 }
 
-// --- Buscadores de IDs en Moodle ---
 async function getUserIdByEmail(email, moodleToken) {
     const params = {
         'wstoken': moodleToken,
@@ -102,7 +86,6 @@ async function getCourseIdByCode(code, moodleToken) {
     };
     try {
         const allCourses = await callMoodle(MOODLE_WEBSERVICE_URL, params);
-        // Busca coincidencia en idnumber (recomendado) o shortname
         const course = allCourses.find(c => String(c.idnumber) === String(code) || String(c.shortname) === String(code));
         return course ? course.id : null;
     } catch (error) {
@@ -123,10 +106,9 @@ async function getRoleIdByName(roleName, moodleToken) {
     };
 
     if (staticRoleMap[inputName]) return staticRoleMap[inputName];
-    return 5; // Default estudiante
+    return 5; 
 }
 
-// --- Crear Usuario ---
 async function createUserInMoodle(userData, moodleToken) {
     const params = {
         'wstoken': moodleToken,
@@ -156,7 +138,6 @@ async function createUserInMoodle(userData, moodleToken) {
     }
 }
 
-// --- Matricular Usuario ---
 async function enrolUserInMoodle(userId, courseId, roleId, moodleToken) {
     const params = {
         'wstoken': moodleToken,
@@ -178,7 +159,6 @@ async function enrolUserInMoodle(userId, courseId, roleId, moodleToken) {
     }
 }
 
-// --- Suspender Usuario ---
 async function suspendUserInMoodle(userId, courseId, moodleToken) {
     const params = {
         'wstoken': moodleToken,
@@ -200,10 +180,6 @@ async function suspendUserInMoodle(userId, courseId, moodleToken) {
         return { success: false, error: error.message };
     }
 }
-
-// ======================================================================
-// LÓGICA DE PROCESAMIENTO (Excel)
-// ======================================================================
 
 async function processExcelAndEnrolUsers(filePath, moodleToken) {
     const excelData = readExcel(filePath);
@@ -320,10 +296,6 @@ async function processExcelAndSuspendUsers(filePath, moodleToken) {
     return { successCount, errorCount, errors };
 }
 
-
-// ======================================================================
-// RUTAS (Endpoints)
-// ======================================================================
 
 router.post('/enroll_users', async (req, res) => {
     try {

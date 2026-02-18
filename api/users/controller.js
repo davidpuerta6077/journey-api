@@ -1,7 +1,6 @@
 module.exports = (injectedDB) => {
     
     let data = injectedDB;
-    // Fallback por si no se inyecta DB (opcional)
     if (!data) data = require('../../store/mysql'); 
 
     function list(TABLA) {
