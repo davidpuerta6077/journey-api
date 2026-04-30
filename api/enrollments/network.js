@@ -328,6 +328,215 @@ router.post('/unenroll_users', async (req, res) => {
     }
 });
 
+
+router.post('/add_user_and_enroll', async (req, res) => {
+    try {
+        const { username, firstname, lastname, email, password, roleid, courseid } = req.body;
+        if (!email || !firstname || !lastname || !courseid) {
+            return response.error(req, res, 'Faltan campos requeridos: email, firstname, lastname, courseid', 400);
+        }
+        let userId = await getUserIdByEmail(email, config.moodle_token);   
+        if (!userId) {
+            const params = {
+                'wstoken': config.moodle_token,
+                'wsfunction': 'core_user_create_users',
+                'moodlewsrestformat': 'json',
+                'users[0][username]': username || email.toLowerCase(),
+                'users[0][password]': password ,
+                'users[0][firstname]': firstname,
+                'users[0][lastname]': lastname,
+                'users[0][email]': email,
+                'users[0][auth]': 'manual',
+                'users[0][country]': 'CO'
+            };
+
+            const createResult = await callMoodle(MOODLE_WEBSERVICE_URL, params);
+
+            if (!Array.isArray(createResult) || createResult.length === 0) {
+                return response.error(req, res, 'Error al crear el usuario en Moodle', 500);
+            }
+
+            userId = createResult[0].id;
+        }
+
+      
+        const enrolResult = await enrolUserInMoodle(userId, courseid, roleid || 5, config.moodle_token);
+
+        if (!enrolResult.success) {
+            return response.error(req, res, `Usuario creado (id: ${userId}) pero falló la matrícula: ${enrolResult.error}`, 400);
+        }
+
+        response.success(req, res, {
+            message: 'Usuario creado y matriculado correctamente',
+            userId
+        }, 200);
+
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
+router.post('/suspend_enrollment', async (req, res) => {
+    try {
+        const { userid, courseid, roleid, suspend } = req.body;
+        if (!userid || !courseid) {
+            return response.error(req, res, 'Faltan campos requeridos: userid, courseid', 400);
+        }
+        const params = {
+            'wstoken': config.moodle_token,
+            'wsfunction': 'enrol_manual_enrol_users',
+            'moodlewsrestformat': 'json',
+            'enrolments[0][userid]': userid,
+            'enrolments[0][courseid]': courseid,
+            'enrolments[0][roleid]': roleid,
+            'enrolments[0][suspend]': suspend ?? 1  
+        };
+        const result = await callMoodle(MOODLE_WEBSERVICE_URL, params);
+        if (result && result.exception) {
+            return response.error(req, res, result.message, 400);
+        }
+        const action = suspend === 0 ? 'reactivada' : 'suspendida';
+        response.success(req, res, {
+            message: `Matrícula ${action} correctamente`,
+            userid,
+            courseid
+        }, 200);
+
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
+router.post('/suspend_multiple_enrollments', async (req, res) => {
+    try {
+        const { userid, roleid, courseids, suspend } = req.body;
+
+        if (!userid || !courseids || !Array.isArray(courseids) || courseids.length === 0) {
+            return response.error(req, res, 'Faltan campos requeridos: userid, courseids (array)', 400);
+        }
+
+        const results = { success: [], errors: [] };
+
+        for (const [index, courseid] of courseids.entries()) {
+            const params = {
+                'wstoken': config.moodle_token,
+                'wsfunction': 'enrol_manual_enrol_users',
+                'moodlewsrestformat': 'json',
+                [`enrolments[${index}][userid]`]: userid,
+                [`enrolments[${index}][courseid]`]: courseid,
+                [`enrolments[${index}][roleid]`]: roleid,
+                [`enrolments[${index}][suspend]`]: suspend ?? 1
+            };
+
+            try {
+                const result = await callMoodle(MOODLE_WEBSERVICE_URL, params);
+
+                if (result && result.exception) {
+                    results.errors.push({ courseid, error: result.message });
+                } else {
+                    results.success.push({ courseid });
+                }
+            } catch (err) {
+                results.errors.push({ courseid, error: err.message });
+            }
+        }
+
+        const action = suspend === 0 ? 'reactivadas' : 'suspendidas';
+        response.success(req, res, {
+            message: `Matrículas ${action}. Exitosas: ${results.success.length}, Fallidas: ${results.errors.length}`,
+            successCount: results.success.length,
+            errorCount: results.errors.length,
+            success: results.success,
+            errors: results.errors
+        }, 200);
+
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
+router.post('/reactivate_enrollment', async (req, res) => {
+    try {
+        const { userid, courseid, roleid } = req.body;
+
+        if (!userid || !courseid) {
+            return response.error(req, res, 'Faltan campos requeridos: userid, courseid', 400);
+        }
+
+        const params = {
+            'wstoken': config.moodle_token,
+            'wsfunction': 'enrol_manual_enrol_users',
+            'moodlewsrestformat': 'json',
+            'enrolments[0][userid]': userid,
+            'enrolments[0][courseid]': courseid,
+            'enrolments[0][roleid]': roleid,
+            'enrolments[0][suspend]': 0 
+        };
+
+        const result = await callMoodle(MOODLE_WEBSERVICE_URL, params);
+
+        if (result && result.exception) {
+            return response.error(req, res, result.message, 400);
+        }
+
+        response.success(req, res, {
+            message: 'Matrícula reactivada correctamente',
+            userid,
+            courseid
+        }, 200);
+
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
+router.post('/reactivate_multiple_enrollments', async (req, res) => {
+    try {
+        const { userid, roleid, courseids } = req.body;
+
+        if (!userid || !courseids || !Array.isArray(courseids) || courseids.length === 0) {
+            return response.error(req, res, 'Faltan campos requeridos: userid, courseids (array)', 400);
+        }
+
+        const results = { success: [], errors: [] };
+
+        for (const [index, courseid] of courseids.entries()) {
+            const params = {
+                'wstoken': config.moodle_token,
+                'wsfunction': 'enrol_manual_enrol_users',
+                'moodlewsrestformat': 'json',
+                [`enrolments[${index}][userid]`]: userid,
+                [`enrolments[${index}][courseid]`]: courseid,
+                [`enrolments[${index}][roleid]`]: roleid,
+                [`enrolments[${index}][suspend]`]: 0 
+            };
+
+            try {
+                const result = await callMoodle(MOODLE_WEBSERVICE_URL, params);
+
+                if (result && result.exception) {
+                    results.errors.push({ courseid, error: result.message });
+                } else {
+                    results.success.push({ courseid });
+                }
+            } catch (err) {
+                results.errors.push({ courseid, error: err.message });
+            }
+        }
+
+        response.success(req, res, {
+            message: `Matrículas reactivadas. Exitosas: ${results.success.length}, Fallidas: ${results.errors.length}`,
+            successCount: results.success.length,
+            errorCount: results.errors.length,
+            success: results.success,
+            errors: results.errors
+        }, 200);
+
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
 router.post('/upload-excel', async (req, res) => {
     if (!req.files || Object.keys(req.files).length === 0) {
         return response.error(req, res, 'No se ha subido ningún archivo.', 400);
@@ -443,6 +652,38 @@ router.post('/update_log', async (req, res) => {
         response.error(req, res, error.message, 500);
     }
 });
+
+
+router.get('/list', async (req, res) => {
+    try {
+        const list = await ctrl.list(tableInjected);
+        response.success(req, res, list, 200);
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
+// Agregar/Matricular manualmente
+router.post('/add', async (req, res) => {
+    try {
+        await ctrl.addElement(tableInjected, req.body);
+        response.success(req, res, 'Matrícula creada', 201);
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
+// Actualizar matrícula
+router.put('/update', async (req, res) => {
+    try {
+        const { id, data } = req.body;
+        await ctrl.updateElement(tableInjected, { id, ...data });
+        response.success(req, res, 'Matrícula actualizada', 200);
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
 
 
 module.exports = router;
