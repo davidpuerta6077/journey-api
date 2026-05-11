@@ -1,8 +1,10 @@
 const axios = require('axios');
 const config = require('../config');
 
+
 // 1. IMPORTAR EL SERVICIO
 const awsAuth = require('./AwsAuthService');
+
 
 const domain = config.domain.url_base;
 
@@ -30,4 +32,6 @@ const GetService = async (endpoint) => {
     }
 }
 
+
 module.exports = { GetService };
+

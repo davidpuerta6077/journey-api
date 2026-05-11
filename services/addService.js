@@ -2,6 +2,7 @@ const axios = require('axios');
 // 1. IMPORTAR EL SERVICIO
 const awsAuth = require('./AwsAuthService');
 
+
 const addService = async (endpoint, data) => {
   try {
     // 2. OBTENER TOKEN AUTOMÁTICO
@@ -30,4 +31,6 @@ const addService = async (endpoint, data) => {
   }
 };
 
+
 module.exports= {addService};
+

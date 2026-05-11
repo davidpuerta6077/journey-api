@@ -1,8 +1,10 @@
 const axios = require('axios');
 const config = require('../config');
 
+
 // 1. IMPORTAR EL SERVICIO QUE CREASTE (Asegúrate de la ruta correcta)
 const awsAuth = require('./AwsAuthService'); 
+
 
 const domain = config.domain.url_base;
 
@@ -31,4 +33,6 @@ const DeleteService = async (endpoint, id) => {
   }
 };
 
+
 module.exports = { DeleteService };
+
