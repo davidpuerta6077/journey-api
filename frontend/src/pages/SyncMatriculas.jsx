@@ -1,0 +1,1 @@
+export default function SyncMatriculas() { return <h2>Sync Matrículas</h2> }

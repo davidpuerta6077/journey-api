@@ -7,7 +7,7 @@ const path = require('path');
 const response = require('../../network/response')
 const router = Router();
 const ctrl = require('./index');
-const { default: addService } = require('../../services/addService');
+const { addService } = require('../../services/addService');
 const config = require('../../config');
 const controller = require('./controller');
 

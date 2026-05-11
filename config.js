@@ -12,11 +12,15 @@ module.exports = {
     postgresql: {
         host: process.env.POSTGRESQL_HOST || 'localhost',
         user: process.env.POSTGRESQL_USER || 'postgres',
-        password: process.env.POSTGRESQL_PASSWORD || 'contraseña',
-        database: process.env.POSTGRESQL_DB || 'sb-data'
+        password: process.env.POSTGRESQL_PASSWORD || '1234',
+        database: process.env.POSTGRESQL_DB || 'journey_db',  // Cambiado a journey_db
+        port: 5433 
     },
     domain: {
         url_base: process.env.URL_BASE || 'https://localhost:3001'
     }, 
-    moodle_token: 'a9667c932d294bca8924ec0888140768'
-}
+    moodle_token: 'a9667c932d294bca8924ec0888140768',
+    university_api: {
+        base_url: 'http://localhost:4000/api'  // Agregado
+    }
+};

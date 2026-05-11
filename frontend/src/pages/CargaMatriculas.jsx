@@ -1,0 +1,1 @@
+export default function CargaMatriculas() { return <h2 style={{color:'#fff'}}>Carga Matrículas</h2> }

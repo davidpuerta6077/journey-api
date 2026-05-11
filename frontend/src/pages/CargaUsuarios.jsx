@@ -1,0 +1,1 @@
+export default function CargaUsuarios() { return <h2 style={{color:'#fff'}}>Carga Usuarios</h2> }

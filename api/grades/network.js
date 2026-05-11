@@ -2,7 +2,7 @@ const { Router } = require('express');
 const response = require('../../network/response')
 const router = Router();
 const ctrl = require('./index');
-const { default: addService } = require('../../services/addService');
+const { addService } = require('../../services/addService');
 const config = require('../../config');
 const tableInjected = 'test';
 
