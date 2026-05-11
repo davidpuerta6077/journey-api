@@ -1,1 +1,0 @@
-export default function CargaDesmatriculas() { return <h2 style={{color:'#fff'}}>Carga Desmatrículas</h2> }

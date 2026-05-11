@@ -43,6 +43,12 @@ body {
   min-height: calc(100vh - 56px);
 }
 
+
+.card-button{
+  text-decoration: none;
+  color: #333;
+}
+
 .sidebar {
   width: 260px;
   min-height: calc(100vh - 56px);

@@ -1,1 +1,0 @@
-export default function SyncCursos() { return <h2 style={{color:'#fff'}}>Sync Cursos</h2> }

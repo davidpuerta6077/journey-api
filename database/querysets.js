@@ -1,3 +1,4 @@
+
 const selectAllItems = (table) => {
     return {
         text: `SELECT * FROM ${table}`,
@@ -88,6 +89,7 @@ const updateData = (table, jsonData) => {
         values: [JSON.stringify(data), id]
     };
 };
+
 
 module.exports = {
     selectAllItems,

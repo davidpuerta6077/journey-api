@@ -1,0 +1,41 @@
+:root {
+    --sigma-dark: #1a1a1a;
+    --sigma-purple: #524e7a; /* Color extraído de la captura */
+    --sigma-light-bg: #f8f9fa;
+}
+.form-custom {
+    border: none;
+    border-bottom: 1px solid #ced4da;
+    border-radius: 0;
+    padding-left: 0;
+}
+.form-custom:focus {
+    box-shadow: none;
+    border-color: var(--sigma-purple);
+}
+.form-custom::placeholder {
+    font-style: italic;
+    color: #aaa;
+    font-size: 0.9rem;
+}
+
+/* Botones del Modal */
+.btn-custom-save {
+    background-color: var(--sigma-purple);
+    color: white;
+    border-radius: 8px;
+}
+.btn-custom-save:hover {
+    background-color: #413d63;
+    color: white;
+}
+.btn-custom-cancel {
+    background-color: #524e7a;
+    color: white;
+    opacity: 0.9;
+    border-radius: 8px;
+}
+
+.table th, .table td {
+    vertical-align: middle;
+}

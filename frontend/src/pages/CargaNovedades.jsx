@@ -1,1 +1,0 @@
-export default function CargaNovedades() { return <h2 style={{color:'#fff'}}>Carga Novedades</h2> }

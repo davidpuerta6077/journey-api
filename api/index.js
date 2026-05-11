@@ -3,6 +3,7 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const config = require('../config');
 const fileUpload = require('express-fileupload');
+const cors = require('cors');
 const users = require('./users/network');
 const courses = require('./courses/network');
 const enrollments = require('./enrollments/network');
@@ -14,13 +15,13 @@ const ROOT = path.resolve(__dirname, '..');
 
 const app = express();
 
-// ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
+app.use(cors());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(fileUpload({
-  limits: { fileSize: 50 * 1024 * 1024 },
-  useTempFiles: true,
-  tempFileDir: '/tmp/'
+    limits: { fileSize: 50 * 1024 * 1024 },
+    useTempFiles: true,
+    tempFileDir: '/tmp/'
 }));
 app.use(express.static(path.join(ROOT, 'public')));
 app.use('/uploads', express.static(path.join(ROOT, 'uploads')));
@@ -107,7 +108,6 @@ app.post('/api/sicau/usuarios', async (req, res, next) => {
       });
 
       if (existing.length > 0) {
-        // Actualizar datos existentes con nuevos campos
         await query({
           text: `UPDATE users SET
             firstname = $1, lastname = $2, city = $3, country = $4,
@@ -196,21 +196,34 @@ app.post('/api/sicau/matriculas', async (req, res, next) => {
 
     for (const enr of lista) {
       const userid = enr.studentId || enr.teacherId || enr.userid;
+      const courseid = enr.courseId || enr.courseid;
+      const codigoJourney = enr.codigo_asignatura && enr.periodo && enr.grupo
+        ? `${enr.codigo_asignatura}${enr.periodo}${enr.grupo}`
+        : null;
+
       const existing = await query({
-        text: 'SELECT id FROM enrollments WHERE userid = $1 AND courseid = $2 LIMIT 1',
-        values: [userid, enr.courseId || enr.courseid]
+        text: 'SELECT id FROM enrollments WHERE codigo_journey = $1 LIMIT 1',
+        values: [codigoJourney]
       });
 
       if (existing.length > 0) {
-        results.push({ userid, status: 'exists' });
+        results.push({ codigo_journey: codigoJourney, status: 'exists' });
       } else {
         await insertItem('enrollments', {
           userid,
-          courseid: enr.courseId || enr.courseid,
+          courseid,
           role: enr.role || 'student',
-          moodle_enrollment_id: null
+          moodle_enrollment_id: null,
+          codigo_asignatura: enr.codigo_asignatura || null,
+          nombre_asignatura: enr.nombre_asignatura || null,
+          programa: enr.programa || null,
+          periodo: enr.periodo || null,
+          grupo: enr.grupo || null,
+          codigo_journey: codigoJourney,
+          estado: enr.estado || null,
+          fecha_creacion_journey: enr.fecha_creacion_journey || null
         });
-        results.push({ userid, status: 'saved' });
+        results.push({ codigo_journey: codigoJourney, status: 'saved' });
       }
     }
     response.success(req, res, { results }, 200);

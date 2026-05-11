@@ -1,1 +1,0 @@
-export default function Configuracion() { return <h2 style={{color:'#fff'}}>Configuración</h2> }

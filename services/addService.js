@@ -8,19 +8,24 @@ const addService = async (endpoint, data) => {
     const token = await awsAuth.getToken();
 
     const url = `${endpoint}`;
-    
     // 3. AGREGAR HEADER AUTHORIZATION
     const res = await axios.post(url, data, {
+
       headers: { 
         'Content-Type': 'application/x-www-form-urlencoded',
         'Authorization': token // <-- Token inyectado
       },
     });
     console.log(res.data.message);
+
     return res.data;
 
   } catch (error) {
-    console.error(error);
+    // Si falla, mostramos el error específico
+    console.error("Error en addService:", error.message);
+    if (error.response) {
+        console.error("Detalle del error:", error.response.data);
+    }
     return null;
   }
 };
