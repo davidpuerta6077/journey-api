@@ -10,23 +10,14 @@ const fs = require('fs');
 const ctrl = require('./index');
 
 const MOODLE_WEBSERVICE_URL = "https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php";
-
-const agent = new https.Agent({  
-    rejectUnauthorized: false
-});
+const agent = new https.Agent({ rejectUnauthorized: false });
 
 async function callMoodle(url, params) {
     try {
-        const res = await axios.post(url, null, { 
-            params: params,
-            httpsAgent: agent 
-        });
-        if (res.data && res.data.exception) {
-            throw new Error(res.data.message);
-        }
+        const res = await axios.post(url, null, { params, httpsAgent: agent });
+        if (res.data && res.data.exception) throw new Error(res.data.message);
         return res.data;
     } catch (error) {
-        console.error('Error en llamada a Moodle:', error.message);
         const msg = error.response ? (error.response.data.error || error.message) : error.message;
         throw new Error(msg);
     }
@@ -34,7 +25,7 @@ async function callMoodle(url, params) {
 
 function readExcel(filePath) {
     const workbook = xlsx.readFile(filePath);
-    const sheetName = workbook.SheetNames[0]; 
+    const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     return xlsx.utils.sheet_to_json(worksheet, { defval: '' });
 }
@@ -56,16 +47,16 @@ function validateUser(userData) {
     const errors = [];
     userData.name = (userData.name != null) ? String(userData.name).trim() : '';
     userData.last_name = (userData.last_name != null) ? String(userData.last_name).trim() : '';
-    userData.document = (userData.document != null) ? String(userData.document).trim() : ''; 
+    userData.document = (userData.document != null) ? String(userData.document).trim() : '';
     userData.email = (userData.email != null) ? String(userData.email).trim() : '';
     if (!userData.name) errors.push('El nombre es obligatorio.');
     if (!userData.last_name) errors.push('El apellido es obligatorio.');
     if (!userData.document) errors.push('El documento es obligatorio.');
-    if (!userData.email || !/\S+@\S+\.\S+/.test(userData.email)) errors.push('El email es inválido o no existe.');
+    if (!userData.email || !/\S+@\S+\.\S+/.test(userData.email)) errors.push('El email es inválido.');
     if (!userData.document) {
-        errors.push('No se puede generar la contraseña, el documento es inválido.');
+        errors.push('No se puede generar la contraseña.');
     } else {
-        userData.password = userData.document; 
+        userData.password = userData.document;
     }
     if (!userData.username) userData.username = userData.email;
     return errors;
@@ -103,7 +94,7 @@ async function processExcelAndCreateUsers(filePath, moodleToken) {
                     errors.push({ ...row, errors: `Error Moodle: ${moodleResult.message}` });
                     errorCount++;
                 } else {
-                    errors.push({ ...row, errors: `Respuesta inesperada: ${JSON.stringify(moodleResult)}` });
+                    errors.push({ ...row, errors: `Respuesta inesperada` });
                     errorCount++;
                 }
             } catch (moodleApiError) {
@@ -114,6 +105,8 @@ async function processExcelAndCreateUsers(filePath, moodleToken) {
     }
     return { successCount, errorCount, errors };
 }
+
+// ─── RUTAS MOODLE ─────────────────────────────────────────────────────────────
 
 router.post('/add_user_pos', async (req, res) => {
     const data = {
@@ -297,6 +290,22 @@ router.get('/test', async (req, res) => {
         response.success(req, res, "Api Users Working!", 200);
     } catch (error) {
         response.error(req, res, error.message, 500);
+    }
+});
+
+// ─── RUTA SICAU ───────────────────────────────────────────────────────────────
+router.post('/sicau', async (req, res, next) => {
+    try {
+        const items = req.body.users || req.body.items || req.body || [];
+        const lista = Array.isArray(items) ? items : [items];
+        const results = [];
+        for (const user of lista) {
+            const result = await ctrl.saveSicauUsuario(user);
+            results.push(result);
+        }
+        response.success(req, res, { results }, 200);
+    } catch (error) {
+        next(error);
     }
 });
 

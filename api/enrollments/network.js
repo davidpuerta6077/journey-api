@@ -12,7 +12,6 @@ const https = require('https');
 
 const tableInjected = 'test';
 const MOODLE_WEBSERVICE_URL = "https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php";
-
 const agent = new https.Agent({ rejectUnauthorized: false });
 
 async function callMoodle(url, params) {
@@ -238,7 +237,7 @@ async function processExcelAndSuspendUsers(filePath, moodleToken) {
     return { successCount, errorCount, errors };
 }
 
-// ─── RUTAS ───────────────────────────────────────────────────────────────────
+// ─── RUTAS MOODLE ─────────────────────────────────────────────────────────────
 
 router.post('/enroll_users', async (req, res) => {
     try {
@@ -479,6 +478,32 @@ router.post('/update_log', async (req, res) => {
         response.success(req, res, 'Log actualizado', 200);
     } catch (error) {
         response.error(req, res, error.message, 500);
+    }
+});
+
+// ─── RUTA SICAU ───────────────────────────────────────────────────────────────
+router.post('/sicau', async (req, res, next) => {
+    try {
+        const items = req.body.enrollments || req.body.items || req.body || [];
+        const lista = Array.isArray(items) ? items : [items];
+        const results = [];
+        for (const enr of lista) {
+            const result = await ctrl.saveSicauMatricula(enr);
+            results.push(result);
+        }
+        response.success(req, res, { results }, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ─── PREVIEW MATRÍCULAS CON DATOS DE USUARIO ─────────────────────────────────
+router.get('/preview', async (req, res, next) => {
+    try {
+        const result = await ctrl.listEnrollmentsWithUsers();
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
     }
 });
 

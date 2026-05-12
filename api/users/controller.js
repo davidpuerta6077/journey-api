@@ -1,23 +1,53 @@
 module.exports = (injectedDB) => {
-    
     let data = injectedDB;
-    if (!data) data = require('../../store/mysql'); 
+    if (!data) data = require('../../database/postgresql');
 
     function list(TABLA) {
-        return data.list(TABLA);
+        return data.listAll(TABLA);
     }
 
     async function addElement(TABLA, datas) {
-        return data.insert(TABLA, datas);
+        return data.insertItem(TABLA, datas);
     }
 
     async function updateElement(TABLA, datas) {
-        return data.update(TABLA, datas);
+        return data.updateItem(TABLA, datas);
+    }
+
+    // ─── SICAU ────────────────────────────────────────────────────────────────
+    async function saveSicauUsuario(user) {
+        const existing = await data.findUserSicau(user.email, user.username);
+
+        if (existing.length > 0) {
+            await data.updateUserFromSicau(user);
+            return { username: user.username, status: 'updated' };
+        } else {
+            await data.insertItem('users', {
+                username: user.username,
+                firstname: user.firstname,
+                lastname: user.lastname,
+                email: user.email,
+                password: user.documento ? String(user.documento) : 'Pascual2024*',
+                city: user.city || 'Medellín',
+                country: user.country || 'CO',
+                documento: user.documento || null,
+                correo_personal: user.correo_personal || null,
+                telefono: user.telefono || null,
+                celular: user.celular || null,
+                fecha_nacimiento: user.fecha_nacimiento || null,
+                jornada: user.jornada || null,
+                departamento_academico: user.departamento_academico || null,
+                plan_estudios: user.plan_estudios || null,
+                moodle_id: null
+            });
+            return { username: user.username, status: 'saved' };
+        }
     }
 
     return {
         list,
-        addElement, 
-        updateElement
+        addElement,
+        updateElement,
+        saveSicauUsuario
     };
 };
