@@ -286,8 +286,9 @@ router.post('/process-excel', async (req, res) => {
 });
 
 router.get('/test', async (req, res) => {
+    response = await ctrl.list("Logs");
     try {
-        response.success(req, res, "Api Users Working!", 200);
+        response.success(req, res, {"test_message": "Api Users Working!", "table": response}, 200);
     } catch (error) {
         response.error(req, res, error.message, 500);
     }
