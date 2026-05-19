@@ -17,11 +17,12 @@ module.exports = {
     //     // schema: process.env.SCHEMA || 'test',
     //     port: process.env.DB_PORT || 5432, 
     postgresql: {
-        host: process.env.POSTGRESQL_HOST || 'localhost',
-        user: process.env.POSTGRESQL_USER || 'postgres',
-        password: process.env.POSTGRESQL_PASSWORD || '1234',
-        database: process.env.POSTGRESQL_DB || 'journey_db',  // Cambiado a journey_db
-        port: 5433 
+        host: process.env.POSTGRESQL_HOST || '127.0.0.1',
+        user: process.env.POSTGRESQL_USER || 'evarango',
+        password: process.env.POSTGRESQL_PASSWORD || '865ugvYTC5cygu',
+        database: process.env.POSTGRESQL_DB || 'journey',
+        schema: process.env.SCHEMA || 'test',
+        port: process.env.DB_PORT || 5434, 
     },
     domain: {
         url_base: process.env.URL_BASE || 'https://localhost:3001'
