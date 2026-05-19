@@ -30,5 +30,11 @@ module.exports = {
     moodle_token: 'a9667c932d294bca8924ec0888140768',
     university_api: {
         base_url: 'http://localhost:4000/api'  // Agregado
-    }
+    },
+    moodle_db: {
+    host: process.env.MOODLE_DB_HOST || 'localhost',
+    user: process.env.MOODLE_DB_USER || 'root',
+    password: process.env.MOODLE_DB_PASSWORD || '',
+    database: process.env.MOODLE_DB_NAME || 'moodle_cinco'
+}
 };

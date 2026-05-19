@@ -1,5 +1,17 @@
 const { insertItem, query } = require('../database/postgresql');
 const { moodleRequest } = require('./moodleService');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
+const mysql = require('mysql2/promise');
+const config = require('../config');
+
+const moodleDB = mysql.createPool({
+  host: config.moodle_db.host,
+  user: config.moodle_db.user,
+  password: config.moodle_db.password,
+  database: config.moodle_db.database
+});
 
 const parseMoodleId = (result) => {
   if (!result) return null;
@@ -17,6 +29,27 @@ const parseMoodleEnrollmentId = (result) => {
   return result.id || result.enrollmentid || null;
 };
 
+// ─── HELPER MOODLE CLI ────────────────────────────────────────────────────────
+
+async function runMoodleAuthSync() {
+  const { stdout, stderr } = await execPromise(
+    `C:\\xampp\\php\\php.exe C:\\xampp\\htdocs\\MoodleCinco\\moodle\\admin\\cli\\scheduled_task.php --execute="\\auth_db\\task\\sync_users"`
+  );
+  console.log('Moodle auth sync output:', stdout);
+  if (stderr) console.warn('Moodle auth sync stderr:', stderr);
+  return stdout;
+}
+
+// ─── HELPER CONSULTA MYSQL MOODLE ────────────────────────────────────────────
+
+async function getMoodleUserByUsername(username) {
+  const [rows] = await moodleDB.query(
+    'SELECT id, username FROM mdl_user WHERE username = ? AND deleted = 0 LIMIT 1',
+    [username]
+  );
+  return rows.length > 0 ? rows[0] : null;
+}
+
 // ─── PREVIEW FUNCTIONS ───────────────────────────────────────────────────────
 
 async function previewStudents() {
@@ -32,19 +65,21 @@ async function previewStudents() {
   for (const user of users) {
     const status = { inDB: true, inMoodle: false };
 
-    if (user.moodle_id) {
-      const check = await moodleRequest('core_user_get_users_by_field', {
-        'field': 'username',
-        'values[0]': user.username
-      });
-      status.inMoodle = Array.isArray(check) && check.length > 0;
+    const moodleUser = await getMoodleUserByUsername(user.username);
+    status.inMoodle = !!moodleUser;
 
-      if (!status.inMoodle) {
-        await query({
-          text: 'UPDATE users SET moodle_id = NULL WHERE id = $1',
-          values: [user.id]
-        });
-      }
+    if (moodleUser && !user.moodle_id) {
+      await query({
+        text: 'UPDATE users SET moodle_id = $1 WHERE id = $2',
+        values: [moodleUser.id, user.id]
+      });
+    }
+
+    if (!moodleUser && user.moodle_id) {
+      await query({
+        text: 'UPDATE users SET moodle_id = NULL WHERE id = $1',
+        values: [user.id]
+      });
     }
 
     results.push({ ...user, _syncStatus: status });
@@ -94,10 +129,7 @@ async function syncStudents(items = []) {
         continue;
       }
 
-      // username en Moodle = correo institucional completo
       const moodleUsername = user.username || user.email;
-      // password en Moodle = documento
-      const moodlePassword = user.documento ? String(user.documento) : 'Pascual2024*';
 
       const existing = await query({
         text: 'SELECT * FROM users WHERE email = $1 OR username = $2 LIMIT 1',
@@ -129,7 +161,7 @@ async function syncStudents(items = []) {
           firstname: user.firstname,
           lastname: user.lastname,
           email: user.email,
-          password: moodlePassword,
+          password: user.documento ? String(user.documento) : 'Pascual2024*',
           city: user.city || 'Medellín',
           country: user.country || 'CO',
           documento: user.documento || null,
@@ -146,60 +178,20 @@ async function syncStudents(items = []) {
         result.status = 'success';
       }
 
-      if (!localUser.moodle_id) {
-        const moodleResult = await moodleRequest('core_user_create_users', {
-          'users[0][username]': moodleUsername,
-          'users[0][firstname]': user.firstname,
-          'users[0][lastname]': user.lastname,
-          'users[0][email]': user.email,
-          'users[0][password]': moodlePassword,
-          'users[0][city]': user.city || 'Medellín',
-          'users[0][country]': user.country || 'CO'
-        });
+      // ─── Ejecutar sync via BD externa ────────────────────────────────────
+      await runMoodleAuthSync();
 
-        const moodleId = parseMoodleId(moodleResult);
-        if (moodleId) {
-          await query({
-            text: 'UPDATE users SET moodle_id = $1 WHERE id = $2',
-            values: [moodleId, localUser.id]
-          });
-          result.moodle_id = moodleId;
-        } else {
-          result.moodle_warning = 'Usuario guardado en BD pero no en Moodle';
-        }
+      // ─── Verificar en MySQL de Moodle local ──────────────────────────────
+      const moodleUser = await getMoodleUserByUsername(moodleUsername);
+
+      if (moodleUser) {
+        await query({
+          text: 'UPDATE users SET moodle_id = $1 WHERE id = $2',
+          values: [moodleUser.id, localUser.id]
+        });
+        result.moodle_id = moodleUser.id;
       } else {
-        const check = await moodleRequest('core_user_get_users_by_field', {
-          'field': 'username',
-          'values[0]': moodleUsername
-        });
-
-        const exists = Array.isArray(check) && check.length > 0;
-        if (!exists) {
-          await query({
-            text: 'UPDATE users SET moodle_id = NULL WHERE id = $1',
-            values: [localUser.id]
-          });
-
-          const moodleResult = await moodleRequest('core_user_create_users', {
-            'users[0][username]': moodleUsername,
-            'users[0][firstname]': user.firstname,
-            'users[0][lastname]': user.lastname,
-            'users[0][email]': user.email,
-            'users[0][password]': moodlePassword,
-            'users[0][city]': user.city || 'Medellín',
-            'users[0][country]': user.country || 'CO'
-          });
-
-          const moodleId = parseMoodleId(moodleResult);
-          if (moodleId) {
-            await query({
-              text: 'UPDATE users SET moodle_id = $1 WHERE id = $2',
-              values: [moodleId, localUser.id]
-            });
-            result.moodle_id = moodleId;
-            result.status = 'success';
-          }
-        }
+        result.moodle_warning = 'Sync ejecutado pero usuario no encontrado en Moodle';
       }
 
     } catch (error) {
