@@ -14,6 +14,20 @@ module.exports = (injectedDB) => {
         return data.updateUser(userData);
     }
 
+    // ─── SYNC ─────────────────────────────────────────────────────────────────
+
+    async function listUsersForSync() {
+        return data.getUsersForSync();
+    }
+
+    async function updateMoodleId(id, moodleId) {
+        return data.setUserMoodleId(id, moodleId);
+    }
+
+    async function clearMoodleId(id) {
+        return data.removeUserMoodleId(id);
+    }
+
     // ─── SICAU ────────────────────────────────────────────────────────────────
 
     async function saveSicauUsuario(user) {
@@ -49,6 +63,9 @@ module.exports = (injectedDB) => {
         list,
         addElement,
         updateElement,
+        listUsersForSync,
+        updateMoodleId,
+        clearMoodleId,
         saveSicauUsuario,
     };
 };
