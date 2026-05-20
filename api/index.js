@@ -14,7 +14,6 @@ const { query } = require('../database/postgresql');
 const ROOT = path.resolve(__dirname, '..');
 const health = require('./health/network');
 
-
 const app = express();
 
 app.use(cors());
@@ -25,7 +24,7 @@ app.use(fileUpload({
     useTempFiles: true,
     tempFileDir: '/tmp/'
 }));
-app.use(express.static(path.join(ROOT, 'public')));
+//app.use(express.static(path.join(ROOT, 'public')));
 app.use('/uploads', express.static(path.join(ROOT, 'uploads')));
 
 // ─── MÓDULOS ──────────────────────────────────────────────────────────────────
@@ -48,19 +47,22 @@ const handleSync = (syncFunction, isSync = false) => async (req, res, next) => {
 };
 
 // ─── PREVIEW ENDPOINTS ────────────────────────────────────────────────────────
-app.get('/sync/preview/students', handleSync(syncService.previewStudents, false));
-app.get('/sync/preview/courses', handleSync(syncService.previewCourses, false));
+app.get('/sync/preview/students',    handleSync(syncService.previewStudents,    false));
+app.get('/sync/preview/courses',     handleSync(syncService.previewCourses,     false));
 app.get('/sync/preview/enrollments', handleSync(syncService.previewEnrollments, false));
 
 // ─── SYNC ENDPOINTS ───────────────────────────────────────────────────────────
-app.post('/sync/students', handleSync(syncService.syncStudents, true));
-app.post('/sync/courses', handleSync(syncService.syncCourses, true));
+app.post('/sync/students',    handleSync(syncService.syncStudents,    true));
+app.post('/sync/courses',     handleSync(syncService.syncCourses,     true));
 app.post('/sync/enrollments', handleSync(syncService.syncEnrollments, true));
 
 // ─── CRUD USUARIOS JOURNEY ────────────────────────────────────────────────────
 app.delete('/journey/usuarios/:id', async (req, res, next) => {
     try {
-        await query({ text: 'DELETE FROM users WHERE id = $1', values: [req.params.id] });
+        await query({
+            text: `DELETE FROM ${config.postgresql.schema}.users WHERE id = $1`,
+            values: [req.params.id]
+        });
         response.success(req, res, 'Usuario eliminado', 200);
     } catch (error) {
         next(error);
@@ -75,7 +77,7 @@ app.put('/journey/usuarios/:id', async (req, res, next) => {
             fecha_nacimiento, jornada, departamento_academico, plan_estudios
         } = req.body;
         await query({
-            text: `UPDATE users SET
+            text: `UPDATE ${config.postgresql.schema}.users SET
                 firstname = $1, lastname = $2, email = $3, city = $4, country = $5,
                 documento = $6, correo_personal = $7, telefono = $8, celular = $9,
                 fecha_nacimiento = $10, jornada = $11, departamento_academico = $12,
@@ -95,13 +97,13 @@ app.put('/journey/usuarios/:id', async (req, res, next) => {
 });
 
 // ─── PÁGINAS ──────────────────────────────────────────────────────────────────
-app.get('/', (req, res) => {
-    res.sendFile(path.join(ROOT, 'public', 'index.html'));
-});
+// app.get('/', (req, res) => {
+//     res.sendFile(path.join(ROOT, 'public', 'index.html'));
+// });
 
-app.get('/carga-usuarios', (req, res) => {
-    res.sendFile(path.join(ROOT, 'public', 'Carga_Usuarios.html'));
-});
+// app.get('/carga-usuarios', (req, res) => {
+//     res.sendFile(path.join(ROOT, 'public', 'Carga_Usuarios.html'));
+// });
 
 // ─── MIDDLEWARE DE ERRORES ────────────────────────────────────────────────────
 app.use((err, req, res, next) => {

@@ -14,9 +14,9 @@ const moodleRequest = async (wsfunction, params) => {
     });
 
     const res = await axios.post(
-      'https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php',
+      config.moodle.url,
       data,
-      { 
+      {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         httpsAgent: agent
       }

@@ -1,29 +1,13 @@
 const { Router } = require('express');
 const router = Router();
 const response = require('../../network/response');
-const config = require('../../config');
-const axios = require('axios');
+const ctrl = require('./index');
+const { moodleRequest } = require('../../services/moodleService');
 const path = require('path');
-const https = require('https');
 const xlsx = require('xlsx');
 const fs = require('fs');
-const ctrl = require('./index');
 
-const MOODLE_WEBSERVICE_URL = "https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php";
-const agent = new https.Agent({ rejectUnauthorized: false });
-
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
-
-async function callMoodle(url, params) {
-    try {
-        const res = await axios.post(url, null, { params, httpsAgent: agent });
-        if (res.data && res.data.exception) throw new Error(res.data.message);
-        return res.data;
-    } catch (error) {
-        const msg = error.response ? (error.response.data.error || error.message) : error.message;
-        throw new Error(msg);
-    }
-}
+// ─── HELPERS EXCEL ────────────────────────────────────────────────────────────
 
 function readExcel(filePath) {
     const workbook = xlsx.readFile(filePath);
@@ -64,7 +48,7 @@ function validateUser(userData) {
     return errors;
 }
 
-async function processExcelAndCreateUsers(filePath, moodleToken) {
+async function processExcelAndCreateUsers(filePath) {
     const excelData = readExcel(filePath);
     const errors = [];
     let successCount = 0;
@@ -77,21 +61,17 @@ async function processExcelAndCreateUsers(filePath, moodleToken) {
             errorCount++;
             continue;
         }
-        const moodleParams = {
-            'wstoken':                  moodleToken,
-            'wsfunction':               'core_user_create_users',
-            'moodlewsrestformat':       'json',
-            'users[0][username]':       row.username.toLowerCase(),
-            'users[0][firstname]':      row.name,
-            'users[0][lastname]':       row.last_name,
-            'users[0][email]':          row.email,
-            'users[0][password]':       row.password,
-            'users[0][city]':           row.city     || 'Desconocido',
-            'users[0][country]':        row.country  || 'CO',
-            'users[0][idnumber]':       row.document,
-        };
         try {
-            const moodleResult = await callMoodle(MOODLE_WEBSERVICE_URL, moodleParams);
+            const moodleResult = await moodleRequest('core_user_create_users', {
+                'users[0][username]':  row.username.toLowerCase(),
+                'users[0][firstname]': row.name,
+                'users[0][lastname]':  row.last_name,
+                'users[0][email]':     row.email,
+                'users[0][password]':  row.password,
+                'users[0][city]':      row.city    || 'Desconocido',
+                'users[0][country]':   row.country || 'CO',
+                'users[0][idnumber]':  row.document,
+            });
             if (Array.isArray(moodleResult) && moodleResult.length > 0) {
                 successCount++;
             } else if (moodleResult && moodleResult.exception) {
@@ -109,27 +89,22 @@ async function processExcelAndCreateUsers(filePath, moodleToken) {
     return { successCount, errorCount, errors };
 }
 
-
 // ─── RUTAS MOODLE ─────────────────────────────────────────────────────────────
 
 router.post('/add_user', async (req, res) => {
     const { email, document: documento, firstname, lastname, city, country } = req.body;
-    const params = {
-        'wstoken':                  config.moodle_token,
-        'wsfunction':               'core_user_create_users',
-        'moodlewsrestformat':       'json',
-        'users[0][username]':       email,
-        'users[0][email]':          email,
-        'users[0][password]':       documento,
-        'users[0][idnumber]':       documento,
-        'users[0][firstname]':      firstname,
-        'users[0][lastname]':       lastname,
-        'users[0][city]':           city    || 'Medellin',
-        'users[0][country]':        country || 'CO',
-    };
     try {
-        const result = await callMoodle(MOODLE_WEBSERVICE_URL, params);
-        if (result.exception) throw new Error(result.message);
+        const result = await moodleRequest('core_user_create_users', {
+            'users[0][username]':  email,
+            'users[0][email]':     email,
+            'users[0][password]':  documento,
+            'users[0][idnumber]':  documento,
+            'users[0][firstname]': firstname,
+            'users[0][lastname]':  lastname,
+            'users[0][city]':      city    || 'Medellin',
+            'users[0][country]':   country || 'CO',
+        });
+        if (result && result.exception) throw new Error(result.message);
         response.success(req, res, result, 200);
     } catch (error) {
         response.error(req, res, error.message, 500);
@@ -137,20 +112,15 @@ router.post('/add_user', async (req, res) => {
 });
 
 router.post('/update_user', async (req, res) => {
-    const params = {
-        'wstoken':              config.moodle_token,
-        'wsfunction':           'core_user_update_users',
-        'moodlewsrestformat':   'json',
-        'users[0][id]':         req.body.id,
-    };
-    if (req.body.firstname)              params['users[0][firstname]']  = req.body.firstname;
-    if (req.body.lastname)               params['users[0][lastname]']   = req.body.lastname;
-    if (req.body.email)                  params['users[0][email]']      = req.body.email;
-    if (req.body.password)               params['users[0][password]']   = req.body.password;
-    if (req.body.city)                   params['users[0][city]']       = req.body.city;
-    if (req.body.suspended !== undefined) params['users[0][suspended]'] = req.body.suspended;
+    const params = { 'users[0][id]': req.body.id };
+    if (req.body.firstname)               params['users[0][firstname]']  = req.body.firstname;
+    if (req.body.lastname)                params['users[0][lastname]']   = req.body.lastname;
+    if (req.body.email)                   params['users[0][email]']      = req.body.email;
+    if (req.body.password)                params['users[0][password]']   = req.body.password;
+    if (req.body.city)                    params['users[0][city]']       = req.body.city;
+    if (req.body.suspended !== undefined) params['users[0][suspended]']  = req.body.suspended;
     try {
-        const result = await callMoodle(MOODLE_WEBSERVICE_URL, params);
+        const result = await moodleRequest('core_user_update_users', params);
         response.success(req, res, result || 'Usuario actualizado', 200);
     } catch (error) {
         response.error(req, res, error.message, 500);
@@ -159,15 +129,11 @@ router.post('/update_user', async (req, res) => {
 
 router.post('/delete_user', async (req, res) => {
     const userId = req.body.userids[0];
-    const params = {
-        'wstoken':              config.moodle_token,
-        'wsfunction':           'core_user_update_users',
-        'moodlewsrestformat':   'json',
-        'users[0][id]':         userId,
-        'users[0][suspended]':  1,
-    };
     try {
-        const result = await callMoodle(MOODLE_WEBSERVICE_URL, params);
+        const result = await moodleRequest('core_user_update_users', {
+            'users[0][id]':        userId,
+            'users[0][suspended]': 1,
+        });
         if (result && result.exception) throw new Error(result.message);
         response.success(req, res, 'Usuario suspendido correctamente', 200);
     } catch (error) {
@@ -176,15 +142,11 @@ router.post('/delete_user', async (req, res) => {
 });
 
 router.post('/search_user', async (req, res) => {
-    const params = {
-        'wstoken':              config.moodle_token,
-        'wsfunction':           'core_user_get_users',
-        'moodlewsrestformat':   'json',
-        'criteria[0][key]':     req.body.key,
-        'criteria[0][value]':   req.body.value,
-    };
     try {
-        const result = await callMoodle(MOODLE_WEBSERVICE_URL, params);
+        const result = await moodleRequest('core_user_get_users', {
+            'criteria[0][key]':   req.body.key,
+            'criteria[0][value]': req.body.value,
+        });
         response.success(req, res, result, 200);
     } catch (error) {
         response.error(req, res, error.message, 500);
@@ -192,15 +154,11 @@ router.post('/search_user', async (req, res) => {
 });
 
 router.get('/get_users', async (req, res) => {
-    const params = {
-        'wstoken':              config.moodle_token,
-        'wsfunction':           'core_user_get_users',
-        'moodlewsrestformat':   'json',
-        'criteria[0][key]':     'lastname',
-        'criteria[0][value]':   req.query.search || '%',
-    };
     try {
-        const result = await callMoodle(MOODLE_WEBSERVICE_URL, params);
+        const result = await moodleRequest('core_user_get_users', {
+            'criteria[0][key]':   'lastname',
+            'criteria[0][value]': req.query.search || '%',
+        });
         response.success(req, res, result.users || [], 200);
     } catch (error) {
         response.error(req, res, error.message, 500);
@@ -211,7 +169,7 @@ router.post('/process-excel', async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta del archivo.', 400);
     try {
-        const result = await processExcelAndCreateUsers(filePath, config.moodle_token);
+        const result = await processExcelAndCreateUsers(filePath);
         if (result.errors.length > 0) {
             const errorExcelPath = await generateErrorExcel(result.errors);
             response.success(req, res, {

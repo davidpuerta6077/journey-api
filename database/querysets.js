@@ -4,13 +4,23 @@ const schema = config.postgresql.schema;
 
 const selectAllItems = (table) => {
     return {
-        query: `SELECT * FROM ${table}`,
+        text: `SELECT * FROM ${schema}.${table}`,
         values: []
     };
 };
+
 // ─── USERS ────────────────────────────────────────────────────────────────────
+
 const selectAllUsers = () => ({
-    query: `SELECT * FROM ${schema}.users`,
+    text: `SELECT * FROM ${schema}.users`,
+    values: []
+});
+
+const selectUsersForSync = () => ({
+    text: `SELECT id, username, firstname, lastname, email, city, country,
+           documento, correo_personal, telefono, celular, fecha_nacimiento,
+           jornada, departamento_academico, plan_estudios, moodle_id
+           FROM ${schema}.users ORDER BY id DESC`,
     values: []
 });
 
@@ -21,32 +31,32 @@ const insertUsuarioData = (data) => {
         jornada, departamento_academico, plan_estudios, moodle_id
     } = data;
 
-    const query = `
+    const text = `
         INSERT INTO ${schema}.users (
             username, firstname, lastname, email, password, city, country,
             documento, correo_personal, telefono, celular, fecha_nacimiento,
             jornada, departamento_academico, plan_estudios, moodle_id
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-        )
+        ) RETURNING *
     `;
 
     const values = [
         username, firstname, lastname, email, password,
-        city                   || 'Medellín', 
+        city                   || 'Medellín',
         country                || 'CO',
-        documento              || null,        
+        documento              || null,
         correo_personal        || null,
-        telefono               || null,        
+        telefono               || null,
         celular                || null,
-        fecha_nacimiento       || null,        
+        fecha_nacimiento       || null,
         jornada                || null,
-        departamento_academico || null,  
+        departamento_academico || null,
         plan_estudios          || null,
         moodle_id              || null
     ];
 
-    return { query, values };
+    return { text, values };
 };
 
 const updateUsuarioData = (data) => {
@@ -56,44 +66,54 @@ const updateUsuarioData = (data) => {
         jornada, departamento_academico, plan_estudios
     } = data;
 
-    const query = `
+    const text = `
         UPDATE ${schema}.users SET
             firstname = $1, lastname = $2, city = $3, country = $4, password = $5, moodle_id = $6,
             documento = $7, correo_personal = $8, telefono = $9, celular = $10,
             fecha_nacimiento = $11, jornada = $12, departamento_academico = $13,
-            plan_estudios = $14 
+            plan_estudios = $14
         WHERE id = $15
     `;
 
     const values = [
-        firstname, lastname, city, country, password, 
+        firstname, lastname, city, country, password,
         moodle_id              || null,
-        documento              || null, 
-        correo_personal        || null, 
+        documento              || null,
+        correo_personal        || null,
         telefono               || null,
-        celular                || null, 
-        fecha_nacimiento       || null, 
+        celular                || null,
+        fecha_nacimiento       || null,
         jornada                || null,
-        departamento_academico || null, 
-        plan_estudios          || null, 
+        departamento_academico || null,
+        plan_estudios          || null,
         id
     ];
 
-    return { query, values };
+    return { text, values };
 };
 
+const updateUserMoodleId = (id, moodleId) => ({
+    text: `UPDATE ${schema}.users SET moodle_id = $1 WHERE id = $2`,
+    values: [moodleId, id]
+});
+
+const clearUserMoodleId = (id) => ({
+    text: `UPDATE ${schema}.users SET moodle_id = NULL WHERE id = $1`,
+    values: [id]
+});
+
 const findUserByEmailOrUsername = (email, username) => ({
-    query: `SELECT id FROM ${schema}.users WHERE email = $1 OR username = $2 LIMIT 1`,
+    text: `SELECT id FROM ${schema}.users WHERE email = $1 OR username = $2 LIMIT 1`,
     values: [email, username]
 });
 
 const findUserByDocumento = (documento) => ({
-    query: `SELECT id FROM ${schema}.users WHERE documento = $1 LIMIT 1`,
+    text: `SELECT id FROM ${schema}.users WHERE documento = $1 LIMIT 1`,
     values: [documento]
 });
 
 const updateUserSicau = (data) => ({
-    query: `UPDATE ${schema}.users SET
+    text: `UPDATE ${schema}.users SET
         firstname = $1, lastname = $2, city = $3, country = $4,
         documento = $5, correo_personal = $6, telefono = $7, celular = $8,
         fecha_nacimiento = $9, jornada = $10, departamento_academico = $11,
@@ -111,7 +131,13 @@ const updateUserSicau = (data) => ({
 // ─── COURSES ──────────────────────────────────────────────────────────────────
 
 const selectAllCourses = () => ({
-    query: `SELECT * FROM ${schema}.courses`,
+    text: `SELECT * FROM ${schema}.courses`,
+    values: []
+});
+
+const selectCoursesForSync = () => ({
+    text: `SELECT id, fullname, shortname, categoryid, idnumber, summary, visible, format, numsections, moodle_id
+           FROM ${schema}.courses ORDER BY id DESC`,
     values: []
 });
 
@@ -121,29 +147,29 @@ const insertCourseData = (data) => {
         visible, format, numsections, moodle_id, seed_course_id
     } = data;
 
-    const query = `
+    const text = `
         INSERT INTO ${schema}.courses (
             fullname, shortname, categoryid, idnumber, summary,
             visible, format, numsections, moodle_id, seed_course_id
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-        )
+        ) RETURNING *
     `;
 
     const values = [
-        fullname, 
-        shortname, 
-        categoryid     || null, 
+        fullname,
+        shortname,
+        categoryid     || null,
         idnumber       || null,
-        summary        || null, 
+        summary        || null,
         visible == null ? true : visible,
-        format         || 'topics', 
+        format         || 'topics',
         numsections    || 10,
-        moodle_id      || null, 
+        moodle_id      || null,
         seed_course_id || null
     ];
 
-    return { query, values };
+    return { text, values };
 };
 
 const updateCourseData = (data) => {
@@ -152,7 +178,7 @@ const updateCourseData = (data) => {
         visible, format, numsections, moodle_id, seed_course_id
     } = data;
 
-    const query = `
+    const text = `
         UPDATE ${schema}.courses SET
             fullname = $1, categoryid = $2, idnumber = $3, summary = $4, visible = $5,
             format = $6, numsections = $7, moodle_id = $8, seed_course_id = $9
@@ -172,18 +198,33 @@ const updateCourseData = (data) => {
         id
     ];
 
-    return { query, values };
+    return { text, values };
 };
 
+const updateCourseMoodleId = (id, moodleId) => ({
+    text: `UPDATE ${schema}.courses SET moodle_id = $1 WHERE id = $2`,
+    values: [moodleId, id]
+});
+
 const findCourseByIdnumber = (idnumber) => ({
-    query: `SELECT id FROM ${schema}.courses WHERE idnumber = $1 LIMIT 1`,
+    text: `SELECT id FROM ${schema}.courses WHERE idnumber = $1 LIMIT 1`,
     values: [idnumber]
+});
+
+const findCourseByShortname = (shortname) => ({
+    text: `SELECT id FROM ${schema}.courses WHERE shortname = $1 LIMIT 1`,
+    values: [shortname]
 });
 
 // ─── ENROLLMENTS ──────────────────────────────────────────────────────────────
 
 const selectAllEnrollments = () => ({
-    query: `SELECT * FROM ${schema}.enrollments`,
+    text: `SELECT * FROM ${schema}.enrollments`,
+    values: []
+});
+
+const selectEnrollmentsForSync = () => ({
+    text: `SELECT id, userid, courseid, role, moodle_enrollment_id FROM ${schema}.enrollments ORDER BY id DESC`,
     values: []
 });
 
@@ -194,58 +235,63 @@ const insertEnrollmentData = (data) => {
         periodo, grupo, codigo_journey, estado, fecha_creacion_journey
     } = data;
 
-    const query = `
+    const text = `
         INSERT INTO ${schema}.enrollments (
             userid, courseid, role, moodle_enrollment_id,
             codigo_asignatura, nombre_asignatura, programa,
             periodo, grupo, codigo_journey, estado, fecha_creacion_journey
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-        )
+        ) RETURNING *
     `;
 
     const values = [
-        userid, 
-        courseid, 
-        role                   || 'student', 
+        userid,
+        courseid,
+        role                   || 'student',
         moodle_enrollment_id   || null,
-        codigo_asignatura      || null, 
-        nombre_asignatura      || null, 
+        codigo_asignatura      || null,
+        nombre_asignatura      || null,
         programa               || null,
-        periodo                || null, 
-        grupo                  || null, 
+        periodo                || null,
+        grupo                  || null,
         codigo_journey         || null,
-        estado                 || null, 
+        estado                 || null,
         fecha_creacion_journey || null
     ];
 
-    return { query, values };
+    return { text, values };
 };
 
 const updateEnrollmentData = (data) => {
     const { id, moodle_enrollment_id } = data;
 
-    const query = `
-        UPDATE ${schema}.enrollments 
-        SET moodle_enrollment_id = $1 
+    const text = `
+        UPDATE ${schema}.enrollments
+        SET moodle_enrollment_id = $1
         WHERE id = $2
     `;
 
     const values = [
-        moodle_enrollment_id || null, 
+        moodle_enrollment_id || null,
         id
     ];
 
-    return { query, values };
+    return { text, values };
 };
 
+const updateEnrollmentMoodleId = (id, moodleEnrollmentId) => ({
+    text: `UPDATE ${schema}.enrollments SET moodle_enrollment_id = $1 WHERE id = $2`,
+    values: [moodleEnrollmentId, id]
+});
+
 const findEnrollmentByCodigoJourney = (codigoJourney) => ({
-    query: `SELECT id FROM ${schema}.enrollments WHERE codigo_journey = $1 LIMIT 1`,
+    text: `SELECT id FROM ${schema}.enrollments WHERE codigo_journey = $1 LIMIT 1`,
     values: [codigoJourney]
 });
 
 const findAllEnrollmentsWithUsers = () => ({
-    query: `SELECT 
+    text: `SELECT
         e.id, e.userid, e.courseid, e.role, e.moodle_enrollment_id,
         e.codigo_asignatura, e.nombre_asignatura, e.programa,
         e.periodo, e.grupo, e.codigo_journey, e.estado,
@@ -256,9 +302,11 @@ const findAllEnrollmentsWithUsers = () => ({
     ORDER BY e.id DESC`,
     values: []
 });
-// ESTADO API
+
+// ─── HEALTH ───────────────────────────────────────────────────────────────────
+
 const healthCheck = () => ({
-    query: `SELECT 1`,
+    text: `SELECT 1`,
     values: []
 });
 
@@ -268,22 +316,30 @@ module.exports = {
     selectAllItems,
     // users
     selectAllUsers,
+    selectUsersForSync,
     insertUsuarioData,
     updateUsuarioData,
+    updateUserMoodleId,
+    clearUserMoodleId,
     findUserByEmailOrUsername,
     findUserByDocumento,
     updateUserSicau,
     // courses
     selectAllCourses,
+    selectCoursesForSync,
     insertCourseData,
     updateCourseData,
+    updateCourseMoodleId,
     findCourseByIdnumber,
+    findCourseByShortname,
     // enrollments
     selectAllEnrollments,
+    selectEnrollmentsForSync,
     insertEnrollmentData,
     updateEnrollmentData,
+    updateEnrollmentMoodleId,
     findEnrollmentByCodigoJourney,
     findAllEnrollmentsWithUsers,
     // health
-    healthCheck,
+    healthCheck
 };

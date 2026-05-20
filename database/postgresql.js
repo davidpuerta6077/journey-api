@@ -2,26 +2,15 @@ const config = require('../config');
 const { Pool } = require('pg');
 const {
     selectAllItems,
-    // users
-    selectAllUsers,
-    insertUsuarioData,
-    updateUsuarioData,
-    findUserByEmailOrUsername,
-    findUserByDocumento,
-    updateUserSicau,
-    // courses
-    selectAllCourses,
-    insertCourseData,
-    updateCourseData,
-    findCourseByIdnumber,
-    // enrollments
-    selectAllEnrollments,
-    insertEnrollmentData,
-    updateEnrollmentData,
-    findEnrollmentByCodigoJourney,
+    selectAllUsers, selectUsersForSync, insertUsuarioData, updateUsuarioData,
+    updateUserMoodleId, clearUserMoodleId, findUserByEmailOrUsername,
+    findUserByDocumento, updateUserSicau,
+    selectAllCourses, selectCoursesForSync, insertCourseData, updateCourseData,
+    updateCourseMoodleId, findCourseByIdnumber, findCourseByShortname,
+    selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
+    updateEnrollmentData, updateEnrollmentMoodleId, findEnrollmentByCodigoJourney,
     findAllEnrollmentsWithUsers,
-    // health
-    healthCheck,
+    healthCheck
 } = require('./querysets');
 
 const pool = new Pool({
@@ -32,12 +21,20 @@ const pool = new Pool({
     port:     config.postgresql.port,
 });
 
-// ─── GENERIC ──────────────────────────────────────────────────────────────────
+// ─── GENÉRICO ─────────────────────────────────────────────────────────────────
 
 function listAll(table) {
     return new Promise((resolve, reject) => {
-        const { query, values } = selectAllItems(table);
-        pool.query(query, values, (err, data) => {
+        pool.query(selectAllItems(table), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function query(queryConfig) {
+    return new Promise((resolve, reject) => {
+        pool.query(queryConfig, (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -46,30 +43,45 @@ function listAll(table) {
 
 // ─── USERS ────────────────────────────────────────────────────────────────────
 
-function listAllUsers() {
-    return new Promise((resolve, reject) => {
-        const { query, values } = selectAllUsers();
-        pool.query(query, values, (err, data) => {
-            if (err) return reject(err);
-            resolve(data.rows);
-        });
-    });
-}
-
 function insertUser(data) {
     return new Promise((resolve, reject) => {
-        const { query, values } = insertUsuarioData(data);
-        pool.query(query, values, (err, data) => {
+        pool.query(insertUsuarioData(data), (err, result) => {
             if (err) return reject(err);
-            resolve(data.rows);
+            resolve(result.rows);
         });
     });
 }
 
 function updateUser(data) {
     return new Promise((resolve, reject) => {
-        const { query, values } = updateUsuarioData(data);
-        pool.query(query, values, (err, data) => {
+        pool.query(updateUsuarioData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function getUsersForSync() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectUsersForSync(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function setUserMoodleId(id, moodleId) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateUserMoodleId(id, moodleId), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function removeUserMoodleId(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(clearUserMoodleId(id), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -78,8 +90,7 @@ function updateUser(data) {
 
 function findUserSicau(email, username) {
     return new Promise((resolve, reject) => {
-        const { query, values } = findUserByEmailOrUsername(email, username);
-        pool.query(query, values, (err, data) => {
+        pool.query(findUserByEmailOrUsername(email, username), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -88,18 +99,16 @@ function findUserSicau(email, username) {
 
 function findUserByDoc(documento) {
     return new Promise((resolve, reject) => {
-        const { query, values } = findUserByDocumento(documento);
-        pool.query(query, values, (err, data) => {
+        pool.query(findUserByDocumento(documento), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
     });
 }
 
-function updateUserFromSicau(data) {
+function updateUserFromSicau(user) {
     return new Promise((resolve, reject) => {
-        const { query, values } = updateUserSicau(data);
-        pool.query(query, values, (err, data) => {
+        pool.query(updateUserSicau(user), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -108,30 +117,36 @@ function updateUserFromSicau(data) {
 
 // ─── COURSES ──────────────────────────────────────────────────────────────────
 
-function listAllCourses() {
-    return new Promise((resolve, reject) => {
-        const { query, values } = selectAllCourses();
-        pool.query(query, values, (err, data) => {
-            if (err) return reject(err);
-            resolve(data.rows);
-        });
-    });
-}
-
 function insertCourse(data) {
     return new Promise((resolve, reject) => {
-        const { query, values } = insertCourseData(data);
-        pool.query(query, values, (err, data) => {
+        pool.query(insertCourseData(data), (err, result) => {
             if (err) return reject(err);
-            resolve(data.rows);
+            resolve(result.rows);
         });
     });
 }
 
 function updateCourse(data) {
     return new Promise((resolve, reject) => {
-        const { query, values } = updateCourseData(data);
-        pool.query(query, values, (err, data) => {
+        pool.query(updateCourseData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function getCoursesForSync() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectCoursesForSync(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function setCourseMoodleId(id, moodleId) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateCourseMoodleId(id, moodleId), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -140,8 +155,16 @@ function updateCourse(data) {
 
 function findCourseSicau(idnumber) {
     return new Promise((resolve, reject) => {
-        const { query, values } = findCourseByIdnumber(idnumber);
-        pool.query(query, values, (err, data) => {
+        pool.query(findCourseByIdnumber(idnumber), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function findCourseByShortnameFn(shortname) {
+    return new Promise((resolve, reject) => {
+        pool.query(findCourseByShortname(shortname), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -150,30 +173,36 @@ function findCourseSicau(idnumber) {
 
 // ─── ENROLLMENTS ──────────────────────────────────────────────────────────────
 
-function listAllEnrollments() {
-    return new Promise((resolve, reject) => {
-        const { query, values } = selectAllEnrollments();
-        pool.query(query, values, (err, data) => {
-            if (err) return reject(err);
-            resolve(data.rows);
-        });
-    });
-}
-
 function insertEnrollment(data) {
     return new Promise((resolve, reject) => {
-        const { query, values } = insertEnrollmentData(data);
-        pool.query(query, values, (err, data) => {
+        pool.query(insertEnrollmentData(data), (err, result) => {
             if (err) return reject(err);
-            resolve(data.rows);
+            resolve(result.rows);
         });
     });
 }
 
 function updateEnrollment(data) {
     return new Promise((resolve, reject) => {
-        const { query, values } = updateEnrollmentData(data);
-        pool.query(query, values, (err, data) => {
+        pool.query(updateEnrollmentData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function getEnrollmentsForSync() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectEnrollmentsForSync(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function setEnrollmentMoodleId(id, moodleEnrollmentId) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateEnrollmentMoodleId(id, moodleEnrollmentId), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -182,8 +211,7 @@ function updateEnrollment(data) {
 
 function findEnrollmentSicau(codigoJourney) {
     return new Promise((resolve, reject) => {
-        const { query, values } = findEnrollmentByCodigoJourney(codigoJourney);
-        pool.query(query, values, (err, data) => {
+        pool.query(findEnrollmentByCodigoJourney(codigoJourney), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -192,8 +220,7 @@ function findEnrollmentSicau(codigoJourney) {
 
 function listAllEnrollmentsWithUsers() {
     return new Promise((resolve, reject) => {
-        const { query, values } = findAllEnrollmentsWithUsers();
-        pool.query(query, values, (err, data) => {
+        pool.query(findAllEnrollmentsWithUsers(), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -202,10 +229,9 @@ function listAllEnrollmentsWithUsers() {
 
 // ─── HEALTH ───────────────────────────────────────────────────────────────────
 
-function checkHealth() {
+function checkDbConnection() {
     return new Promise((resolve, reject) => {
-        const { query, values } = healthCheck();
-        pool.query(query, values, (err) => {
+        pool.query(healthCheck(), (err) => {
             if (err) return reject(err);
             resolve(true);
         });
@@ -215,25 +241,32 @@ function checkHealth() {
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 module.exports = {
+    // genérico
     listAll,
+    query,
     // users
-    listAllUsers,
     insertUser,
     updateUser,
+    getUsersForSync,
+    setUserMoodleId,
+    removeUserMoodleId,
     findUserSicau,
     findUserByDoc,
     updateUserFromSicau,
     // courses
-    listAllCourses,
     insertCourse,
     updateCourse,
+    getCoursesForSync,
+    setCourseMoodleId,
     findCourseSicau,
+    findCourseByShortnameFn,
     // enrollments
-    listAllEnrollments,
     insertEnrollment,
     updateEnrollment,
+    getEnrollmentsForSync,
+    setEnrollmentMoodleId,
     findEnrollmentSicau,
     listAllEnrollmentsWithUsers,
     // health
-    checkDbConnection: checkHealth,
+    checkDbConnection
 };
