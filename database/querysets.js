@@ -4,7 +4,7 @@ const schema = config.postgresql.schema;
 
 const selectAllItems = (table) => {
     return {
-        text: `SELECT * FROM ${table}`,
+        query: `SELECT * FROM ${table}`,
         values: []
     };
 };
@@ -14,7 +14,7 @@ const selectAllUsers = () => ({
     values: []
 });
 
-const insertUsuarioData = (table, data) => {
+const insertUsuarioData = (data) => {
     const {
         username, firstname, lastname, email, password, city, country,
         documento, correo_personal, telefono, celular, fecha_nacimiento,
@@ -22,7 +22,7 @@ const insertUsuarioData = (table, data) => {
     } = data;
 
     const query = `
-        INSERT INTO ${schema}.${table} (
+        INSERT INTO ${schema}.users (
             username, firstname, lastname, email, password, city, country,
             documento, correo_personal, telefono, celular, fecha_nacimiento,
             jornada, departamento_academico, plan_estudios, moodle_id
@@ -258,7 +258,7 @@ const findAllEnrollmentsWithUsers = () => ({
 });
 // ESTADO API
 const healthCheck = () => ({
-    text: `SELECT 1`,
+    query: `SELECT 1`,
     values: []
 });
 

@@ -1,80 +1,137 @@
 const config = require('../config');
 const { Pool } = require('pg');
 const {
-    selectAllItems, insertData, updateData,
-    findUserByEmailOrUsername, updateUserSicau,
-    findUserByDocumento, findCourseByIdnumber,
-    findEnrollmentByCodigoJourney, findAllEnrollmentsWithUsers, 
-    healthCheck  
+    selectAllItems,
+    // users
+    selectAllUsers,
+    insertUsuarioData,
+    updateUsuarioData,
+    findUserByEmailOrUsername,
+    findUserByDocumento,
+    updateUserSicau,
+    // courses
+    selectAllCourses,
+    insertCourseData,
+    updateCourseData,
+    findCourseByIdnumber,
+    // enrollments
+    selectAllEnrollments,
+    insertEnrollmentData,
+    updateEnrollmentData,
+    findEnrollmentByCodigoJourney,
+    findAllEnrollmentsWithUsers,
+    // health
+    healthCheck,
 } = require('./querysets');
 
 const pool = new Pool({
     database: config.postgresql.database,
-    user: config.postgresql.user,
+    user:     config.postgresql.user,
     password: config.postgresql.password,
-    host: config.postgresql.host,
-    port: config.postgresql.port,
+    host:     config.postgresql.host,
+    port:     config.postgresql.port,
 });
+
+// ─── GENERIC ──────────────────────────────────────────────────────────────────
 
 function listAll(table) {
     return new Promise((resolve, reject) => {
-        pool.query(selectAllItems(table), (err, data) => {
+        const { query, values } = selectAllItems(table);
+        pool.query(query, values, (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
     });
 }
 
-function insertItem(table, data) {
+// ─── USERS ────────────────────────────────────────────────────────────────────
+
+function listAllUsers() {
     return new Promise((resolve, reject) => {
-        pool.query(insertData(table, data), (err, data) => {
+        const { query, values } = selectAllUsers();
+        pool.query(query, values, (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
     });
 }
 
-function updateItem(table, data) {
+function insertUser(data) {
     return new Promise((resolve, reject) => {
-        pool.query(updateData(table, data), (err, data) => {
+        const { query, values } = insertUsuarioData(data);
+        pool.query(query, values, (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
     });
 }
 
-function query(queryConfig) {
+function updateUser(data) {
     return new Promise((resolve, reject) => {
-        pool.query(queryConfig, (err, data) => {
+        const { query, values } = updateUsuarioData(data);
+        pool.query(query, values, (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
     });
 }
 
-// ─── FUNCIONES SICAU USUARIOS ─────────────────────────────────────────────────
 function findUserSicau(email, username) {
     return new Promise((resolve, reject) => {
-        pool.query(findUserByEmailOrUsername(email, username), (err, data) => {
+        const { query, values } = findUserByEmailOrUsername(email, username);
+        pool.query(query, values, (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
     });
 }
 
-function updateUserFromSicau(user) {
-    return new Promise((resolve, reject) => {
-        pool.query(updateUserSicau(user), (err, data) => {
-            if (err) return reject(err);
-            resolve(data.rows);
-        });
-    });
-}
-
-// ─── FUNCIONES SICAU MATRÍCULAS ───────────────────────────────────────────────
 function findUserByDoc(documento) {
     return new Promise((resolve, reject) => {
-        pool.query(findUserByDocumento(documento), (err, data) => {
+        const { query, values } = findUserByDocumento(documento);
+        pool.query(query, values, (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function updateUserFromSicau(data) {
+    return new Promise((resolve, reject) => {
+        const { query, values } = updateUserSicau(data);
+        pool.query(query, values, (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+// ─── COURSES ──────────────────────────────────────────────────────────────────
+
+function listAllCourses() {
+    return new Promise((resolve, reject) => {
+        const { query, values } = selectAllCourses();
+        pool.query(query, values, (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function insertCourse(data) {
+    return new Promise((resolve, reject) => {
+        const { query, values } = insertCourseData(data);
+        pool.query(query, values, (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function updateCourse(data) {
+    return new Promise((resolve, reject) => {
+        const { query, values } = updateCourseData(data);
+        pool.query(query, values, (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -83,7 +140,40 @@ function findUserByDoc(documento) {
 
 function findCourseSicau(idnumber) {
     return new Promise((resolve, reject) => {
-        pool.query(findCourseByIdnumber(idnumber), (err, data) => {
+        const { query, values } = findCourseByIdnumber(idnumber);
+        pool.query(query, values, (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+// ─── ENROLLMENTS ──────────────────────────────────────────────────────────────
+
+function listAllEnrollments() {
+    return new Promise((resolve, reject) => {
+        const { query, values } = selectAllEnrollments();
+        pool.query(query, values, (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function insertEnrollment(data) {
+    return new Promise((resolve, reject) => {
+        const { query, values } = insertEnrollmentData(data);
+        pool.query(query, values, (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function updateEnrollment(data) {
+    return new Promise((resolve, reject) => {
+        const { query, values } = updateEnrollmentData(data);
+        pool.query(query, values, (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -92,7 +182,8 @@ function findCourseSicau(idnumber) {
 
 function findEnrollmentSicau(codigoJourney) {
     return new Promise((resolve, reject) => {
-        pool.query(findEnrollmentByCodigoJourney(codigoJourney), (err, data) => {
+        const { query, values } = findEnrollmentByCodigoJourney(codigoJourney);
+        pool.query(query, values, (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -101,33 +192,48 @@ function findEnrollmentSicau(codigoJourney) {
 
 function listAllEnrollmentsWithUsers() {
     return new Promise((resolve, reject) => {
-        pool.query(findAllEnrollmentsWithUsers(), (err, data) => {
+        const { query, values } = findAllEnrollmentsWithUsers();
+        pool.query(query, values, (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
     });
 }
 
-// ESTADO API
+// ─── HEALTH ───────────────────────────────────────────────────────────────────
+
 function checkHealth() {
     return new Promise((resolve, reject) => {
-        pool.query(healthCheck(), (err) => {
+        const { query, values } = healthCheck();
+        pool.query(query, values, (err) => {
             if (err) return reject(err);
             resolve(true);
         });
     });
 }
 
+// ─── EXPORTS ──────────────────────────────────────────────────────────────────
+
 module.exports = {
     listAll,
-    insertItem,
-    updateItem,
-    query,
+    // users
+    listAllUsers,
+    insertUser,
+    updateUser,
     findUserSicau,
-    updateUserFromSicau,
     findUserByDoc,
+    updateUserFromSicau,
+    // courses
+    listAllCourses,
+    insertCourse,
+    updateCourse,
     findCourseSicau,
+    // enrollments
+    listAllEnrollments,
+    insertEnrollment,
+    updateEnrollment,
     findEnrollmentSicau,
     listAllEnrollmentsWithUsers,
-    checkDbConnection: checkHealth
+    // health
+    checkDbConnection: checkHealth,
 };
