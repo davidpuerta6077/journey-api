@@ -4,7 +4,8 @@ const {
     selectAllItems, insertData, updateData,
     findUserByEmailOrUsername, updateUserSicau,
     findUserByDocumento, findCourseByIdnumber,
-    findEnrollmentByCodigoJourney, findAllEnrollmentsWithUsers
+    findEnrollmentByCodigoJourney, findAllEnrollmentsWithUsers, 
+    healthCheck  
 } = require('./querysets');
 
 const pool = new Pool({
@@ -107,6 +108,16 @@ function listAllEnrollmentsWithUsers() {
     });
 }
 
+// ESTADO API
+function checkHealth() {
+    return new Promise((resolve, reject) => {
+        pool.query(healthCheck(), (err) => {
+            if (err) return reject(err);
+            resolve(true);
+        });
+    });
+}
+
 module.exports = {
     listAll,
     insertItem,
@@ -117,5 +128,6 @@ module.exports = {
     findUserByDoc,
     findCourseSicau,
     findEnrollmentSicau,
-    listAllEnrollmentsWithUsers
+    listAllEnrollmentsWithUsers,
+    checkDbConnection: checkHealth
 };

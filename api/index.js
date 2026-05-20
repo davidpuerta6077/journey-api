@@ -12,6 +12,8 @@ const response = require('../network/response');
 const syncService = require('../services/syncService');
 const { query } = require('../database/postgresql');
 const ROOT = path.resolve(__dirname, '..');
+const health = require('./health/network');
+
 
 const app = express();
 
@@ -31,6 +33,7 @@ app.use('/users', users);
 app.use('/courses', courses);
 app.use('/enrollments', enrollments);
 app.use('/grades', grades);
+app.use('/health', health);
 
 // ─── HELPER SYNC ─────────────────────────────────────────────────────────────
 const handleSync = (syncFunction, isSync = false) => async (req, res, next) => {
