@@ -18,10 +18,11 @@ module.exports = {
       //  port: process.env.DB_PORT || 5432, 
    //postgresql: {
        host: process.env.POSTGRESQL_HOST || 'localhost',
-      user: process.env.POSTGRESQL_USER || 'postgres',
-       password: process.env.POSTGRESQL_PASSWORD || '1234',
-       database: process.env.POSTGRESQL_DB || 'journey_db',  // Cambiado a journey_db
-        port: 5433 
+      user: process.env.POSTGRESQL_USER || 'brdque',
+       password: process.env.POSTGRESQL_PASSWORD || 'ouv7gVTCVT77YFVT',
+       schema: process.env.SCHEMA || 'test',
+       database: process.env.POSTGRESQL_DB || 'journey',  // 
+        port: 5435
     },
     domain: {
         url_base: process.env.URL_BASE || 'https://localhost:3001'
