@@ -1,7 +1,4 @@
 const { moodleRequest } = require('./moodleService');
-const { exec } = require('child_process');
-const util = require('util');
-const execPromise = util.promisify(exec);
 const mysql = require('mysql2/promise');
 const config = require('../config');
 
@@ -32,27 +29,19 @@ const parseMoodleEnrollmentId = (result) => {
     return result.id || result.enrollmentid || null;
 };
 
-// ─── HELPER MOODLE CLI ────────────────────────────────────────────────────────
-
-async function runMoodleAuthSync() {
-    const phpPath = config.moodle_cli.php_path;
-    const moodlePath = config.moodle_cli.moodle_path;
-    const { stdout, stderr } = await execPromise(
-        `"${phpPath}" "${moodlePath}\\admin\\cli\\scheduled_task.php" --execute="\\auth_db\\task\\sync_users"`
-    );
-    console.log('Moodle auth sync output:', stdout);
-    if (stderr) console.warn('Moodle auth sync stderr:', stderr);
-    return stdout;
-}
-
 // ─── HELPER CONSULTA MYSQL MOODLE ────────────────────────────────────────────
 
 async function getMoodleUserByUsername(username) {
-    const [rows] = await moodleDB.query(
-        'SELECT id, username FROM mdl_user WHERE username = ? AND deleted = 0 LIMIT 1',
-        [username]
-    );
-    return rows.length > 0 ? rows[0] : null;
+    try {
+        const [rows] = await moodleDB.query(
+            'SELECT id, username FROM mdl_user WHERE username = ? AND deleted = 0 LIMIT 1',
+            [username]
+        );
+        return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+        console.warn('No se pudo consultar Moodle DB:', error.message);
+        return null;
+    }
 }
 
 // ─── PREVIEW FUNCTIONS ───────────────────────────────────────────────────────
@@ -93,7 +82,7 @@ async function previewEnrollments() {
     return enrollments.map(enr => ({
         ...enr,
         studentId: enr.userid,
-        courseId: enr.courseid,
+        courseId:  enr.courseid,
         _syncStatus: { inDB: true, inMoodle: !!enr.moodle_enrollment_id }
     }));
 }
@@ -124,57 +113,54 @@ async function syncStudents(items = []) {
             if (existing.length > 0) {
                 localUser = existing[0];
                 await usersCtrl.updateElement({
-                    id:                    localUser.id,
-                    firstname:             user.firstname,
-                    lastname:              user.lastname,
-                    city:                  user.city                    || 'Medellín',
-                    country:               user.country                 || 'CO',
-                    password:              localUser.password,
-                    moodle_id:             localUser.moodle_id,
-                    documento:             user.documento               || null,
-                    correo_personal:       user.correo_personal         || null,
-                    telefono:              user.telefono                || null,
-                    celular:               user.celular                 || null,
-                    fecha_nacimiento:      user.fecha_nacimiento        || null,
-                    jornada:               user.jornada                 || null,
-                    departamento_academico: user.departamento_academico || null,
-                    plan_estudios:         user.plan_estudios           || null
+                    id:                     localUser.id,
+                    firstname:              user.firstname,
+                    lastname:               user.lastname,
+                    city:                   user.city                    || 'Medellín',
+                    country:                user.country                 || 'CO',
+                    password:               localUser.password,
+                    moodle_id:              localUser.moodle_id,
+                    documento:              user.documento               || null,
+                    correo_personal:        user.correo_personal         || null,
+                    telefono:               user.telefono                || null,
+                    celular:                user.celular                 || null,
+                    fecha_nacimiento:       user.fecha_nacimiento        || null,
+                    jornada:                user.jornada                 || null,
+                    departamento_academico: user.departamento_academico  || null,
+                    plan_estudios:          user.plan_estudios           || null
                 });
                 result.status = 'exists';
             } else {
                 const inserted = await usersCtrl.addElement({
-                    username:              moodleUsername,
-                    firstname:             user.firstname,
-                    lastname:              user.lastname,
-                    email:                 user.email,
-                    password:              user.documento ? String(user.documento) : 'Pascual2024*',
-                    city:                  user.city                    || 'Medellín',
-                    country:               user.country                 || 'CO',
-                    documento:             user.documento               || null,
-                    correo_personal:       user.correo_personal         || null,
-                    telefono:              user.telefono                || null,
-                    celular:               user.celular                 || null,
-                    fecha_nacimiento:      user.fecha_nacimiento        || null,
-                    jornada:               user.jornada                 || null,
-                    departamento_academico: user.departamento_academico || null,
-                    plan_estudios:         user.plan_estudios           || null,
-                    moodle_id:             null
+                    username:               moodleUsername,
+                    firstname:              user.firstname,
+                    lastname:               user.lastname,
+                    email:                  user.email,
+                    password:               user.documento ? String(user.documento) : 'Pascual2024*',
+                    city:                   user.city                    || 'Medellín',
+                    country:                user.country                 || 'CO',
+                    documento:              user.documento               || null,
+                    correo_personal:        user.correo_personal         || null,
+                    telefono:               user.telefono                || null,
+                    celular:                user.celular                 || null,
+                    fecha_nacimiento:       user.fecha_nacimiento        || null,
+                    jornada:                user.jornada                 || null,
+                    departamento_academico: user.departamento_academico  || null,
+                    plan_estudios:          user.plan_estudios           || null,
+                    moodle_id:              null
                 });
                 localUser = inserted[0];
                 result.status = 'success';
             }
 
-            // ─── Sync via BD externa ──────────────────────────────────────────
-            await runMoodleAuthSync();
-
-            // ─── Verificar en MySQL de Moodle local ──────────────────────────
+            // ─── Verificar en BD Moodle productivo ───────────────────────────
             const moodleUser = await getMoodleUserByUsername(moodleUsername);
 
             if (moodleUser) {
                 await usersCtrl.updateMoodleId(localUser.id, moodleUser.id);
                 result.moodle_id = moodleUser.id;
             } else {
-                result.moodle_warning = 'Sync ejecutado pero usuario no encontrado en Moodle';
+                result.moodle_warning = 'Usuario guardado en Journey. Moodle lo sincronizará por cron via BD externa.';
             }
 
         } catch (error) {
@@ -245,7 +231,7 @@ async function syncEnrollments(items = []) {
     const results = [];
 
     for (const enr of items) {
-        const userid = enr.studentId || enr.teacherId || enr.userid;
+        const userid  = enr.studentId || enr.teacherId || enr.userid;
         const courseid = enr.courseId || enr.courseid;
         const result = { id: enr.id, userid, courseid };
 
