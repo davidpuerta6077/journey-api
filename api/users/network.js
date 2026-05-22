@@ -89,6 +89,51 @@ async function processExcelAndCreateUsers(filePath) {
     return { successCount, errorCount, errors };
 }
 
+// ─── RUTAS EXCEL ──────────────────────────────────────────────────────────────
+
+// express-fileupload ya está configurado globalmente en index.js
+// los archivos llegan en req.files.<nombre_del_campo>
+router.post('/upload-excel', (req, res) => {
+    if (!req.files || !req.files.excel) {
+        return response.error(req, res, 'No se recibió ningún archivo.', 400);
+    }
+    const file = req.files.excel;
+    const uploadDir = path.join(__dirname, '../../uploads');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    const fileName = `excel_${Date.now()}_${file.name}`;
+    const filePath = path.join(uploadDir, fileName);
+    file.mv(filePath, (err) => {
+        if (err) return response.error(req, res, err.message, 500);
+        response.success(req, res, { filePath }, 200);
+    });
+});
+
+router.post('/process-excel', async (req, res) => {
+    const { filePath } = req.body;
+    if (!filePath) return response.error(req, res, 'No se ha especificado la ruta del archivo.', 400);
+    try {
+        const result = await processExcelAndCreateUsers(filePath);
+        if (result.errors.length > 0) {
+            const errorExcelPath = await generateErrorExcel(result.errors);
+            response.success(req, res, {
+                message:      'Proceso completado con errores.',
+                successCount: result.successCount,
+                errorCount:   result.errorCount,
+                errorFileUrl: `/uploads/${path.basename(errorExcelPath)}`
+            }, 200);
+        } else {
+            response.success(req, res, {
+                message:      'Usuarios cargados con éxito.',
+                successCount: result.successCount
+            }, 200);
+        }
+    } catch (error) {
+        response.error(req, res, `Error interno: ${error.message}`, 500);
+    } finally {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+});
+
 // ─── RUTAS MOODLE ─────────────────────────────────────────────────────────────
 
 router.post('/add_user', async (req, res) => {
@@ -162,32 +207,6 @@ router.get('/get_users', async (req, res) => {
         response.success(req, res, result.users || [], 200);
     } catch (error) {
         response.error(req, res, error.message, 500);
-    }
-});
-
-router.post('/process-excel', async (req, res) => {
-    const { filePath } = req.body;
-    if (!filePath) return response.error(req, res, 'No se ha especificado la ruta del archivo.', 400);
-    try {
-        const result = await processExcelAndCreateUsers(filePath);
-        if (result.errors.length > 0) {
-            const errorExcelPath = await generateErrorExcel(result.errors);
-            response.success(req, res, {
-                message:      'Proceso completado con errores.',
-                successCount: result.successCount,
-                errorCount:   result.errorCount,
-                errorFileUrl: `/uploads/${path.basename(errorExcelPath)}`
-            }, 200);
-        } else {
-            response.success(req, res, {
-                message:      'Usuarios cargados con éxito.',
-                successCount: result.successCount
-            }, 200);
-        }
-    } catch (error) {
-        response.error(req, res, `Error interno: ${error.message}`, 500);
-    } finally {
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 });
 
