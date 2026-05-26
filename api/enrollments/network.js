@@ -3,7 +3,7 @@ const router = Router();
 const response = require('../../network/response');
 const ctrl = require('./index');
 const { moodleRequest } = require('../../services/moodleService');
-const config = require('../../config');
+const syncService = require('../../services/syncService');
 const path = require('path');
 const fs = require('fs');
 const xlsx = require('xlsx');
@@ -437,6 +437,26 @@ router.get('/preview', async (req, res, next) => {
     try {
         const result = await ctrl.listEnrollmentsWithUsers();
         response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ─── SYNC ─────────────────────────────────────────────────────────────────────
+
+router.get('/sync/preview', async (req, res, next) => {
+    try {
+        const result = await syncService.previewEnrollments();
+        response.success(req, res, result || 'Datos cargados correctamente', 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post('/sync', async (req, res, next) => {
+    try {
+        const result = await syncService.syncEnrollments(req.body.items || []);
+        response.success(req, res, result || 'Datos cargados correctamente', 200);
     } catch (error) {
         next(error);
     }

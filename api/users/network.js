@@ -3,10 +3,11 @@ const router = Router();
 const response = require('../../network/response');
 const ctrl = require('./index');
 const { moodleRequest } = require('../../services/moodleService');
+const syncService = require('../../services/syncService');
 const path = require('path');
-const xlsx = require('xlsx');
 const fs = require('fs');
 
+<<<<<<< HEAD
 // ─── HELPERS EXCEL ────────────────────────────────────────────────────────────
 
 function readExcel(filePath) {
@@ -134,6 +135,8 @@ router.post('/process-excel', async (req, res) => {
     }
 });
 
+=======
+>>>>>>> c6145b39f91fe41e58d6f58873244d75d68f1553
 // ─── RUTAS MOODLE ─────────────────────────────────────────────────────────────
 
 router.post('/add_user', async (req, res) => {
@@ -210,11 +213,40 @@ router.get('/get_users', async (req, res) => {
     }
 });
 
+<<<<<<< HEAD
+=======
+router.post('/process-excel', async (req, res) => {
+    const { filePath } = req.body;
+    if (!filePath) return response.error(req, res, 'No se ha especificado la ruta del archivo.', 400);
+    try {
+        const result = await ctrl.processExcelAndCreateUsers(filePath);
+        if (result.errors.length > 0) {
+            const errorExcelPath = await ctrl.generateErrorExcel(result.errors);
+            response.success(req, res, {
+                message:      'Proceso completado con errores.',
+                successCount: result.successCount,
+                errorCount:   result.errorCount,
+                errorFileUrl: `/uploads/${path.basename(errorExcelPath)}`
+            }, 200);
+        } else {
+            response.success(req, res, {
+                message:      'Usuarios cargados con éxito.',
+                successCount: result.successCount
+            }, 200);
+        }
+    } catch (error) {
+        response.error(req, res, `Error interno: ${error.message}`, 500);
+    } finally {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+});
+
+>>>>>>> c6145b39f91fe41e58d6f58873244d75d68f1553
 // ─── RUTAS DB ─────────────────────────────────────────────────────────────────
 
 router.get('/test', async (req, res) => {
     try {
-        const data = await ctrl.list('test.logs');
+        const data = await ctrl.list('logs');
         response.success(req, res, { test_message: 'Api Users Working!', table: data }, 200);
     } catch (error) {
         response.error(req, res, error.message, 500);
@@ -231,6 +263,26 @@ router.post('/sicau', async (req, res, next) => {
             results.push(result);
         }
         response.success(req, res, { results }, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ─── SYNC ─────────────────────────────────────────────────────────────────────
+
+router.post(['/sync/preview', '/sync/preview/'], async (req, res, next) => {
+    try {
+        const result = await syncService.previewStudents();
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post(['/sync', '/sync/'], async (req, res, next) => {
+    try {
+        const result = await syncService.syncStudents(req.body.items || []);
+        response.success(req, res, result || 'Datos cargados correctamente', 200);
     } catch (error) {
         next(error);
     }
