@@ -214,8 +214,8 @@ router.get('/get_users', async (req, res) => {
 
 router.get('/test', async (req, res) => {
     try {
-        const data = await ctrl.list('test.logs');
-        response.success(req, res, { test_message: 'Api Users Working!', table: data }, 200);
+        const data = await ctrl.list('logs');
+        response.success(req, res, { test_message: 'Api Users Working!' }, 200);
     } catch (error) {
         response.error(req, res, error.message, 500);
     }
