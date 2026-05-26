@@ -142,3 +142,8 @@ dist
 .svelte-kit
 
 # End of https://www.toptal.com/developers/gitignore/api/node
+# Configuración local con credenciales
+config.js
+
+# Archivos subidos
+uploads/
