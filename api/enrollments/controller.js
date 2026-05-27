@@ -24,6 +24,10 @@ module.exports = (injectedDB) => {
         return data.setEnrollmentMoodleId(id, moodleEnrollmentId);
     }
 
+    async function markEnrollmentAsSynchronized(id) {
+        return data.updateEnrollmentSyncStatus(id, true);
+    }
+
     // ─── SICAU ────────────────────────────────────────────────────────────────
 
     async function saveSicauMatricula(enr) {
@@ -34,17 +38,17 @@ module.exports = (injectedDB) => {
         }
         const userid = userResult[0].id;
 
-        // 2. Generar código Journey
+        // 2. Generar código Journey del curso (sin cédula)
         const codigoJourney = `${enr.codigo_asignatura}${enr.periodo}${enr.grupo}`;
 
-        // 3. Buscar courseid
+        // 3. Buscar courseid por codigo_journey
         const courseResult = await data.findCourseSicau(codigoJourney);
         const courseid = courseResult.length > 0 ? courseResult[0].id : null;
 
-        // 4. Verificar si ya existe
-        const existing = await data.findEnrollmentSicau(codigoJourney);
+        // 4. Verificar si ya existe la matrícula para ese usuario y curso
+        const existing = await data.findEnrollmentByUserAndCourse(userid, codigoJourney);
         if (existing.length > 0) {
-            return { codigo_journey: codigoJourney, status: 'exists' };
+            return { cedula: enr.cedula, codigo_journey: codigoJourney, status: 'exists' };
         }
 
         // 5. Insertar
@@ -76,6 +80,7 @@ module.exports = (injectedDB) => {
         updateElement,
         listEnrollmentsForSync,
         updateEnrollmentMoodleId,
+        markEnrollmentAsSynchronized,
         saveSicauMatricula,
         listEnrollmentsWithUsers
     };

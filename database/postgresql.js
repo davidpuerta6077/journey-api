@@ -6,12 +6,15 @@ const {
     updateUsuarioJourney, deleteUsuarioData,
     updateUserMoodleId, clearUserMoodleId, findUserByEmailOrUsername,
     findUserByDocumento, updateUserSicau,
-    updateUserSyncStatusQuery,          // ✅ CORREGIDO: import que Gemini eliminó
+    updateUserSyncStatusQuery, updateUserUnsyncQuery,
     selectAllCourses, selectCoursesForSync, insertCourseData, updateCourseData,
     updateCourseMoodleId, findCourseByIdnumber, findCourseByShortname,
+    updateCourseSyncStatusQuery,
     selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
     updateEnrollmentData, updateEnrollmentMoodleId, findEnrollmentByCodigoJourney,
+    findEnrollmentByUserAndCourse,
     findAllEnrollmentsWithUsers,
+    updateEnrollmentSyncStatusQuery,
     healthCheck
 } = require('./querysets');
 
@@ -135,10 +138,18 @@ function updateUserFromSicau(user) {
     });
 }
 
-// ✅ CORREGIDO: ahora updateUserSyncStatusQuery está importado correctamente arriba
 function updateUserSyncStatus(id, statusValue) {
     return new Promise((resolve, reject) => {
         pool.query(updateUserSyncStatusQuery(id, statusValue), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updateUserUnsync(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateUserUnsyncQuery(id), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -201,6 +212,15 @@ function findCourseByShortnameFn(shortname) {
     });
 }
 
+function updateCourseSyncStatus(id, statusValue) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateCourseSyncStatusQuery(id, statusValue), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 // ─── ENROLLMENTS ──────────────────────────────────────────────────────────────
 
 function insertEnrollment(data) {
@@ -248,11 +268,30 @@ function findEnrollmentSicau(codigoJourney) {
     });
 }
 
+// ✅ nuevo: busca matrícula por usuario y código de curso
+function findEnrollmentByUserAndCourseFn(userid, codigoJourney) {
+    return new Promise((resolve, reject) => {
+        pool.query(findEnrollmentByUserAndCourse(userid, codigoJourney), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
 function listAllEnrollmentsWithUsers() {
     return new Promise((resolve, reject) => {
         pool.query(findAllEnrollmentsWithUsers(), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
+        });
+    });
+}
+
+function updateEnrollmentSyncStatus(id, statusValue) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateEnrollmentSyncStatusQuery(id, statusValue), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
         });
     });
 }
@@ -284,17 +323,21 @@ module.exports = {
     findUserByDoc,
     updateUserFromSicau,
     updateUserSyncStatus,
+    updateUserUnsync,
     insertCourse,
     updateCourse,
     getCoursesForSync,
     setCourseMoodleId,
     findCourseSicau,
     findCourseByShortnameFn,
+    updateCourseSyncStatus,
     insertEnrollment,
     updateEnrollment,
     getEnrollmentsForSync,
     setEnrollmentMoodleId,
     findEnrollmentSicau,
+    findEnrollmentByUserAndCourse: findEnrollmentByUserAndCourseFn,
     listAllEnrollmentsWithUsers,
+    updateEnrollmentSyncStatus,
     checkDbConnection
 };

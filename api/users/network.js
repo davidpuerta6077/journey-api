@@ -155,4 +155,16 @@ router.post(['/sync', '/sync/'], async (req, res, next) => {
     }
 });
 
+// proibar
+
+router.get('/test-moodle-user/:username', async (req, res, next) => {
+    try {
+        const { getMoodleUserByUsername } = require('../../services/moodle/getMoodleUser');
+        const result = await getMoodleUserByUsername(req.params.username);
+        response.success(req, res, { result }, 200);
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
 module.exports = router;
