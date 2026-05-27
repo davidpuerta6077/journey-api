@@ -3,8 +3,8 @@ const router = Router();
 const response = require('../../network/response');
 const ctrl = require('./index');
 const { moodleRequest } = require('../../services/moodleService');
+const syncService = require('../../services/syncService');
 const path = require('path');
-const xlsx = require('xlsx');
 const fs = require('fs');
 
 // ─── HELPERS EXCEL ────────────────────────────────────────────────────────────
@@ -215,7 +215,7 @@ router.get('/get_users', async (req, res) => {
 router.get('/test', async (req, res) => {
     try {
         const data = await ctrl.list('logs');
-        response.success(req, res, { test_message: 'Api Users Working!' }, 200);
+        response.success(req, res, { test_message: 'Api Users Working!', table: data }, 200);
     } catch (error) {
         response.error(req, res, error.message, 500);
     }
@@ -231,6 +231,26 @@ router.post('/sicau', async (req, res, next) => {
             results.push(result);
         }
         response.success(req, res, { results }, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ─── SYNC ─────────────────────────────────────────────────────────────────────
+
+router.post(['/sync/preview', '/sync/preview/'], async (req, res, next) => {
+    try {
+        const result = await syncService.previewStudents();
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post(['/sync', '/sync/'], async (req, res, next) => {
+    try {
+        const result = await syncService.syncStudents(req.body.items || []);
+        response.success(req, res, result || 'Datos cargados correctamente', 200);
     } catch (error) {
         next(error);
     }

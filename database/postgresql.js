@@ -3,8 +3,10 @@ const { Pool } = require('pg');
 const {
     selectAllItems,
     selectAllUsers, selectUsersForSync, insertUsuarioData, updateUsuarioData,
+    updateUsuarioJourney, deleteUsuarioData,
     updateUserMoodleId, clearUserMoodleId, findUserByEmailOrUsername,
     findUserByDocumento, updateUserSicau,
+    updateUserSyncStatusQuery,          // ✅ CORREGIDO: import que Gemini eliminó
     selectAllCourses, selectCoursesForSync, insertCourseData, updateCourseData,
     updateCourseMoodleId, findCourseByIdnumber, findCourseByShortname,
     selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
@@ -61,6 +63,24 @@ function updateUser(data) {
     });
 }
 
+function updateJourneyUser(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateUsuarioJourney(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function deleteUser(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(deleteUsuarioData(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 function getUsersForSync() {
     return new Promise((resolve, reject) => {
         pool.query(selectUsersForSync(), (err, data) => {
@@ -111,6 +131,16 @@ function updateUserFromSicau(user) {
         pool.query(updateUserSicau(user), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
+        });
+    });
+}
+
+// ✅ CORREGIDO: ahora updateUserSyncStatusQuery está importado correctamente arriba
+function updateUserSyncStatus(id, statusValue) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateUserSyncStatusQuery(id, statusValue), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
         });
     });
 }
@@ -241,32 +271,30 @@ function checkDbConnection() {
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 module.exports = {
-    // genérico
     listAll,
     query,
-    // users
     insertUser,
     updateUser,
+    updateJourneyUser,
+    deleteUser,
     getUsersForSync,
     setUserMoodleId,
     removeUserMoodleId,
     findUserSicau,
     findUserByDoc,
     updateUserFromSicau,
-    // courses
+    updateUserSyncStatus,
     insertCourse,
     updateCourse,
     getCoursesForSync,
     setCourseMoodleId,
     findCourseSicau,
     findCourseByShortnameFn,
-    // enrollments
     insertEnrollment,
     updateEnrollment,
     getEnrollmentsForSync,
     setEnrollmentMoodleId,
     findEnrollmentSicau,
     listAllEnrollmentsWithUsers,
-    // health
     checkDbConnection
 };

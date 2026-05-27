@@ -3,20 +3,20 @@ const router = Router();
 const response = require('../../network/response');
 const ctrl = require('./index');
 const { moodleRequest } = require('../../services/moodleService');
-const config = require('../../config');
+const syncService = require('../../services/syncService');
 
 // ─── RUTAS MOODLE ─────────────────────────────────────────────────────────────
 
 router.post('/add_course', async (req, res) => {
     try {
         const result = await moodleRequest('core_course_create_courses', {
-            'courses[0][fullname]':   req.body.fullname,
-            'courses[0][shortname]':  req.body.shortname,
-            'courses[0][categoryid]': req.body.categoryid,
-            'courses[0][idnumber]':   req.body.idnumber,
-            'courses[0][summary]':    req.body.summary,
-            'courses[0][visible]':    req.body.visible,
-            'courses[0][format]':     req.body.format,
+            'courses[0][fullname]':    req.body.fullname,
+            'courses[0][shortname]':   req.body.shortname,
+            'courses[0][categoryid]':  req.body.categoryid,
+            'courses[0][idnumber]':    req.body.idnumber,
+            'courses[0][summary]':     req.body.summary,
+            'courses[0][visible]':     req.body.visible,
+            'courses[0][format]':      req.body.format,
             'courses[0][numsections]': req.body.numsections,
         });
         response.success(req, res, result, 200);
@@ -42,14 +42,14 @@ router.post('/duplicate_course', async (req, res) => {
 router.post('/update_course', async (req, res) => {
     try {
         const result = await moodleRequest('core_course_update_courses', {
-            'courses[0][id]':        req.body.id,
-            'courses[0][fullname]':  req.body.fullname,
-            'courses[0][shortname]': req.body.shortname,
+            'courses[0][id]':         req.body.id,
+            'courses[0][fullname]':   req.body.fullname,
+            'courses[0][shortname]':  req.body.shortname,
             'courses[0][categoryid]': req.body.categoryid,
-            'courses[0][idnumber]':  req.body.idnumber,
-            'courses[0][summary]':   req.body.summary,
-            'courses[0][visible]':   req.body.visible,
-            'courses[0][format]':    req.body.format
+            'courses[0][idnumber]':   req.body.idnumber,
+            'courses[0][summary]':    req.body.summary,
+            'courses[0][visible]':    req.body.visible,
+            'courses[0][format]':     req.body.format
         });
         response.success(req, res, result, 200);
     } catch (error) {
@@ -134,12 +134,12 @@ router.get('/list', async (req, res) => {
 });
 
 // ─── RUTA SICAU ───────────────────────────────────────────────────────────────
+
 router.post('/sicau', async (req, res, next) => {
     try {
         const items = req.body.courses || req.body.items || req.body || [];
         const lista = Array.isArray(items) ? items : [items];
         const results = [];
-
         for (const course of lista) {
             const result = await ctrl.saveSicauCurso(course);
             results.push(result);
@@ -149,5 +149,25 @@ router.post('/sicau', async (req, res, next) => {
         next(error);
     }
 });
+
+// ─── SYNC ─────────────────────────────────────────────────────────────────────
+
+router.get('/sync/preview', async (req, res, next) => {
+     try {
+         const result = await syncService.previewCourses();
+         response.success(req, res, result || 'Datos cargados correctamente', 200);
+     } catch (error) {
+         next(error);
+     }
+ });
+
+ router.post('/sync', async (req, res, next) => {
+     try {
+         const result = await syncService.syncCourses(req.body.items || []);
+         response.success(req, res, result || 'Datos cargados correctamente', 200);
+     } catch (error) {
+         next(error);
+     }
+ });
 
 module.exports = router;

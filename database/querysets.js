@@ -1,7 +1,6 @@
 const config = require('../config');
 const schema = config.postgresql.schema;
 
-
 const selectAllItems = (table) => {
     return {
         text: `SELECT * FROM ${schema}.${table}`,
@@ -19,8 +18,9 @@ const selectAllUsers = () => ({
 const selectUsersForSync = () => ({
     text: `SELECT id, username, firstname, lastname, email, city, country,
            documento, correo_personal, telefono, celular, fecha_nacimiento,
-           jornada, departamento_academico, plan_estudios, moodle_id
-           FROM ${schema}.users ORDER BY id DESC`,
+           jornada, departamento_academico, plan_estudios, moodle_id, sincronizado
+           FROM ${schema}.users 
+           ORDER BY id DESC`,
     values: []
 });
 
@@ -92,6 +92,45 @@ const updateUsuarioData = (data) => {
     return { text, values };
 };
 
+const updateUsuarioJourney = (data) => {
+    const {
+        id, firstname, lastname, email, city, country,
+        documento, correo_personal, telefono, celular,
+        fecha_nacimiento, jornada, departamento_academico, plan_estudios
+    } = data;
+
+    const text = `
+        UPDATE ${schema}.users SET
+            firstname = $1, lastname = $2, email = $3, city = $4, country = $5,
+            documento = $6, correo_personal = $7, telefono = $8, celular = $9,
+            fecha_nacimiento = $10, jornada = $11, departamento_academico = $12,
+            plan_estudios = $13
+        WHERE id = $14
+    `;
+
+    const values = [
+        firstname, lastname, email,
+        city                   || 'Medellín',
+        country                || 'CO',
+        documento              || null,
+        correo_personal        || null,
+        telefono               || null,
+        celular                || null,
+        fecha_nacimiento       || null,
+        jornada                || null,
+        departamento_academico || null,
+        plan_estudios          || null,
+        id
+    ];
+
+    return { text, values };
+};
+
+const deleteUsuarioData = (id) => ({
+    text: `DELETE FROM ${schema}.users WHERE id = $1`,
+    values: [id]
+});
+
 const updateUserMoodleId = (id, moodleId) => ({
     text: `UPDATE ${schema}.users SET moodle_id = $1 WHERE id = $2`,
     values: [moodleId, id]
@@ -127,6 +166,14 @@ const updateUserSicau = (data) => ({
         data.email, data.username
     ]
 });
+
+// ✅ CORREGIDO: casteo ::integer para compatibilidad String → Integer en PostgreSQL
+function updateUserSyncStatusQuery(id, statusValue) {
+    return {
+        text: 'UPDATE test.users SET sincronizado = $2 WHERE id = $1::integer',
+        values: [id, statusValue]
+    };
+}
 
 // ─── COURSES ──────────────────────────────────────────────────────────────────
 
@@ -303,6 +350,13 @@ const findAllEnrollmentsWithUsers = () => ({
     values: []
 });
 
+// ─── MOODLE ───────────────────────────────────────────────────────────────────
+
+const findMoodleUserByUsername = (username) => ({
+    text: 'SELECT id, username FROM mdl_user WHERE username = ? AND deleted = 0 LIMIT 1',
+    values: [username]
+});
+
 // ─── HEALTH ───────────────────────────────────────────────────────────────────
 
 const healthCheck = () => ({
@@ -319,11 +373,14 @@ module.exports = {
     selectUsersForSync,
     insertUsuarioData,
     updateUsuarioData,
+    updateUsuarioJourney,
+    deleteUsuarioData,
     updateUserMoodleId,
     clearUserMoodleId,
     findUserByEmailOrUsername,
     findUserByDocumento,
     updateUserSicau,
+    updateUserSyncStatusQuery,
     // courses
     selectAllCourses,
     selectCoursesForSync,
@@ -340,6 +397,8 @@ module.exports = {
     updateEnrollmentMoodleId,
     findEnrollmentByCodigoJourney,
     findAllEnrollmentsWithUsers,
+    // moodle
+    findMoodleUserByUsername,
     // health
     healthCheck
 };
