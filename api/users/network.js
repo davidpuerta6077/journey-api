@@ -137,7 +137,7 @@ router.post('/sicau', async (req, res, next) => {
 
 // ─── SYNC ─────────────────────────────────────────────────────────────────────
 
-router.post(['/sync/preview', '/sync/preview/'], async (req, res, next) => {
+router.post('/sync/preview', async (req, res, next) => {
     try {
         const result = await syncService.previewStudents();
         response.success(req, res, result, 200);
@@ -146,7 +146,7 @@ router.post(['/sync/preview', '/sync/preview/'], async (req, res, next) => {
     }
 });
 
-router.post(['/sync', '/sync/'], async (req, res, next) => {
+router.post('/sync', async (req, res, next) => {
     try {
         const result = await syncService.syncStudents(req.body.items || []);
         response.success(req, res, result || 'Datos cargados correctamente', 200);
@@ -154,17 +154,51 @@ router.post(['/sync', '/sync/'], async (req, res, next) => {
         next(error);
     }
 });
+// ─── MÓDULOS ──────────────────────────────────────────────────────────────────
 
-// proibar
-
-router.get('/test-moodle-user/:username', async (req, res, next) => {
+router.post('/journey', async (req, res, next) => {
     try {
-        const { getMoodleUserByUsername } = require('../../services/moodle/getMoodleUser');
-        const result = await getMoodleUserByUsername(req.params.username);
-        response.success(req, res, { result }, 200);
+        const result = await ctrl.saveJourneyUsuario(req.body);
+        response.success(req, res, result, 201);
     } catch (error) {
-        response.error(req, res, error.message, 500);
+        next(error);
     }
 });
+
+router.post('/reset-password/:id', async (req, res, next) => {
+    try {
+        const result = await ctrl.resetUserPassword(req.params.id);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.get('/:id/enrollments', async (req, res, next) => {
+    try {
+        const result = await ctrl.getUserEnrollments(req.params.id);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.put('/:id', async (req, res, next) => {
+    try {
+        const result = await ctrl.updateJourneyUser({ ...req.body, id: req.params.id })
+        response.success(req, res, result, 200)
+    } catch (error) {
+        next(error)
+    }
+})
+
+router.delete('/:id', async (req, res, next) => {
+    try {
+        await ctrl.deleteUser(req.params.id)
+        response.success(req, res, 'Usuario eliminado', 200)
+    } catch (error) {
+        next(error)
+    }
+})
 
 module.exports = router;

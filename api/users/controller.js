@@ -165,7 +165,45 @@ module.exports = (injectedDB) => {
         }
         return { successCount, errorCount, errors };
     }
+    async function saveJourneyUsuario(user) {
+        const existing = await data.findUserSicau(user.email, user.username || user.email);
+        if (existing.length > 0) {
+            throw new Error('Ya existe un usuario con ese email o username');
+        }
+        const result = await data.insertUser({
+            username:               user.username || user.email,
+            firstname:              user.firstname,
+            lastname:               user.lastname,
+            email:                  user.email,
+            password:               user.documento ? String(user.documento) : 'Pascual2024*',
+            city:                   user.city                   || 'Medellín',
+            country:                user.country                || 'CO',
+            documento:              user.documento              || null,
+            correo_personal:        user.correo_personal        || null,
+            telefono:               user.telefono               || null,
+            celular:                user.celular                || null,
+            fecha_nacimiento:       user.fecha_nacimiento       || null,
+            jornada:                user.jornada                || null,
+            departamento_academico: user.departamento_academico || null,
+            plan_estudios:          user.plan_estudios          || null,
+            moodle_id:              null,
+            sincronizado:           false
+        });
+        return result[0];
+    }
 
+async function resetUserPassword(id) {
+    const users = await data.getUsersForSync();
+    const user = users.find(u => u.id === parseInt(id));
+    if (!user) throw new Error('Usuario no encontrado');
+    const newPassword = user.documento || 'Pascual2024*';
+    await data.resetPassword(id, newPassword);
+    return { status: 'reset', message: `Contraseña restablecida al documento` };
+}
+
+async function getUserEnrollments(userId) {
+    return data.getEnrollmentsByUserId(userId);
+}
     return {
         list,
         addElement,
@@ -173,6 +211,9 @@ module.exports = (injectedDB) => {
         updateJourneyUser,
         deleteUser,
         listUsersForSync,
+        saveJourneyUsuario,
+        resetUserPassword,
+        getUserEnrollments,
         updateMoodleId,
         clearMoodleId,
         saveSicauUsuario,

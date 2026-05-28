@@ -1,3 +1,10 @@
+// ─── MAPEO DE ROLES ───────────────────────────────────────────────────────────
+const ROLE_MAP = {
+    'ESTUDIANTE':    'student',
+    'DOCENTE':       'editingteacher',
+    'TUTOR':         'teacher'
+}
+
 module.exports = (injectedDB) => {
     let data = injectedDB;
     if (!data) data = require('../../database/postgresql');
@@ -51,19 +58,21 @@ module.exports = (injectedDB) => {
             return { cedula: enr.cedula, codigo_journey: codigoJourney, status: 'exists' };
         }
 
-        // 5. Insertar
+        // 5. Mapear rol y insertar
+        const moodleRole = ROLE_MAP[enr.role?.toUpperCase()] || 'student'
+
         await data.insertEnrollment({
             userid,
             courseid,
-            role:                  enr.role                  || 'student',
-            moodle_enrollment_id:  null,
-            codigo_asignatura:     enr.codigo_asignatura     || null,
-            nombre_asignatura:     enr.nombre_asignatura     || null,
-            programa:              enr.programa              || null,
-            periodo:               enr.periodo               || null,
-            grupo:                 enr.grupo                 || null,
-            codigo_journey:        codigoJourney,
-            estado:                enr.estado                || null,
+            role:                   moodleRole,
+            moodle_enrollment_id:   null,
+            codigo_asignatura:      enr.codigo_asignatura     || null,
+            nombre_asignatura:      enr.nombre_asignatura     || null,
+            programa:               enr.programa              || null,
+            periodo:                enr.periodo               || null,
+            grupo:                  enr.grupo                 || null,
+            codigo_journey:         codigoJourney,
+            estado:                 enr.estado                || null,
             fecha_creacion_journey: new Date().toISOString().split('T')[0]
         });
 

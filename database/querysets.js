@@ -18,7 +18,8 @@ const selectAllUsers = () => ({
 const selectUsersForSync = () => ({
     text: `SELECT id, username, firstname, lastname, email, city, country,
            documento, correo_personal, telefono, celular, fecha_nacimiento,
-           jornada, departamento_academico, plan_estudios, moodle_id, sincronizado
+           jornada, departamento_academico, plan_estudios, moodle_id, sincronizado,
+           created_at
            FROM ${schema}.users 
            ORDER BY id DESC`,
     values: []
@@ -181,6 +182,21 @@ function updateUserUnsyncQuery(id) {
         values: [id]
     };
 }
+const selectEnrollmentsByUserId = (userId) => ({
+    text: `SELECT e.id, e.codigo_journey, e.nombre_asignatura, e.programa,
+           e.periodo, e.grupo, e.role, e.sincronizado, e.estado,
+           c.fullname, c.shortname, c.idnumber
+           FROM ${schema}.enrollments e
+           LEFT JOIN ${schema}.courses c ON c.id = e.courseid::integer
+           WHERE e.userid = $1
+           ORDER BY e.id DESC`,
+    values: [userId]
+});
+
+const updateUserPassword = (id, password) => ({
+    text: `UPDATE ${schema}.users SET password = $1 WHERE id = $2`,
+    values: [password, id]
+});
 
 // ─── COURSES ──────────────────────────────────────────────────────────────────
 
@@ -433,6 +449,8 @@ module.exports = {
     updateUserSicau,
     updateUserSyncStatusQuery,
     updateUserUnsyncQuery,
+    selectEnrollmentsByUserId,
+    updateUserPassword,
     // courses
     selectAllCourses,
     selectCoursesForSync,

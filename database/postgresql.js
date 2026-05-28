@@ -6,7 +6,8 @@ const {
     updateUsuarioJourney, deleteUsuarioData,
     updateUserMoodleId, clearUserMoodleId, findUserByEmailOrUsername,
     findUserByDocumento, updateUserSicau,
-    updateUserSyncStatusQuery, updateUserUnsyncQuery,
+    updateUserSyncStatusQuery, updateUserUnsyncQuery,selectEnrollmentsByUserId,
+    updateUserPassword,
     selectAllCourses, selectCoursesForSync, insertCourseData, updateCourseData,
     updateCourseMoodleId, findCourseByIdnumber, findCourseByShortname,
     updateCourseSyncStatusQuery,
@@ -152,6 +153,23 @@ function updateUserUnsync(id) {
         pool.query(updateUserUnsyncQuery(id), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
+        });
+    });
+}
+function getEnrollmentsByUserId(userId) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectEnrollmentsByUserId(userId), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function resetPassword(id, password) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateUserPassword(id, password), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
         });
     });
 }
@@ -339,5 +357,6 @@ module.exports = {
     findEnrollmentByUserAndCourse: findEnrollmentByUserAndCourseFn,
     listAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatus,
-    checkDbConnection
+    checkDbConnection,getEnrollmentsByUserId,
+    resetPassword
 };
