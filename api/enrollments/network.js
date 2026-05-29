@@ -30,188 +30,39 @@ async function generateErrorExcel(errors) {
     return outputPath;
 }
 
-// ─── HELPERS MOODLE ───────────────────────────────────────────────────────────
-
-async function getUserIdByEmail(email) {
-    try {
-        const result = await moodleRequest('core_user_get_users_by_field', {
-            'field':     'email',
-            'values[0]': email
-        });
-        if (result && Array.isArray(result) && result.length > 0) return result[0].id;
-        return null;
-    } catch { return null; }
-}
-
-async function getCourseIdByCode(code) {
-    try {
-        const allCourses = await moodleRequest('core_course_get_courses', {});
-        const course = allCourses.find(c => String(c.idnumber) === String(code) || String(c.shortname) === String(code));
-        return course ? course.id : null;
-    } catch { return null; }
-}
-
-async function getRoleIdByName(roleName) {
-    const inputName = roleName ? String(roleName).trim().toLowerCase() : 'student';
-    const staticRoleMap = {
-        'manager': 1, 'gestor': 1,
-        'coursecreator': 2, 'creador': 2,
-        'editingteacher': 3, 'profesor': 3, 'docente': 3,
-        'teacher': 4, 'profesor sin permisos': 4,
-        'student': 5, 'estudiante': 5, 'alumno': 5, 'aprendiz': 5,
-        'guest': 6, 'invitado': 6
-    };
-    return staticRoleMap[inputName] || 5;
-}
-
-async function createUserInMoodle(userData) {
-    const res = await moodleRequest('core_user_create_users', {
-        'users[0][username]':  userData.email.toLowerCase(),
-        'users[0][password]':  'Pascual2025*',
-        'users[0][firstname]': userData.name      || 'Sin Nombre',
-        'users[0][lastname]':  userData.last_name || 'Sin Apellido',
-        'users[0][email]':     userData.email,
-        'users[0][auth]':      'manual',
-        'users[0][idnumber]':  userData.document  || '',
-        'users[0][city]':      userData.departamento || 'Medellín',
-        'users[0][country]':   'CO'
-    });
-    if (Array.isArray(res) && res.length > 0) return res[0].id;
-    throw new Error('Moodle no devolvió el ID del usuario creado.');
-}
-
-async function enrolUserInMoodle(userId, courseId, roleId) {
-    try {
-        const res = await moodleRequest('enrol_manual_enrol_users', {
-            'enrolments[0][userid]':   userId,
-            'enrolments[0][courseid]': courseId,
-            'enrolments[0][roleid]':   roleId
-        });
-        if (res && res.exception) return { success: false, error: res.message };
-        return { success: true };
-    } catch (error) {
-        return { success: false, error: error.message };
-    }
-}
-
-async function suspendUserInMoodle(userId, courseId) {
-    try {
-        const res = await moodleRequest('enrol_manual_enrol_users', {
-            'enrolments[0][userid]':   userId,
-            'enrolments[0][courseid]': courseId,
-            'enrolments[0][roleid]':   5,
-            'enrolments[0][suspend]':  1
-        });
-        if (res && res.exception) return { success: false, error: res.message };
-        return { success: true };
-    } catch (error) {
-        return { success: false, error: error.message };
-    }
-}
-
-async function processExcelAndEnrolUsers(filePath) {
-    const excelData = readExcel(filePath);
-    const errors = [];
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const row of excelData) {
-        const rowErrors = [];
-        const email    = String(row.email || '').trim();
-        const code     = String(row.code  || '').trim();
-        const roleName = String(row.rol   || 'estudiante').trim();
-
-        if (!email) rowErrors.push('Falta email');
-        if (!code)  rowErrors.push('Falta código curso');
-
-        if (rowErrors.length > 0) {
-            errors.push({ ...row, errors: rowErrors.join(', ') });
-            errorCount++;
-            continue;
-        }
-
-        try {
-            const courseId = await getCourseIdByCode(code);
-            const roleId   = await getRoleIdByName(roleName);
-
-            if (!courseId) {
-                errors.push({ ...row, errors: `Curso no encontrado: ${code}` });
-                errorCount++;
-                continue;
-            }
-
-            let userId = await getUserIdByEmail(email);
-            if (!userId) {
-                if (row.name && row.last_name) {
-                    try {
-                        userId = await createUserInMoodle(row);
-                    } catch (createError) {
-                        errors.push({ ...row, errors: `No existe y falló al crear: ${createError.message}` });
-                        errorCount++;
-                        continue;
-                    }
-                } else {
-                    errors.push({ ...row, errors: 'Usuario no existe y faltan datos para crearlo.' });
-                    errorCount++;
-                    continue;
-                }
-            }
-
-            const enrolResult = await enrolUserInMoodle(userId, courseId, roleId);
-            if (enrolResult.success) {
-                successCount++;
-            } else {
-                errors.push({ ...row, errors: `Fallo al matricular: ${enrolResult.error}` });
-                errorCount++;
-            }
-        } catch (generalError) {
-            errors.push({ ...row, errors: `Error inesperado: ${generalError.message}` });
-            errorCount++;
-        }
-    }
-    return { successCount, errorCount, errors };
-}
-
-async function processExcelAndSuspendUsers(filePath) {
-    const excelData = readExcel(filePath);
-    const errors = [];
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const row of excelData) {
-        const email = String(row.usuario || row.email || '').trim();
-        const code  = String(row.curso   || row.code  || '').trim();
-
-        if (!email || !code) {
-            errors.push({ ...row, errors: 'Faltan datos (usuario o curso)' });
-            errorCount++;
-            continue;
-        }
-
-        try {
-            const userId   = await getUserIdByEmail(email);
-            const courseId = await getCourseIdByCode(code);
-
-            if (!userId)   { errors.push({ ...row, errors: `Usuario no encontrado: ${email}` }); errorCount++; continue; }
-            if (!courseId) { errors.push({ ...row, errors: `Curso no encontrado: ${code}` });    errorCount++; continue; }
-
-            const result = await suspendUserInMoodle(userId, courseId);
-            if (result.success) {
-                successCount++;
-            } else {
-                errors.push({ ...row, errors: `Error Moodle: ${result.error}` });
-                errorCount++;
-            }
-        } catch (err) {
-            errors.push({ ...row, errors: `Error interno: ${err.message}` });
-            errorCount++;
-        }
-    }
-    return { successCount, errorCount, errors };
-}
-
 // ─── RUTAS MOODLE ─────────────────────────────────────────────────────────────
 
+/**
+ * @swagger
+ * /enrollments/enroll_users:
+ *   post:
+ *     summary: Matricular usuario en un curso de Moodle
+ *     tags: [Enrollments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userid, courseid, roleid]
+ *             properties:
+ *               userid:   { type: integer, example: 42 }
+ *               courseid: { type: integer, example: 10 }
+ *               roleid:   { type: integer, example: 5 }
+ *     responses:
+ *       200:
+ *         description: Usuario matriculado correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Error al matricular
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/enroll_users', async (req, res) => {
     try {
         const { userid, courseid, roleid } = req.body;
@@ -223,6 +74,37 @@ router.post('/enroll_users', async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /enrollments/unenroll_users:
+ *   post:
+ *     summary: Desmatricular usuario de un curso de Moodle
+ *     tags: [Enrollments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userid, courseid, roleid]
+ *             properties:
+ *               userid:   { type: integer, example: 42 }
+ *               courseid: { type: integer, example: 10 }
+ *               roleid:   { type: integer, example: 5 }
+ *     responses:
+ *       200:
+ *         description: Usuario desmatriculado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error de Moodle
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/unenroll_users', async (req, res) => {
     try {
         const result = await moodleRequest('enrol_manual_unenrol_users', {
@@ -236,6 +118,41 @@ router.post('/unenroll_users', async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /enrollments/add_user_and_enroll:
+ *   post:
+ *     summary: Crear usuario y matricularlo en un curso de Moodle
+ *     tags: [Enrollments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, firstname, lastname, courseid]
+ *             properties:
+ *               username:  { type: string }
+ *               firstname: { type: string, example: "Juan" }
+ *               lastname:  { type: string, example: "Pérez" }
+ *               email:     { type: string, example: "juan@correo.com" }
+ *               password:  { type: string }
+ *               roleid:    { type: integer, example: 5 }
+ *               courseid:  { type: integer, example: 10 }
+ *     responses:
+ *       200:
+ *         description: Usuario creado y matriculado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Faltan campos requeridos o error al matricular
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/add_user_and_enroll', async (req, res) => {
     try {
         const { username, firstname, lastname, email, password, roleid, courseid } = req.body;
@@ -266,6 +183,38 @@ router.post('/add_user_and_enroll', async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /enrollments/suspend_enrollment:
+ *   post:
+ *     summary: Suspender o reactivar matrícula de un usuario en un curso
+ *     tags: [Enrollments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userid, courseid]
+ *             properties:
+ *               userid:   { type: integer, example: 42 }
+ *               courseid: { type: integer, example: 10 }
+ *               roleid:   { type: integer, example: 5 }
+ *               suspend:  { type: integer, enum: [0, 1], example: 1 }
+ *     responses:
+ *       200:
+ *         description: Matrícula suspendida o reactivada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Faltan campos o error de Moodle
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/suspend_enrollment', async (req, res) => {
     try {
         const { userid, courseid, roleid, suspend } = req.body;
@@ -284,6 +233,38 @@ router.post('/suspend_enrollment', async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /enrollments/suspend_multiple_enrollments:
+ *   post:
+ *     summary: Suspender o reactivar múltiples matrículas de un usuario
+ *     tags: [Enrollments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userid, courseids]
+ *             properties:
+ *               userid:    { type: integer, example: 42 }
+ *               roleid:    { type: integer, example: 5 }
+ *               courseids: { type: array, items: { type: integer }, example: [10, 11, 12] }
+ *               suspend:   { type: integer, enum: [0, 1], example: 1 }
+ *     responses:
+ *       200:
+ *         description: Resultado del proceso masivo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Faltan campos requeridos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/suspend_multiple_enrollments', async (req, res) => {
     try {
         const { userid, roleid, courseids, suspend } = req.body;
@@ -319,6 +300,37 @@ router.post('/suspend_multiple_enrollments', async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /enrollments/reactivate_enrollment:
+ *   post:
+ *     summary: Reactivar matrícula suspendida
+ *     tags: [Enrollments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userid, courseid]
+ *             properties:
+ *               userid:   { type: integer, example: 42 }
+ *               courseid: { type: integer, example: 10 }
+ *               roleid:   { type: integer, example: 5 }
+ *     responses:
+ *       200:
+ *         description: Matrícula reactivada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Faltan campos o error de Moodle
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/reactivate_enrollment', async (req, res) => {
     try {
         const { userid, courseid, roleid } = req.body;
@@ -336,6 +348,36 @@ router.post('/reactivate_enrollment', async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /enrollments/upload-excel:
+ *   post:
+ *     summary: Subir archivo Excel para carga masiva de matrículas
+ *     tags: [Enrollments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               excel:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Archivo subido correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: No se recibió archivo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/upload-excel', async (req, res) => {
     if (!req.files || Object.keys(req.files).length === 0) {
         return response.error(req, res, 'No se ha subido ningún archivo.', 400);
@@ -352,6 +394,35 @@ router.post('/upload-excel', async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /enrollments/process-excel:
+ *   post:
+ *     summary: Procesar Excel y matricular usuarios en Moodle
+ *     tags: [Enrollments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [filePath]
+ *             properties:
+ *               filePath: { type: string, example: "/uploads/upload_123.xlsx" }
+ *     responses:
+ *       200:
+ *         description: Resultado del procesamiento
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: No se especificó filePath
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/process-excel', async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta.', 400);
@@ -375,6 +446,35 @@ router.post('/process-excel', async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /enrollments/process-novedades:
+ *   post:
+ *     summary: Procesar Excel y suspender usuarios en Moodle
+ *     tags: [Enrollments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [filePath]
+ *             properties:
+ *               filePath: { type: string, example: "/uploads/upload_123.xlsx" }
+ *     responses:
+ *       200:
+ *         description: Resultado del procesamiento
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: No se especificó filePath
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/process-novedades', async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta.', 400);
@@ -398,6 +498,26 @@ router.post('/process-novedades', async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /enrollments/list:
+ *   get:
+ *     summary: Listar matrículas con datos de usuario
+ *     tags: [Enrollments]
+ *     responses:
+ *       200:
+ *         description: Lista de matrículas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get('/list', async (req, res) => {
     try {
         const list = await ctrl.listEnrollmentsWithUsers();
@@ -407,6 +527,35 @@ router.get('/list', async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /enrollments/update_log:
+ *   post:
+ *     summary: Actualizar log de matrícula
+ *     tags: [Enrollments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:                   { type: integer }
+ *               moodle_enrollment_id: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Log actualizado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/update_log', async (req, res) => {
     try {
         await ctrl.updateElement(req.body);
@@ -417,6 +566,47 @@ router.post('/update_log', async (req, res) => {
 });
 
 // ─── RUTA SICAU ───────────────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /enrollments/sicau:
+ *   post:
+ *     summary: Guardar matrículas provenientes del sistema SICAU
+ *     tags: [Enrollments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               enrollments:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     cedula:            { type: string, example: "1111111124" }
+ *                     role:              { type: string, example: "ESTUDIANTE" }
+ *                     codigo_asignatura: { type: string, example: "FB0010" }
+ *                     nombre_asignatura: { type: string, example: "Álgebra Lineal" }
+ *                     programa:          { type: string, example: "Fundamentación" }
+ *                     periodo:           { type: string, example: "20261" }
+ *                     grupo:             { type: string, example: "G101" }
+ *                     estado:            { type: string, example: "Activa" }
+ *     responses:
+ *       200:
+ *         description: Matrículas guardadas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/sicau', async (req, res, next) => {
     try {
         const items = req.body.enrollments || req.body.items || req.body || [];
@@ -434,7 +624,26 @@ router.post('/sicau', async (req, res, next) => {
     }
 });
 
-// ─── PREVIEW MATRÍCULAS CON DATOS DE USUARIO ─────────────────────────────────
+/**
+ * @swagger
+ * /enrollments/preview:
+ *   get:
+ *     summary: Vista previa de matrículas con datos de usuario
+ *     tags: [Enrollments]
+ *     responses:
+ *       200:
+ *         description: Lista de matrículas con datos de usuario
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get('/preview', async (req, res, next) => {
     try {
         const result = await ctrl.listEnrollmentsWithUsers();
@@ -446,7 +655,27 @@ router.get('/preview', async (req, res, next) => {
 
 // ─── SYNC ─────────────────────────────────────────────────────────────────────
 
-router.post(['/sync/preview', '/sync/preview/'], async (req, res, next) => {
+/**
+ * @swagger
+ * /enrollments/sync/preview:
+ *   post:
+ *     summary: Vista previa de matrículas a sincronizar con estado real de Moodle
+ *     tags: [Enrollments]
+ *     responses:
+ *       200:
+ *         description: Lista de matrículas con estado de sincronización
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post('/sync/preview', async (req, res, next) => {
     try {
         const result = await syncService.previewEnrollments();
         response.success(req, res, result, 200);
@@ -455,7 +684,38 @@ router.post(['/sync/preview', '/sync/preview/'], async (req, res, next) => {
     }
 });
 
-router.post(['/sync', '/sync/'], async (req, res, next) => {
+/**
+ * @swagger
+ * /enrollments/sync:
+ *   post:
+ *     summary: Sincronizar matrículas seleccionadas con Moodle
+ *     tags: [Enrollments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               items:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *     responses:
+ *       200:
+ *         description: Sincronización completada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post('/sync', async (req, res, next) => {
     try {
         const result = await syncService.syncEnrollments(req.body.items || []);
         response.success(req, res, result || 'Datos cargados correctamente', 200);
