@@ -7,92 +7,46 @@ const syncService = require('../../services/syncService');
 const path = require('path');
 const fs = require('fs');
 
-// ─── HELPERS EXCEL ────────────────────────────────────────────────────────────
-
-function readExcel(filePath) {
-    const workbook = xlsx.readFile(filePath);
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    return xlsx.utils.sheet_to_json(worksheet, { defval: '' });
-}
-
-async function generateErrorExcel(errors) {
-    if (errors.length === 0) return null;
-    const ws = xlsx.utils.json_to_sheet(errors);
-    const wb = xlsx.utils.book_new();
-    xlsx.utils.book_append_sheet(wb, ws, 'Errores de Carga');
-    const fileName = `errores_carga_usuarios_${Date.now()}.xlsx`;
-    const outputPath = path.join(__dirname, '../../uploads', fileName);
-    const dir = path.dirname(outputPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    xlsx.writeFile(wb, outputPath);
-    return outputPath;
-}
-
-function validateUser(userData) {
-    const errors = [];
-    userData.name      = (userData.name      != null) ? String(userData.name).trim()      : '';
-    userData.last_name = (userData.last_name  != null) ? String(userData.last_name).trim() : '';
-    userData.document  = (userData.document   != null) ? String(userData.document).trim()  : '';
-    userData.email     = (userData.email      != null) ? String(userData.email).trim()     : '';
-    if (!userData.name)      errors.push('El nombre es obligatorio.');
-    if (!userData.last_name) errors.push('El apellido es obligatorio.');
-    if (!userData.document)  errors.push('El documento es obligatorio.');
-    if (!userData.email || !/\S+@\S+\.\S+/.test(userData.email)) errors.push('El email es inválido.');
-    if (!userData.document) {
-        errors.push('No se puede generar la contraseña.');
-    } else {
-        userData.password = userData.document;
-    }
-    if (!userData.username) userData.username = userData.email;
-    return errors;
-}
-
-async function processExcelAndCreateUsers(filePath) {
-    const excelData = readExcel(filePath);
-    const errors = [];
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const row of excelData) {
-        const validationErrors = validateUser(row);
-        if (validationErrors.length > 0) {
-            errors.push({ ...row, errors: validationErrors.join(', ') });
-            errorCount++;
-            continue;
-        }
-        try {
-            const moodleResult = await moodleRequest('core_user_create_users', {
-                'users[0][username]':  row.username.toLowerCase(),
-                'users[0][firstname]': row.name,
-                'users[0][lastname]':  row.last_name,
-                'users[0][email]':     row.email,
-                'users[0][password]':  row.password,
-                'users[0][city]':      row.city    || 'Desconocido',
-                'users[0][country]':   row.country || 'CO',
-                'users[0][idnumber]':  row.document,
-            });
-            if (Array.isArray(moodleResult) && moodleResult.length > 0) {
-                successCount++;
-            } else if (moodleResult && moodleResult.exception) {
-                errors.push({ ...row, errors: `Error Moodle: ${moodleResult.message}` });
-                errorCount++;
-            } else {
-                errors.push({ ...row, errors: 'Respuesta inesperada' });
-                errorCount++;
-            }
-        } catch (moodleApiError) {
-            errors.push({ ...row, errors: `Error API: ${moodleApiError.message}` });
-            errorCount++;
-        }
-    }
-    return { successCount, errorCount, errors };
-}
-
 // ─── RUTAS EXCEL ──────────────────────────────────────────────────────────────
 
-// express-fileupload ya está configurado globalmente en index.js
-// los archivos llegan en req.files.<nombre_del_campo>
+/**
+ * @swagger
+ * /users/upload-excel:
+ *   post:
+ *     summary: Subir archivo Excel para carga masiva
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               excel:
+ *                 type: string
+ *                 format: binary
+ *                 description: Archivo .xlsx con columnas name, last_name, document, email
+ *     responses:
+ *       200:
+ *         description: Archivo subido correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:  { type: boolean, example: false }
+ *                 status: { type: integer, example: 200 }
+ *                 body:
+ *                   type: object
+ *                   properties:
+ *                     filePath: { type: string, example: "/uploads/excel_123.xlsx" }
+ *       400:
+ *         description: No se recibió archivo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/upload-excel', (req, res) => {
     if (!req.files || !req.files.excel) {
         return response.error(req, res, 'No se recibió ningún archivo.', 400);
@@ -107,7 +61,53 @@ router.post('/upload-excel', (req, res) => {
         response.success(req, res, { filePath }, 200);
     });
 });
-
+/**
+ * @swagger
+ * /users/process-excel:
+ *   post:
+ *     summary: Procesar archivo Excel subido y crear usuarios en Moodle
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [filePath]
+ *             properties:
+ *               filePath:
+ *                 type: string
+ *                 example: "/uploads/excel_123.xlsx"
+ *     responses:
+ *       200:
+ *         description: Resultado del procesamiento
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:  { type: boolean, example: false }
+ *                 status: { type: integer, example: 200 }
+ *                 body:
+ *                   type: object
+ *                   properties:
+ *                     message:      { type: string }
+ *                     successCount: { type: integer, example: 10 }
+ *                     errorCount:   { type: integer, example: 2 }
+ *                     errorFileUrl: { type: string, example: "/uploads/errores_123.xlsx" }
+ *       400:
+ *         description: No se especificó filePath
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/process-excel', async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta del archivo.', 400);
@@ -135,7 +135,40 @@ router.post('/process-excel', async (req, res) => {
 });
 
 // ─── RUTAS MOODLE ─────────────────────────────────────────────────────────────
-
+/**
+ * @swagger
+ * /users/add_user:
+ *   post:
+ *     summary: Crear usuario en Moodle
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, document, firstname, lastname]
+ *             properties:
+ *               email:     { type: string, example: "juan@correo.com" }
+ *               document:  { type: string, example: "1234567890" }
+ *               firstname: { type: string, example: "Juan" }
+ *               lastname:  { type: string, example: "Pérez" }
+ *               city:      { type: string, example: "Medellín" }
+ *               country:   { type: string, example: "CO" }
+ *     responses:
+ *       200:
+ *         description: Usuario creado en Moodle
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error de Moodle
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/add_user', async (req, res) => {
     const { email, document: documento, firstname, lastname, city, country } = req.body;
     try {
@@ -155,7 +188,41 @@ router.post('/add_user', async (req, res) => {
         response.error(req, res, error.message, 500);
     }
 });
-
+/**
+ * @swagger
+ * /users/update_user:
+ *   post:
+ *     summary: Actualizar usuario en Moodle
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [id]
+ *             properties:
+ *               id:        { type: integer, example: 42 }
+ *               firstname: { type: string }
+ *               lastname:  { type: string }
+ *               email:     { type: string }
+ *               password:  { type: string }
+ *               city:      { type: string }
+ *               suspended: { type: integer, enum: [0, 1] }
+ *     responses:
+ *       200:
+ *         description: Usuario actualizado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error de Moodle
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/update_user', async (req, res) => {
     const params = { 'users[0][id]': req.body.id };
     if (req.body.firstname)               params['users[0][firstname]']  = req.body.firstname;
@@ -171,7 +238,38 @@ router.post('/update_user', async (req, res) => {
         response.error(req, res, error.message, 500);
     }
 });
-
+/**
+ * @swagger
+ * /users/delete_user:
+ *   post:
+ *     summary: Suspender usuario en Moodle
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userids]
+ *             properties:
+ *               userids:
+ *                 type: array
+ *                 items: { type: integer }
+ *                 example: [42]
+ *     responses:
+ *       200:
+ *         description: Usuario suspendido correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error de Moodle
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/delete_user', async (req, res) => {
     const userId = req.body.userids[0];
     try {
@@ -185,7 +283,36 @@ router.post('/delete_user', async (req, res) => {
         response.error(req, res, error.message, 500);
     }
 });
-
+/**
+ * @swagger
+ * /users/search_user:
+ *   post:
+ *     summary: Buscar usuario en Moodle por criterio
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [key, value]
+ *             properties:
+ *               key:   { type: string, example: "email", description: "Campo por el que buscar" }
+ *               value: { type: string, example: "juan@correo.com" }
+ *     responses:
+ *       200:
+ *         description: Resultados de búsqueda
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error de Moodle
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/search_user', async (req, res) => {
     try {
         const result = await moodleRequest('core_user_get_users', {
@@ -198,6 +325,41 @@ router.post('/search_user', async (req, res) => {
     }
 });
 
+
+/**
+ * @swagger
+ * /users/get_users:
+ *   get:
+ *     summary: Listar usuarios de Moodle
+ *     tags: [Users]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Filtrar por apellido (% para todos)
+ *         example: "García"
+ *     responses:
+ *       200:
+ *         description: Lista de usuarios de Moodle
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:  { type: boolean, example: false }
+ *                 status: { type: integer, example: 200 }
+ *                 body:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/User'
+ *       500:
+ *         description: Error de Moodle
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get('/get_users', async (req, res) => {
     try {
         const result = await moodleRequest('core_user_get_users', {
@@ -211,7 +373,28 @@ router.get('/get_users', async (req, res) => {
 });
 
 // ─── RUTAS DB ─────────────────────────────────────────────────────────────────
-
+/**
+ * @swagger
+ * /users/test:
+ *   get:
+ *     summary: Test de conexión a la base de datos
+ *     tags: [Users]
+ *     responses:
+ *       200:
+ *         description: API funcionando correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:  { type: boolean, example: false }
+ *                 status: { type: integer, example: 200 }
+ *                 body:
+ *                   type: object
+ *                   properties:
+ *                     test_message: { type: string, example: "Api Users Working!" }
+ *                     table:        { type: array, items: { type: object } }
+ */
 router.get('/test', async (req, res) => {
     try {
         const data = await ctrl.list('logs');
@@ -220,7 +403,44 @@ router.get('/test', async (req, res) => {
         response.error(req, res, error.message, 500);
     }
 });
-
+/**
+ * @swagger
+ * /users/sicau:
+ *   post:
+ *     summary: Guardar usuarios provenientes del sistema SICAU
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               users:
+ *                 type: array
+ *                 items:
+ *                   $ref: '#/components/schemas/User'
+ *     responses:
+ *       200:
+ *         description: Usuarios guardados
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:  { type: boolean, example: false }
+ *                 status: { type: integer, example: 200 }
+ *                 body:
+ *                   type: object
+ *                   properties:
+ *                     results: { type: array, items: { type: object } }
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/sicau', async (req, res, next) => {
     try {
         const items = req.body.users || req.body.items || req.body || [];
@@ -237,7 +457,26 @@ router.post('/sicau', async (req, res, next) => {
 });
 
 // ─── SYNC ─────────────────────────────────────────────────────────────────────
-
+/**
+ * @swagger
+ * /users/sync/preview:
+ *   post:
+ *     summary: Vista previa de estudiantes a sincronizar
+ *     tags: [Users]
+ *     responses:
+ *       200:
+ *         description: Lista de estudiantes pendientes de sincronización
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/sync/preview', async (req, res, next) => {
     try {
         const result = await syncService.previewStudents();
@@ -246,7 +485,37 @@ router.post('/sync/preview', async (req, res, next) => {
         next(error);
     }
 });
-
+/**
+ * @swagger
+ * /users/sync:
+ *   post:
+ *     summary: Sincronizar estudiantes seleccionados con Moodle
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               items:
+ *                 type: array
+ *                 items:
+ *                   $ref: '#/components/schemas/User'
+ *     responses:
+ *       200:
+ *         description: Sincronización completada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/sync', async (req, res, next) => {
     try {
         const result = await syncService.syncStudents(req.body.items || []);
@@ -256,7 +525,32 @@ router.post('/sync', async (req, res, next) => {
     }
 });
 // ─── MÓDULOS ──────────────────────────────────────────────────────────────────
-
+/**
+ * @swagger
+ * /users/journey:
+ *   post:
+ *     summary: Crear usuario directamente en Journey
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/User'
+ *     responses:
+ *       201:
+ *         description: Usuario creado en Journey
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/journey', async (req, res, next) => {
     try {
         const result = await ctrl.saveJourneyUsuario(req.body);
@@ -265,7 +559,33 @@ router.post('/journey', async (req, res, next) => {
         next(error);
     }
 });
-
+/**
+ * @swagger
+ * /users/reset-password/{id}:
+ *   post:
+ *     summary: Resetear contraseña de un usuario
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID del usuario
+ *     responses:
+ *       200:
+ *         description: Contraseña reseteada correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/reset-password/:id', async (req, res, next) => {
     try {
         const result = await ctrl.resetUserPassword(req.params.id);
@@ -274,7 +594,40 @@ router.post('/reset-password/:id', async (req, res, next) => {
         next(error);
     }
 });
-
+/**
+ * @swagger
+ * /users/{id}/enrollments:
+ *   get:
+ *     summary: Obtener matrículas de un usuario
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID del usuario
+ *     responses:
+ *       200:
+ *         description: Lista de matrículas del usuario
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:  { type: boolean, example: false }
+ *                 status: { type: integer, example: 200 }
+ *                 body:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Enrollment'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get('/:id/enrollments', async (req, res, next) => {
     try {
         const result = await ctrl.getUserEnrollments(req.params.id);
@@ -283,7 +636,62 @@ router.get('/:id/enrollments', async (req, res, next) => {
         next(error);
     }
 });
-
+/**
+ * @swagger
+ * /users/{id}:
+ *   put:
+ *     summary: Actualizar usuario en Journey
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID del usuario
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/User'
+ *     responses:
+ *       200:
+ *         description: Usuario actualizado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *   delete:
+ *     summary: Eliminar usuario de Journey
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID del usuario
+ *     responses:
+ *       200:
+ *         description: Usuario eliminado correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.put('/:id', async (req, res, next) => {
     try {
         const result = await ctrl.updateJourneyUser({ ...req.body, id: req.params.id })
