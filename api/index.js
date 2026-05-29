@@ -10,10 +10,16 @@ const enrollments = require('./enrollments/network');
 const response = require('../network/response');
 const grades = require('./grades/network');
 const ROOT = path.resolve(__dirname, '..');
+const swaggerUi   = require('swagger-ui-express');
+const swaggerSpec = require('../swagger');  
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+    origin: process.env.CORS_ORIGIN || '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(fileUpload({
@@ -23,7 +29,12 @@ app.use(fileUpload({
 }));
 //app.use(express.static(path.join(ROOT, 'public')));
 app.use('/uploads', express.static(path.join(ROOT, 'uploads')));
-
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    customSiteTitle: 'Journey API Docs',
+    swaggerOptions: {
+        persistAuthorization: true  // mantiene el token al recargar
+    }
+}));
 // ─── MÓDULOS ──────────────────────────────────────────────────────────────────
 app.use('/users', users);
 app.use('/courses', courses);
