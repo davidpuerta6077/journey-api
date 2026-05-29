@@ -16,9 +16,9 @@ const swaggerSpec = require('../swagger');
 const app = express();
 
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: '*'
 }));
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
