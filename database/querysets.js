@@ -18,7 +18,8 @@ const selectAllUsers = () => ({
 const selectUsersForSync = () => ({
     text: `SELECT id, username, firstname, lastname, email, city, country,
            documento, correo_personal, telefono, celular, fecha_nacimiento,
-           jornada, departamento_academico, plan_estudios, moodle_id, sincronizado
+           jornada, departamento_academico, plan_estudios, moodle_id, sincronizado,
+           created_at
            FROM ${schema}.users 
            ORDER BY id DESC`,
     values: []
@@ -167,13 +168,35 @@ const updateUserSicau = (data) => ({
     ]
 });
 
-// ✅ CORREGIDO: casteo ::integer para compatibilidad String → Integer en PostgreSQL
 function updateUserSyncStatusQuery(id, statusValue) {
     return {
         text: 'UPDATE test.users SET sincronizado = $2 WHERE id = $1::integer',
         values: [id, statusValue]
     };
 }
+
+// ✅ nuevo: revierte sincronización y limpia moodle_id
+function updateUserUnsyncQuery(id) {
+    return {
+        text: 'UPDATE test.users SET sincronizado = false, moodle_id = NULL WHERE id = $1::integer',
+        values: [id]
+    };
+}
+const selectEnrollmentsByUserId = (userId) => ({
+    text: `SELECT e.id, e.codigo_journey, e.nombre_asignatura, e.programa,
+           e.periodo, e.grupo, e.role, e.sincronizado, e.estado,
+           c.fullname, c.shortname, c.idnumber
+           FROM ${schema}.enrollments e
+           LEFT JOIN ${schema}.courses c ON c.id = e.courseid::integer
+           WHERE e.userid = $1
+           ORDER BY e.id DESC`,
+    values: [userId]
+});
+
+const updateUserPassword = (id, password) => ({
+    text: `UPDATE ${schema}.users SET password = $1 WHERE id = $2`,
+    values: [password, id]
+});
 
 // ─── COURSES ──────────────────────────────────────────────────────────────────
 
@@ -183,37 +206,61 @@ const selectAllCourses = () => ({
 });
 
 const selectCoursesForSync = () => ({
-    text: `SELECT id, fullname, shortname, categoryid, idnumber, summary, visible, format, numsections, moodle_id
+    text: `SELECT id, fullname, shortname, categoryid, idnumber, summary, visible, format, 
+           numsections, moodle_id, sincronizado, departamento, programa, docente, 
+           fecha_inicio, fecha_fin, periodo, grupo, codigo_asignatura, nombre_asignatura, templatecourse
            FROM ${schema}.courses ORDER BY id DESC`,
     values: []
 });
 
+function updateCourseSyncStatusQuery(id, statusValue) {
+    return {
+        text: `UPDATE ${schema}.courses SET sincronizado = $2 WHERE id = $1::integer`,
+        values: [id, statusValue]
+    };
+}
+
 const insertCourseData = (data) => {
     const {
         fullname, shortname, categoryid, idnumber, summary,
-        visible, format, numsections, moodle_id, seed_course_id
+        visible, format, numsections, moodle_id, seed_course_id,
+        departamento, programa, docente, fecha_inicio, fecha_fin,
+        periodo, grupo, codigo_asignatura, nombre_asignatura, templatecourse
     } = data;
 
     const text = `
-        INSERT INTO ${schema}.courses (
+        INSERT INTO test.courses (
             fullname, shortname, categoryid, idnumber, summary,
-            visible, format, numsections, moodle_id, seed_course_id
+            visible, format, numsections, moodle_id, seed_course_id,
+            departamento, programa, docente, fecha_inicio, fecha_fin,
+            periodo, grupo, codigo_asignatura, nombre_asignatura, templatecourse
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+            $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
         ) RETURNING *
     `;
 
     const values = [
         fullname,
         shortname,
-        categoryid     || null,
-        idnumber       || null,
-        summary        || null,
+        categoryid        || null,
+        idnumber          || null,
+        summary           || null,
         visible == null ? true : visible,
-        format         || 'topics',
-        numsections    || 10,
-        moodle_id      || null,
-        seed_course_id || null
+        format            || 'topics',
+        numsections       || 10,
+        moodle_id         || null,
+        seed_course_id    || null,
+        departamento      || null,
+        programa          || null,
+        docente           || null,
+        fecha_inicio      || null,
+        fecha_fin         || null,
+        periodo           || null,
+        grupo             || null,
+        codigo_asignatura || null,
+        nombre_asignatura || null,
+        templatecourse    || null
     ];
 
     return { text, values };
@@ -271,7 +318,16 @@ const selectAllEnrollments = () => ({
 });
 
 const selectEnrollmentsForSync = () => ({
-    text: `SELECT id, userid, courseid, role, moodle_enrollment_id FROM ${schema}.enrollments ORDER BY id DESC`,
+    text: `SELECT 
+            e.id, e.userid, e.courseid, e.role, e.moodle_enrollment_id,
+            e.codigo_asignatura, e.nombre_asignatura, e.programa,
+            e.periodo, e.grupo, e.codigo_journey, e.estado,
+            e.fecha_creacion_journey, e.sincronizado,
+            u.firstname, u.lastname, u.email, u.documento, u.username,
+            u.moodle_id AS user_moodle_id
+           FROM ${schema}.enrollments e
+           LEFT JOIN ${schema}.users u ON u.id = e.userid::integer
+           ORDER BY e.id DESC`,
     values: []
 });
 
@@ -342,7 +398,7 @@ const findAllEnrollmentsWithUsers = () => ({
         e.id, e.userid, e.courseid, e.role, e.moodle_enrollment_id,
         e.codigo_asignatura, e.nombre_asignatura, e.programa,
         e.periodo, e.grupo, e.codigo_journey, e.estado,
-        e.fecha_creacion_journey, e.created_at,
+        e.fecha_creacion_journey, e.created_at, e.sincronizado,
         u.firstname, u.lastname, u.email, u.documento
     FROM ${schema}.enrollments e
     LEFT JOIN ${schema}.users u ON u.id = e.userid
@@ -350,6 +406,17 @@ const findAllEnrollmentsWithUsers = () => ({
     values: []
 });
 
+function updateEnrollmentSyncStatusQuery(id, statusValue) {
+    return {
+        text: `UPDATE ${schema}.enrollments SET sincronizado = $2 WHERE id = $1::integer`,
+        values: [id, statusValue]
+    };
+}
+
+const findEnrollmentByUserAndCourse = (userid, codigoJourney) => ({
+    text: `SELECT id FROM ${schema}.enrollments WHERE userid = $1 AND codigo_journey = $2 LIMIT 1`,
+    values: [userid, codigoJourney]
+});
 // ─── MOODLE ───────────────────────────────────────────────────────────────────
 
 const findMoodleUserByUsername = (username) => ({
@@ -381,6 +448,9 @@ module.exports = {
     findUserByDocumento,
     updateUserSicau,
     updateUserSyncStatusQuery,
+    updateUserUnsyncQuery,
+    selectEnrollmentsByUserId,
+    updateUserPassword,
     // courses
     selectAllCourses,
     selectCoursesForSync,
@@ -389,6 +459,7 @@ module.exports = {
     updateCourseMoodleId,
     findCourseByIdnumber,
     findCourseByShortname,
+    updateCourseSyncStatusQuery,
     // enrollments
     selectAllEnrollments,
     selectEnrollmentsForSync,
@@ -397,6 +468,8 @@ module.exports = {
     updateEnrollmentMoodleId,
     findEnrollmentByCodigoJourney,
     findAllEnrollmentsWithUsers,
+    findEnrollmentByUserAndCourse,
+    updateEnrollmentSyncStatusQuery,
     // moodle
     findMoodleUserByUsername,
     // health

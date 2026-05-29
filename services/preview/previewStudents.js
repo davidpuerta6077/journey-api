@@ -1,17 +1,30 @@
 const usersCtrl = require('../../api/users/index');
-const { getMoodleUserByUsername } = require('../moodle/getMoodleUser');
+const { moodleRequest } = require('../moodleService');
 
 async function previewStudents() {
     const users = await usersCtrl.listUsersForSync();
 
     return Promise.all(users.map(async (user) => {
-        const moodleUser = await getMoodleUserByUsername(user.username);
-        const inMoodle = !!moodleUser;
+        let inMoodle = false;
+        let moodleUser = null;
 
-        if (moodleUser && !user.moodle_id) {
-            await usersCtrl.updateMoodleId(user.id, moodleUser.id);
-        } else if (!moodleUser && user.moodle_id) {
-            await usersCtrl.clearMoodleId(user.id);
+        try {
+            const result = await moodleRequest('core_user_get_users_by_field', {
+                'field':     'username',
+                'values[0]': user.username
+            });
+            moodleUser = Array.isArray(result) && result.length > 0 ? result[0] : null;
+            inMoodle = !!moodleUser;
+
+            if (moodleUser && !user.moodle_id) {
+                await usersCtrl.updateMoodleId(user.id, moodleUser.id);
+            } else if (!moodleUser && user.moodle_id) {
+                await usersCtrl.clearMoodleId(user.id);
+                await usersCtrl.markAsUnsynchronized(user.id);
+            }
+        } catch (e) {
+            console.warn('Error consultando Moodle API:', e.message);
+            inMoodle = user.sincronizado;
         }
 
         return {
