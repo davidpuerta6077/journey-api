@@ -421,9 +421,11 @@ router.post('/sicau', async (req, res, next) => {
     try {
         const items = req.body.enrollments || req.body.items || req.body || [];
         const lista = Array.isArray(items) ? items : [items];
+        console.log('SICAU items recibidos:', JSON.stringify(lista, null, 2));
         const results = [];
         for (const enr of lista) {
             const result = await ctrl.saveSicauMatricula(enr);
+            console.log('Resultado:', result);
             results.push(result);
         }
         response.success(req, res, { results }, 200);
@@ -444,16 +446,16 @@ router.get('/preview', async (req, res, next) => {
 
 // ─── SYNC ─────────────────────────────────────────────────────────────────────
 
-router.get('/sync/preview', async (req, res, next) => {
+router.post(['/sync/preview', '/sync/preview/'], async (req, res, next) => {
     try {
         const result = await syncService.previewEnrollments();
-        response.success(req, res, result || 'Datos cargados correctamente', 200);
+        response.success(req, res, result, 200);
     } catch (error) {
         next(error);
     }
 });
 
-router.post('/sync', async (req, res, next) => {
+router.post(['/sync', '/sync/'], async (req, res, next) => {
     try {
         const result = await syncService.syncEnrollments(req.body.items || []);
         response.success(req, res, result || 'Datos cargados correctamente', 200);

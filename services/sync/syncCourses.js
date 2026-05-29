@@ -1,53 +1,78 @@
-const { moodleRequest } = require('../moodleService');
 const coursesCtrl = require('../../api/courses/index');
-
-const parseMoodleId = (result) => {
-    if (!result) return null;
-    if (Array.isArray(result) && result.length > 0) {
-        return result[0]?.id || result[0]?.userid || null;
-    }
-    return result.id || result.userid || null;
-};
+const { moodleRequest } = require('../moodleService');
 
 async function syncCourses(items = []) {
     const results = [];
-    const localCourses = await coursesCtrl.listCoursesForSync();
 
     for (const course of items) {
         const result = { id: course.id, shortname: course.shortname };
 
         try {
-            if (!course.shortname) {
+            if (!course.id) {
                 result.status = 'error';
-                result.error = 'Sin shortname';
+                result.error = 'Sin ID de curso';
                 results.push(result);
                 continue;
             }
 
-            const saved = await coursesCtrl.saveSicauCurso(course);
-            result.status = saved.status;
-
-            const localCourse = localCourses.find(c => c.shortname === course.shortname);
-
-            if (localCourse && !localCourse.moodle_id) {
-                const moodleResult = await moodleRequest('core_course_create_courses', {
-                    'courses[0][fullname]': course.fullname,
-                    'courses[0][shortname]': course.shortname,
-                    'courses[0][categoryid]': course.categoryid || 1,
-                    'courses[0][idnumber]': course.idnumber || course.shortname,
-                    'courses[0][summary]': course.summary || '',
-                    'courses[0][format]': course.format || 'topics',
-                    'courses[0][numsections]': course.numsections || 10
-                });
-
-                const moodleId = parseMoodleId(moodleResult);
-                if (moodleId) {
-                    await coursesCtrl.updateCourseMoodleId(localCourse.id, moodleId);
-                    result.moodle_id = moodleId;
-                } else {
-                    result.moodle_warning = 'Curso guardado en BD pero no en Moodle';
-                }
+            // 1. Buscar el ID de la semilla en Moodle por shortname
+            const semillaShortname = course.templatecourse;
+            if (!semillaShortname) {
+                result.status = 'error';
+                result.error = 'Sin templatecourse definido';
+                results.push(result);
+                continue;
             }
+
+            const semillaResult = await moodleRequest('core_course_get_courses_by_field', {
+                'field': 'shortname',
+                'value': semillaShortname
+            });
+
+            console.log('Semilla encontrada:', JSON.stringify(semillaResult, null, 2));
+
+            if (!semillaResult?.courses?.length) {
+                result.status = 'error';
+                result.error = `Semilla no encontrada en Moodle: ${semillaShortname}`;
+                results.push(result);
+                continue;
+            }
+
+            const semillaId = semillaResult.courses[0].id;
+
+            // 2. Duplicar el curso semilla
+            const duplicado = await moodleRequest('core_course_duplicate_course', {
+                'courseid':   semillaId,
+                'fullname':   course.fullname,
+                'shortname':  course.shortname,
+                'categoryid': semillaResult.courses[0].categoryid,
+                'visible':    1
+            });
+
+            console.log('Respuesta duplicado Moodle:', JSON.stringify(duplicado, null, 2));
+
+            if (!duplicado?.id) {
+                result.status = 'error';
+                result.error = 'Moodle no devolvió el ID del curso duplicado';
+                results.push(result);
+                continue;
+            }
+
+            // 3. Actualizar idnumber del curso en Moodle
+            await moodleRequest('core_course_update_courses', {
+                'courses[0][id]':        duplicado.id,
+                'courses[0][idnumber]':  course.idnumber,
+                'courses[0][fullname]':  course.fullname,
+                'courses[0][shortname]': course.shortname
+            });
+
+            // 4. Guardar moodle_id en Journey y marcar como sincronizado
+            await coursesCtrl.updateCourseMoodleId(course.id, duplicado.id);
+            await coursesCtrl.markCourseAsSynchronized(course.id);
+
+            result.status = 'success';
+            result.moodle_id = duplicado.id;
+            result.message = `Curso creado en Moodle desde semilla ${semillaShortname}`;
 
         } catch (error) {
             console.error('Error sincronizando curso:', course.shortname, error.message);

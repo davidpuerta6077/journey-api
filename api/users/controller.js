@@ -41,41 +41,46 @@ module.exports = (injectedDB) => {
         return data.removeUserMoodleId(id);
     }
 
+    async function markAsSynchronized(id) {
+        return data.updateUserSyncStatus(id, true);
+    }
+
+    // ✅ nuevo: marca usuario como no sincronizado y limpia moodle_id
+    async function markAsUnsynchronized(id) {
+        return data.updateUserUnsync(id);
+    }
+
     // ─── SICAU ────────────────────────────────────────────────────────────────
 
-async function saveSicauUsuario(user) {
-    const existing = await data.findUserSicau(user.email, user.username);
+    async function saveSicauUsuario(user) {
+        const existing = await data.findUserSicau(user.email, user.username);
 
-    if (existing.length > 0) {
-        await data.updateUserFromSicau(user);
-        return { username: user.username, status: 'updated' };
-    } else {
-        await data.insertUser({
-            username:               user.username,
-            firstname:              user.firstname,
-            lastname:               user.lastname,
-            email:                  user.email,
-            password:               user.documento ? String(user.documento) : 'Pascual2024*',
-            city:                   user.city                   || 'Medellín',
-            country:                user.country                || 'CO',
-            documento:              user.documento              || null,
-            correo_personal:        user.correo_personal        || null,
-            telefono:               user.telefono               || null,
-            celular:                user.celular                || null,
-            fecha_nacimiento:       user.fecha_nacimiento       || null,
-            jornada:                user.jornada                || null,
-            departamento_academico: user.departamento_academico || null,
-            plan_estudios:          user.plan_estudios          || null,
-            moodle_id:              null,
-            sincronizado:           false
-        });
-        return { username: user.username, status: 'saved' };
+        if (existing.length > 0) {
+            await data.updateUserFromSicau(user);
+            return { username: user.username, status: 'updated' };
+        } else {
+            await data.insertUser({
+                username:               user.username,
+                firstname:              user.firstname,
+                lastname:               user.lastname,
+                email:                  user.email,
+                password:               user.documento ? String(user.documento) : 'Pascual2024*',
+                city:                   user.city                   || 'Medellín',
+                country:                user.country                || 'CO',
+                documento:              user.documento              || null,
+                correo_personal:        user.correo_personal        || null,
+                telefono:               user.telefono               || null,
+                celular:                user.celular                || null,
+                fecha_nacimiento:       user.fecha_nacimiento       || null,
+                jornada:                user.jornada                || null,
+                departamento_academico: user.departamento_academico || null,
+                plan_estudios:          user.plan_estudios          || null,
+                moodle_id:              null,
+                sincronizado:           false
+            });
+            return { username: user.username, status: 'saved' };
+        }
     }
-}
-
-async function markAsSynchronized(id) {
-    return data.updateUserSyncStatus(id, true);
-}
 
     // ─── EXCEL PROCESSOR ──────────────────────────────────────────────────────
 
@@ -105,12 +110,12 @@ async function markAsSynchronized(id) {
         userData.last_name = (userData.last_name != null) ? String(userData.last_name).trim() : '';
         userData.document  = (userData.document  != null) ? String(userData.document).trim()  : '';
         userData.email     = (userData.email     != null) ? String(userData.email).trim()     : '';
-        
+
         if (!userData.name)      errors.push('El nombre es obligatorio.');
         if (!userData.last_name) errors.push('El apellido es obligatorio.');
         if (!userData.document)  errors.push('El documento es obligatorio.');
         if (!userData.email || !/\S+@\S+\.\S+/.test(userData.email)) errors.push('El email es inválido.');
-        
+
         if (!userData.document) {
             errors.push('No se puede generar la contraseña.');
         } else {
@@ -160,7 +165,45 @@ async function markAsSynchronized(id) {
         }
         return { successCount, errorCount, errors };
     }
+    async function saveJourneyUsuario(user) {
+        const existing = await data.findUserSicau(user.email, user.username || user.email);
+        if (existing.length > 0) {
+            throw new Error('Ya existe un usuario con ese email o username');
+        }
+        const result = await data.insertUser({
+            username:               user.username || user.email,
+            firstname:              user.firstname,
+            lastname:               user.lastname,
+            email:                  user.email,
+            password:               user.documento ? String(user.documento) : 'Pascual2024*',
+            city:                   user.city                   || 'Medellín',
+            country:                user.country                || 'CO',
+            documento:              user.documento              || null,
+            correo_personal:        user.correo_personal        || null,
+            telefono:               user.telefono               || null,
+            celular:                user.celular                || null,
+            fecha_nacimiento:       user.fecha_nacimiento       || null,
+            jornada:                user.jornada                || null,
+            departamento_academico: user.departamento_academico || null,
+            plan_estudios:          user.plan_estudios          || null,
+            moodle_id:              null,
+            sincronizado:           false
+        });
+        return result[0];
+    }
 
+async function resetUserPassword(id) {
+    const users = await data.getUsersForSync();
+    const user = users.find(u => u.id === parseInt(id));
+    if (!user) throw new Error('Usuario no encontrado');
+    const newPassword = user.documento || 'Pascual2024*';
+    await data.resetPassword(id, newPassword);
+    return { status: 'reset', message: `Contraseña restablecida al documento` };
+}
+
+async function getUserEnrollments(userId) {
+    return data.getEnrollmentsByUserId(userId);
+}
     return {
         list,
         addElement,
@@ -168,11 +211,15 @@ async function markAsSynchronized(id) {
         updateJourneyUser,
         deleteUser,
         listUsersForSync,
+        saveJourneyUsuario,
+        resetUserPassword,
+        getUserEnrollments,
         updateMoodleId,
         clearMoodleId,
         saveSicauUsuario,
         generateErrorExcel,
         processExcelAndCreateUsers,
-        markAsSynchronized
+        markAsSynchronized,
+        markAsUnsynchronized
     };
 };

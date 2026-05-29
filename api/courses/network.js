@@ -152,22 +152,22 @@ router.post('/sicau', async (req, res, next) => {
 
 // ─── SYNC ─────────────────────────────────────────────────────────────────────
 
-router.get('/sync/preview', async (req, res, next) => {
-     try {
-         const result = await syncService.previewCourses();
-         response.success(req, res, result || 'Datos cargados correctamente', 200);
-     } catch (error) {
-         next(error);
-     }
- });
+router.post(['/sync/preview', '/sync/preview/'], async (req, res, next) => {
+    try {
+        const result = await syncService.previewCourses();
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
 
- router.post('/sync', async (req, res, next) => {
-     try {
-         const result = await syncService.syncCourses(req.body.items || []);
-         response.success(req, res, result || 'Datos cargados correctamente', 200);
-     } catch (error) {
-         next(error);
-     }
- });
+router.post(['/sync', '/sync/'], async (req, res, next) => {
+    try {
+        const result = await syncService.syncCourses(req.body.items || []);
+        response.success(req, res, result || 'Datos cargados correctamente', 200);
+    } catch (error) {
+        next(error);
+    }
+});
 
 module.exports = router;
