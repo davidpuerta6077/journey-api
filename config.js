@@ -38,17 +38,17 @@ module.exports = {
         // password: process.env.MOODLE_DB_PASSWORD || '',
         // database: process.env.MOODLE_DB_NAME || 'moodle_cinco'
         // producción:
-        host: process.env.MOODLE_DB_HOST || 'rdspascualbravo.cygtmjsaacoj.us-east-1.rds.amazonaws.com',
-        user: process.env.MOODLE_DB_USER || 'campus_moodle50',
+        host:     process.env.MOODLE_DB_HOST     || 'rdspascualbravo.cygtmjsaacoj.us-east-1.rds.amazonaws.com',
+        user:     process.env.MOODLE_DB_USER     || 'campus_moodle50',
         password: process.env.MOODLE_DB_PASSWORD || 'ks6Xj8ADInsHUtKr',
-        database: process.env.MOODLE_DB_NAME || 'campus_moodle50'
+        database: process.env.MOODLE_DB_NAME     || 'campus_moodle50'
     },
     moodle: {
-        url: process.env.MOODLE_URL || 'https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php',
+        url:   process.env.MOODLE_URL   || 'https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php',
         token: process.env.MOODLE_TOKEN || 'a9667c932d294bca8924ec0888140768'
     },
     moodle_cli: {
-        php_path: process.env.PHP_PATH || 'C:\\xampp\\php\\php.exe',
+        php_path:    process.env.PHP_PATH    || 'C:\\xampp\\php\\php.exe',
         moodle_path: process.env.MOODLE_PATH || 'C:\\xampp\\htdocs\\MoodleCinco\\moodle'
     },
 };
