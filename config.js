@@ -23,7 +23,7 @@ module.exports = {
     //     database: process.env.POSTGRESQL_DB || 'journey',
     //     schema: process.env.SCHEMA || 'test',
     //     port: process.env.DB_PORT || 5434, 
-    // },
+    },
     domain: {
         url_base: process.env.URL_BASE || 'https://localhost:3001'
     },
