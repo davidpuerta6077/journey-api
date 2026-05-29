@@ -13,12 +13,13 @@ const moodleRequest = async (wsfunction, params) => {
       ...params
     });
 
-    const res = await axios.post(
+const res = await axios.post(
       config.moodle.url,
       data,
       {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        httpsAgent: agent
+        httpsAgent: agent,
+        timeout: 15000
       }
     );
 
@@ -29,5 +30,7 @@ const moodleRequest = async (wsfunction, params) => {
     return null;
   }
 };
+
+
 
 module.exports = { moodleRequest };

@@ -4,13 +4,13 @@ const { moodleRequest } = require('../moodleService');
 
 async function previewEnrollments() {
     const enrollments = await enrollmentsCtrl.listEnrollmentsForSync();
+    const results = [];
 
-    return Promise.all(enrollments.map(async (enr) => {
+    for (const enr of enrollments) {
         let inMoodle = false;
         let userExistsInMoodle = false;
 
         try {
-            // Verificar si el usuario existe en Moodle (igual que previewStudents)
             const result = await moodleRequest('core_user_get_users_by_field', {
                 'field':     'username',
                 'values[0]': enr.username
@@ -18,7 +18,6 @@ async function previewEnrollments() {
             const moodleUser = Array.isArray(result) && result.length > 0 ? result[0] : null;
             userExistsInMoodle = !!moodleUser;
 
-            // Si existe, verificar si está matriculado en el curso
             if (userExistsInMoodle && enr.sincronizado && enr.user_moodle_id) {
                 const courses = await moodleRequest('core_enrol_get_users_courses', {
                     'userid': enr.user_moodle_id
@@ -33,14 +32,16 @@ async function previewEnrollments() {
             userExistsInMoodle = !!enr.user_moodle_id;
         }
 
-        return {
+        results.push({
             ...enr,
             studentId:          enr.userid,
             courseId:           enr.courseid,
             userExistsInMoodle,
             _syncStatus:        { inDB: true, inMoodle }
-        };
-    }));
+        });
+    }
+
+    return results;
 }
 
 module.exports = { previewEnrollments };

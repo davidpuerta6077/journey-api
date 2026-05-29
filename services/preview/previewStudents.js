@@ -3,8 +3,9 @@ const { moodleRequest } = require('../moodleService');
 
 async function previewStudents() {
     const users = await usersCtrl.listUsersForSync();
+    const results = [];
 
-    return Promise.all(users.map(async (user) => {
+    for (const user of users) {
         let inMoodle = false;
         let moodleUser = null;
 
@@ -27,11 +28,13 @@ async function previewStudents() {
             inMoodle = user.sincronizado;
         }
 
-        return {
+        results.push({
             ...user,
             _syncStatus: { inDB: true, inMoodle }
-        };
-    }));
+        });
+    }
+
+    return results;
 }
 
 module.exports = { previewStudents };
