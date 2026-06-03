@@ -204,6 +204,21 @@ async function resetUserPassword(id) {
 async function getUserEnrollments(userId) {
     return data.getEnrollmentsByUserId(userId);
 }
+
+/* Adding User to Auth */
+async function addUserElement(json) {
+    return data.insertUserDatas(json)
+}
+
+async function addConsentData(json) {
+    return data.insertConsentDatas(json)
+}
+
+async function itemByEmailData(TABLE, EMAIL) {
+    return data.itemByEmail(TABLE, EMAIL)
+}
+
+
     return {
         list,
         addElement,

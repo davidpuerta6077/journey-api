@@ -710,4 +710,27 @@ router.delete('/:id', async (req, res, next) => {
     }
 })
 
+
+/* Adding Users to Auth */ 
+
+router.post('/add_user_data', async (req, res) => {
+    try {
+        const data = req.body
+        
+        if (data.is_accepted === true) {
+            await ctrl.addUserElement(data);
+            const user_data = await ctrl.itemByEmailData("users", data.email);
+            data["user_id"] = user_data[0].id
+            await ctrl.addConsentData(data)
+        } else {
+            return response.error(req, res, "Consent Invalid", 404)
+        }
+
+        response.success(req, res, `Item Created`, 200);
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
+
 module.exports = router;

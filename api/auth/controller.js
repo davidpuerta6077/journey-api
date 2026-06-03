@@ -1,0 +1,65 @@
+const auth = require('../../auth/index')
+const bcrypt = require('bcrypt');
+
+
+module.exports = (database) => {
+    let store = database
+
+    const authUpsert = async (body) => {
+        const authData = {}
+
+        if (data.username) {
+            authData.name = body.name;
+        };
+        
+        if (data.username) {
+            authData.username = body.username;
+        };
+
+        if (data.password){
+            authData.password = await bcrypt.hash(body.password, 5);
+        };
+
+        return store.insertNewAuth(authData)
+    };
+
+    const login = async (user_email) => {
+
+        const data = await store.itemByEmail('users', user_email);
+        const emailSend = data[0]['email'];
+        const emailRecived = user_email;
+
+        const payload = { roles_id: data[0]["roles_id"], email: data[0]["email"] };
+
+        try {
+          const result = emailRecived === emailSend;
+          if (result === true) {
+            return {token: auth.sign(payload), profile: data[0]["type"]};
+          } else {
+            throw new Error('Credenciales invalidas');
+          }
+        } catch (e) {
+          throw new Error('Error al comparar los emails');
+        }
+      };
+
+    const addElement = async (data) => {
+        const user = {
+            name: data.name,
+            username: data.username,
+            password: data.password,
+        };
+
+        if (data.password || data.username){
+            await authUpsert(user);
+        };
+
+        return store.insertNewUser(user);
+    };
+
+    return {
+        authUpsert,
+        login,
+        addElement
+    }
+};
