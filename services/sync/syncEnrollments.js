@@ -4,6 +4,9 @@ const database = require('../../database/postgresql');
 async function syncEnrollments(items = []) {
     const results = [];
 
+    const allUsers = await database.getUsersForSync();
+    const syncedUserIds = new Set(allUsers.filter(u => u.sincronizado).map(u => u.id));
+
     for (const enr of items) {
         const result = { id: enr.id, userid: enr.userid, courseid: enr.courseid };
 
@@ -15,11 +18,7 @@ async function syncEnrollments(items = []) {
                 continue;
             }
 
-            // Verificar que el usuario esté sincronizado
-            const users = await database.getUsersForSync();
-            const userSincronizado = !users.find(u => u.id === enr.userid && !u.sincronizado);
-            
-            if (!userSincronizado) {
+            if (!syncedUserIds.has(enr.userid)) {
                 result.status = 'error';
                 result.error = 'El usuario no está sincronizado en Moodle todavía';
                 results.push(result);
