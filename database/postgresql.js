@@ -4,7 +4,7 @@ const {
     selectAllItems,
     selectAllUsers, selectUsersForSync, insertUsuarioData, updateUsuarioData,
     updateUsuarioJourney, deleteUsuarioData,
-    updateUserMoodleId, clearUserMoodleId, findUserByEmailOrUsername,
+    updateUserMoodleId, clearUserMoodleId, selectUserById, findUserByEmailOrUsername,
     findUserByDocumento, updateUserSicau,
     updateUserSyncStatusQuery, updateUserUnsyncQuery,selectEnrollmentsByUserId,
     updateUserPassword,
@@ -108,6 +108,15 @@ function removeUserMoodleId(id) {
         pool.query(clearUserMoodleId(id), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
+        });
+    });
+}
+
+function getUserById(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectUserById(id), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows[0] || null);
         });
     });
 }
@@ -335,6 +344,7 @@ module.exports = {
     updateJourneyUser,
     deleteUser,
     getUsersForSync,
+    getUserById,
     setUserMoodleId,
     removeUserMoodleId,
     findUserSicau,

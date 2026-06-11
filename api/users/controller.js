@@ -193,8 +193,7 @@ module.exports = (injectedDB) => {
     }
 
 async function resetUserPassword(id) {
-    const users = await data.getUsersForSync();
-    const user = users.find(u => u.id === parseInt(id));
+    const user = await data.getUserById(parseInt(id));
     if (!user) throw new Error('Usuario no encontrado');
     const newPassword = user.documento || 'Pascual2024*';
     await data.resetPassword(id, newPassword);

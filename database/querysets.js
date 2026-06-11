@@ -144,6 +144,11 @@ const clearUserMoodleId = (id) => ({
     values: [id]
 });
 
+const selectUserById = (id) => ({
+    text: `SELECT id, documento FROM ${schema}.users WHERE id = $1 LIMIT 1`,
+    values: [id]
+});
+
 const findUserByEmailOrUsername = (email, username) => ({
     text: `SELECT id FROM ${schema}.users WHERE email = $1 OR username = $2 LIMIT 1`,
     values: [email, username]
@@ -449,6 +454,7 @@ module.exports = {
     deleteUsuarioData,
     updateUserMoodleId,
     clearUserMoodleId,
+    selectUserById,
     findUserByEmailOrUsername,
     findUserByDocumento,
     updateUserSicau,
