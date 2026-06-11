@@ -30,6 +30,108 @@ async function generateErrorExcel(errors) {
     return outputPath;
 }
 
+async function getUserIdByEmail(email) {
+    try {
+        const result = await moodleRequest('core_user_get_users', {
+            'criteria[0][key]':   'email',
+            'criteria[0][value]': email,
+        });
+        if (result && result.users && result.users.length > 0) return result.users[0].id;
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+async function enrolUserInMoodle(userid, courseid, roleid) {
+    try {
+        const result = await moodleRequest('enrol_manual_enrol_users', {
+            'enrolments[0][userid]':   userid,
+            'enrolments[0][courseid]': courseid,
+            'enrolments[0][roleid]':   roleid || 5,
+        });
+        if (result && result.exception) return { success: false, error: result.message };
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+}
+
+async function processExcelAndEnrolUsers(filePath) {
+    const rows = readExcel(filePath);
+    const errors = [];
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const row of rows) {
+        const { email, courseid, roleid } = row;
+        if (!email || !courseid) {
+            errors.push({ ...row, errors: 'Faltan campos requeridos (email, courseid)' });
+            errorCount++;
+            continue;
+        }
+        try {
+            const userId = await getUserIdByEmail(email);
+            if (!userId) {
+                errors.push({ ...row, errors: `Usuario no encontrado en Moodle: ${email}` });
+                errorCount++;
+                continue;
+            }
+            const result = await enrolUserInMoodle(userId, courseid, roleid || 5);
+            if (result.success) {
+                successCount++;
+            } else {
+                errors.push({ ...row, errors: result.error });
+                errorCount++;
+            }
+        } catch (err) {
+            errors.push({ ...row, errors: err.message });
+            errorCount++;
+        }
+    }
+    return { successCount, errorCount, errors };
+}
+
+async function processExcelAndSuspendUsers(filePath) {
+    const rows = readExcel(filePath);
+    const errors = [];
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const row of rows) {
+        const { email, courseid, roleid } = row;
+        if (!email || !courseid) {
+            errors.push({ ...row, errors: 'Faltan campos requeridos (email, courseid)' });
+            errorCount++;
+            continue;
+        }
+        try {
+            const userId = await getUserIdByEmail(email);
+            if (!userId) {
+                errors.push({ ...row, errors: `Usuario no encontrado en Moodle: ${email}` });
+                errorCount++;
+                continue;
+            }
+            const result = await moodleRequest('enrol_manual_enrol_users', {
+                'enrolments[0][userid]':   userId,
+                'enrolments[0][courseid]': courseid,
+                'enrolments[0][roleid]':   roleid || 5,
+                'enrolments[0][suspend]':  1
+            });
+            if (result && result.exception) {
+                errors.push({ ...row, errors: result.message });
+                errorCount++;
+            } else {
+                successCount++;
+            }
+        } catch (err) {
+            errors.push({ ...row, errors: err.message });
+            errorCount++;
+        }
+    }
+    return { successCount, errorCount, errors };
+}
+
 // ─── RUTAS MOODLE ─────────────────────────────────────────────────────────────
 
 /**

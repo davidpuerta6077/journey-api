@@ -112,9 +112,9 @@ router.post('/process-excel', async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta del archivo.', 400);
     try {
-        const result = await processExcelAndCreateUsers(filePath);
+        const result = await ctrl.processExcelAndCreateUsers(filePath);
         if (result.errors.length > 0) {
-            const errorExcelPath = await generateErrorExcel(result.errors);
+            const errorExcelPath = await ctrl.generateErrorExcel(result.errors);
             response.success(req, res, {
                 message:      'Proceso completado con errores.',
                 successCount: result.successCount,
