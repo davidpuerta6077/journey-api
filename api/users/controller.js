@@ -1,7 +1,10 @@
 const path = require('path');
 const xlsx = require('xlsx');
 const fs = require('fs');
+const bcrypt = require('bcrypt');
 const { moodleRequest } = require('../../services/moodleService');
+
+const BCRYPT_ROUNDS = 10;
 
 module.exports = (injectedDB) => {
     let data = injectedDB;
@@ -59,12 +62,13 @@ module.exports = (injectedDB) => {
             await data.updateUserFromSicau(user);
             return { username: user.username, status: 'updated' };
         } else {
+            const plainPass = user.documento ? String(user.documento) : 'Pascual2024*';
             await data.insertUser({
                 username:               user.username,
                 firstname:              user.firstname,
                 lastname:               user.lastname,
                 email:                  user.email,
-                password:               user.documento ? String(user.documento) : 'Pascual2024*',
+                password:               await bcrypt.hash(plainPass, BCRYPT_ROUNDS),
                 city:                   user.city                   || 'Medellín',
                 country:                user.country                || 'CO',
                 documento:              user.documento              || null,
@@ -170,12 +174,13 @@ module.exports = (injectedDB) => {
         if (existing.length > 0) {
             throw new Error('Ya existe un usuario con ese email o username');
         }
+        const plainPass = user.documento ? String(user.documento) : 'Pascual2024*';
         const result = await data.insertUser({
             username:               user.username || user.email,
             firstname:              user.firstname,
             lastname:               user.lastname,
             email:                  user.email,
-            password:               user.documento ? String(user.documento) : 'Pascual2024*',
+            password:               await bcrypt.hash(plainPass, BCRYPT_ROUNDS),
             city:                   user.city                   || 'Medellín',
             country:                user.country                || 'CO',
             documento:              user.documento              || null,
@@ -195,8 +200,8 @@ module.exports = (injectedDB) => {
 async function resetUserPassword(id) {
     const user = await data.getUserById(parseInt(id));
     if (!user) throw new Error('Usuario no encontrado');
-    const newPassword = user.documento || 'Pascual2024*';
-    await data.resetPassword(id, newPassword);
+    const plainPass = user.documento || 'Pascual2024*';
+    await data.resetPassword(id, await bcrypt.hash(plainPass, BCRYPT_ROUNDS));
     return { status: 'reset', message: `Contraseña restablecida al documento` };
 }
 
