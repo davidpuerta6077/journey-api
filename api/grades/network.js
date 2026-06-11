@@ -105,7 +105,6 @@ router.post('/grades_user_table', async (req, res) => {
         response.error(req, res, error.message, 500);
     }
 });
-+
 
 router.get('/list', async (req, res) => {
     try {
