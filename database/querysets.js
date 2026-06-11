@@ -1,5 +1,6 @@
 const config = require('../config');
 const schema = config.postgresql.schema;
+const MAX_ROWS = parseInt(process.env.MAX_ROWS) || 5000;
 
 const selectAllItems = (table) => {
     return {
@@ -20,8 +21,9 @@ const selectUsersForSync = () => ({
            documento, correo_personal, telefono, celular, fecha_nacimiento,
            jornada, departamento_academico, plan_estudios, moodle_id, sincronizado,
            created_at
-           FROM ${schema}.users 
-           ORDER BY id DESC`,
+           FROM ${schema}.users
+           ORDER BY id DESC
+           LIMIT ${MAX_ROWS}`,
     values: []
 });
 
@@ -206,10 +208,12 @@ const selectAllCourses = () => ({
 });
 
 const selectCoursesForSync = () => ({
-    text: `SELECT id, fullname, shortname, categoryid, idnumber, summary, visible, format, 
-           numsections, moodle_id, sincronizado, departamento, programa, docente, 
+    text: `SELECT id, fullname, shortname, categoryid, idnumber, summary, visible, format,
+           numsections, moodle_id, sincronizado, departamento, programa, docente,
            fecha_inicio, fecha_fin, periodo, grupo, codigo_asignatura, nombre_asignatura, templatecourse
-           FROM ${schema}.courses ORDER BY id DESC`,
+           FROM ${schema}.courses
+           ORDER BY id DESC
+           LIMIT ${MAX_ROWS}`,
     values: []
 });
 
@@ -318,7 +322,7 @@ const selectAllEnrollments = () => ({
 });
 
 const selectEnrollmentsForSync = () => ({
-    text: `SELECT 
+    text: `SELECT
             e.id, e.userid, e.courseid, e.role, e.moodle_enrollment_id,
             e.codigo_asignatura, e.nombre_asignatura, e.programa,
             e.periodo, e.grupo, e.codigo_journey, e.estado,
@@ -327,7 +331,8 @@ const selectEnrollmentsForSync = () => ({
             u.moodle_id AS user_moodle_id
            FROM ${schema}.enrollments e
            LEFT JOIN ${schema}.users u ON u.id = e.userid::integer
-           ORDER BY e.id DESC`,
+           ORDER BY e.id DESC
+           LIMIT ${MAX_ROWS}`,
     values: []
 });
 
