@@ -10,6 +10,7 @@ const courses = require('./courses/network');
 const enrollments = require('./enrollments/network');
 const response = require('../network/response');
 const grades = require('./grades/network');
+const auth = require('./auth/network');
 const ROOT = path.resolve(__dirname, '..');
 const swaggerUi   = require('swagger-ui-express');
 const swaggerSpec = require('../swagger');  
@@ -37,6 +38,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     }
 }));
 // ─── MÓDULOS ──────────────────────────────────────────────────────────────────
+app.use('/auth', auth);
 app.use('/users', users);
 app.use('/courses', courses);
 app.use('/enrollments', enrollments);
