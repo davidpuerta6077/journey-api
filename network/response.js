@@ -1,48 +1,19 @@
-
-
-const success = (req, res, mesagge, status) => {
-    let statusCode = status || 200;
-    let statusMessage = mesagge || '';
+const success = (req, res, message, status) => {
+    const statusCode = status || 200;
     res.status(statusCode).json({
         error: false,
-        status: status,
-        body: statusMessage,
+        status: statusCode,
+        body: message || '',
     });
 };
 
-const error = (req, res, mesagge, status) => {
-    let statusCode = status || 500;
-    let statusMessage = mesagge || 'Internal server error';
+const error = (req, res, message, status) => {
+    const statusCode = status || 500;
     res.status(statusCode).json({
         error: true,
-        status: status,
-        body: statusMessage,
-    });
-};
-
-module.exports = {
-    success,
-    error,
-}
-
-exports.success = function (req, res, message, status) {
-    let statusCode = status || 200;
-    let statusMessage = message || '';
-
-    res.status(statusCode).send({
-        error: false,
         status: statusCode,
-        body: statusMessage,
+        body: message || 'Internal server error',
     });
 };
 
-exports.error = function (req, res, message, status) {
-    let statusCode = status || 500;
-    let statusMessage = message || 'Internal server error';
-
-    res.status(statusCode).send({
-        error: true,
-        status: statusCode,
-        body: statusMessage,
-    });
-};
+module.exports = { success, error };
