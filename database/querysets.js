@@ -170,7 +170,7 @@ const updateUserSicau = (data) => ({
 
 function updateUserSyncStatusQuery(id, statusValue) {
     return {
-        text: 'UPDATE test.users SET sincronizado = $2 WHERE id = $1::integer',
+        text: `UPDATE ${schema}.users SET sincronizado = $2 WHERE id = $1::integer`,
         values: [id, statusValue]
     };
 }
@@ -178,7 +178,7 @@ function updateUserSyncStatusQuery(id, statusValue) {
 // ✅ nuevo: revierte sincronización y limpia moodle_id
 function updateUserUnsyncQuery(id) {
     return {
-        text: 'UPDATE test.users SET sincronizado = false, moodle_id = NULL WHERE id = $1::integer',
+        text: `UPDATE ${schema}.users SET sincronizado = false, moodle_id = NULL WHERE id = $1::integer`,
         values: [id]
     };
 }
@@ -229,7 +229,7 @@ const insertCourseData = (data) => {
     } = data;
 
     const text = `
-        INSERT INTO test.courses (
+        INSERT INTO ${schema}.courses (
             fullname, shortname, categoryid, idnumber, summary,
             visible, format, numsections, moodle_id, seed_course_id,
             departamento, programa, docente, fecha_inicio, fecha_fin,
