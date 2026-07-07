@@ -6,6 +6,7 @@ const { moodleRequest } = require('../../services/moodleService');
 const syncService = require('../../services/syncService');
 const path = require('path');
 const fs = require('fs');
+const { verifyToken } = require('../../utils/services/secure');
 
 // ─── RUTAS EXCEL ──────────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ const fs = require('fs');
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/upload-excel', (req, res) => {
+router.post('/upload-excel', verifyToken(), (req, res) => {
     if (!req.files || !req.files.excel) {
         return response.error(req, res, 'No se recibió ningún archivo.', 400);
     }

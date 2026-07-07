@@ -7,6 +7,7 @@ const cors = require('cors');
 const users = require('./users/network');
 const courses = require('./courses/network');
 const enrollments = require('./enrollments/network');
+const auth = require('./auth/network')
 const response = require('../network/response');
 const grades = require('./grades/network');
 const ROOT = path.resolve(__dirname, '..');
@@ -40,6 +41,7 @@ app.use('/users', users);
 app.use('/courses', courses);
 app.use('/enrollments', enrollments);
 app.use('/grades', grades);
+app.use(`/auth`, auth)
 
 
 // ─── PÁGINAS ──────────────────────────────────────────────────────────────────
