@@ -40,10 +40,10 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 }));
 // ─── MÓDULOS ──────────────────────────────────────────────────────────────────
 app.use('/auth', auth);
-app.use('/users',       verifyToken, users);
-app.use('/courses',     verifyToken, courses);
-app.use('/enrollments', verifyToken, enrollments);
-app.use('/grades',      verifyToken, grades);
+app.use('/users',       users);
+app.use('/courses',     courses);
+app.use('/enrollments', enrollments);
+app.use('/grades',      grades);
 
 
 // ─── PÁGINAS ──────────────────────────────────────────────────────────────────
