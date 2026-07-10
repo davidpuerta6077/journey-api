@@ -16,6 +16,8 @@ const {
     findEnrollmentByUserAndCourse,
     findAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatusQuery,
+    updateJourneyEnrollmentData,
+    deleteEnrollmentData,
     healthCheck
 } = require('./querysets');
 
@@ -259,6 +261,24 @@ function updateEnrollment(data) {
     });
 }
 
+function updateJourneyEnrollment(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateJourneyEnrollmentData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function deleteEnrollment(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(deleteEnrollmentData(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 function getEnrollmentsForSync() {
     return new Promise((resolve, reject) => {
         pool.query(selectEnrollmentsForSync(), (err, data) => {
@@ -351,6 +371,8 @@ module.exports = {
     updateCourseSyncStatus,
     insertEnrollment,
     updateEnrollment,
+    updateJourneyEnrollment,
+    deleteEnrollment,
     getEnrollmentsForSync,
     setEnrollmentMoodleId,
     findEnrollmentSicau,

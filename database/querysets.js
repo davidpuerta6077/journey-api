@@ -301,7 +301,7 @@ const updateCourseMoodleId = (id, moodleId) => ({
 });
 
 const findCourseByIdnumber = (idnumber) => ({
-    text: `SELECT id FROM ${schema}.courses WHERE idnumber = $1 LIMIT 1`,
+    text: `SELECT * FROM ${schema}.courses WHERE idnumber = $1 LIMIT 1`,
     values: [idnumber]
 });
 
@@ -417,6 +417,50 @@ const findEnrollmentByUserAndCourse = (userid, codigoJourney) => ({
     text: `SELECT id FROM ${schema}.enrollments WHERE userid = $1 AND codigo_journey = $2 LIMIT 1`,
     values: [userid, codigoJourney]
 });
+
+const updateJourneyEnrollmentData = (data) => {
+    const {
+        id, userid, courseid, role,
+        codigo_asignatura, nombre_asignatura, programa,
+        periodo, grupo, estado
+    } = data;
+
+    const text = `
+        UPDATE ${schema}.enrollments SET
+            userid             = $1,
+            courseid           = $2,
+            role               = $3,
+            codigo_asignatura  = $4,
+            nombre_asignatura  = $5,
+            programa           = $6,
+            periodo            = $7,
+            grupo              = $8,
+            estado             = $9
+        WHERE id = $10
+        RETURNING *
+    `;
+
+    const values = [
+        userid,
+        courseid               || null,
+        role                    || 'student',
+        codigo_asignatura      || null,
+        nombre_asignatura      || null,
+        programa                || null,
+        periodo                 || null,
+        grupo                   || null,
+        estado                  || null,
+        id
+    ];
+
+    return { text, values };
+};
+
+const deleteEnrollmentData = (id) => ({
+    text: `DELETE FROM ${schema}.enrollments WHERE id = $1`,
+    values: [id]
+});
+
 // ─── MOODLE ───────────────────────────────────────────────────────────────────
 
 const findMoodleUserByUsername = (username) => ({
@@ -470,6 +514,8 @@ module.exports = {
     findAllEnrollmentsWithUsers,
     findEnrollmentByUserAndCourse,
     updateEnrollmentSyncStatusQuery,
+    updateJourneyEnrollmentData,
+    deleteEnrollmentData,
     // moodle
     findMoodleUserByUsername,
     // health
