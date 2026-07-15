@@ -1,6 +1,7 @@
 const path = require('path');
 const xlsx = require('xlsx');
 const fs = require('fs');
+const { moodleRequest } = require('../../services/moodleService');
 
 // ─── MAPEO DE ROLES ───────────────────────────────────────────────────────────
 const ROLE_MAP = {
@@ -8,6 +9,13 @@ const ROLE_MAP = {
     'DOCENTE':       'editingteacher',
     'TUTOR':         'teacher'
 }
+
+// Rol (string) guardado localmente en enrollments → roleid numérico que espera Moodle.
+const ROLE_ID_MAP = {
+    student:        5,
+    editingteacher: 3,
+    teacher:        4
+};
 
 // ─── CARGA MASIVA (EXCEL) ──────────────────────────────────────────────────────
 const ALLOWED_ROLES = ['gestor', 'editingteacher', 'teacher', 'student', 'revisor'];
@@ -291,6 +299,84 @@ module.exports = (injectedDB) => {
         return { successCount, errorCount, errors };
     }
 
+    // ─── CARGA MASIVA DE DESMATRÍCULAS (SUSPENSIÓN EN MOODLE) ───────────────────
+
+    function validateSuspendRow(row) {
+        const errors = [];
+        row.code  = row.code  != null ? String(row.code).trim()  : '';
+        row.email = row.email != null ? String(row.email).trim() : '';
+        if (!row.code) errors.push('El código de curso (code) es obligatorio.');
+        if (!row.email || !/\S+@\S+\.\S+/.test(row.email)) errors.push('El email es inválido.');
+        return errors;
+    }
+
+    async function processExcelAndSuspendUsers(filePath) {
+        const excelData = readExcel(filePath);
+        const errors = [];
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const row of excelData) {
+            const validationErrors = validateSuspendRow(row);
+            if (validationErrors.length > 0) {
+                errors.push({ ...row, errors: validationErrors.join(', ') });
+                errorCount++;
+                continue;
+            }
+            try {
+                const users = await data.findUserSicau(row.email, row.email);
+                if (users.length === 0 || !users[0].moodle_id) {
+                    errors.push({ ...row, errors: `Usuario "${row.email}" no existe o no está sincronizado con Moodle.` });
+                    errorCount++;
+                    continue;
+                }
+                const user = users[0];
+
+                const enrollments = await data.findEnrollmentByUserAndCourse(user.id, row.code);
+                if (enrollments.length === 0) {
+                    errors.push({ ...row, errors: `No existe matrícula local para "${row.email}" en el curso "${row.code}".` });
+                    errorCount++;
+                    continue;
+                }
+                const enrollment = enrollments[0];
+
+                const courses = await data.findCourseSicau(row.code);
+                if (courses.length === 0 || !courses[0].moodle_id) {
+                    errors.push({ ...row, errors: `Curso "${row.code}" no existe o no está sincronizado con Moodle.` });
+                    errorCount++;
+                    continue;
+                }
+                const course = courses[0];
+
+                const roleid = ROLE_ID_MAP[enrollment.role];
+                if (!roleid) {
+                    errors.push({ ...row, errors: `Rol "${enrollment.role}" de la matrícula no tiene roleid de Moodle asignado.` });
+                    errorCount++;
+                    continue;
+                }
+
+                const result = await moodleRequest('enrol_manual_enrol_users', {
+                    'enrolments[0][userid]':   user.moodle_id,
+                    'enrolments[0][courseid]': course.moodle_id,
+                    'enrolments[0][roleid]':   roleid,
+                    'enrolments[0][suspend]':  1
+                });
+                if (result && result.exception) {
+                    errors.push({ ...row, errors: `Moodle: ${result.message}` });
+                    errorCount++;
+                    continue;
+                }
+
+                await data.updateEnrollmentEstado(enrollment.id, 'Suspendido');
+                successCount++;
+            } catch (err) {
+                errors.push({ ...row, errors: `Error: ${err.message}` });
+                errorCount++;
+            }
+        }
+        return { successCount, errorCount, errors };
+    }
+
     return {
         list,
         addElement,
@@ -304,6 +390,7 @@ module.exports = (injectedDB) => {
         updateJourneyEnrollment,
         listEnrollmentsWithUsers,
         generateErrorExcel,
-        processExcelAndEnrolUsers
+        processExcelAndEnrolUsers,
+        processExcelAndSuspendUsers
     };
 };

@@ -479,9 +479,9 @@ router.post('/process-novedades', async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta.', 400);
     try {
-        const result = await processExcelAndSuspendUsers(filePath);
+        const result = await ctrl.processExcelAndSuspendUsers(filePath);
         if (result.errors.length > 0) {
-            const errorExcelPath = await generateErrorExcel(result.errors);
+            const errorExcelPath = await ctrl.generateErrorExcel(result.errors);
             response.success(req, res, {
                 message:      'Proceso de novedades con errores.',
                 successCount: result.successCount,

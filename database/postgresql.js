@@ -14,6 +14,7 @@ const {
     selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
     updateEnrollmentData, updateEnrollmentMoodleId, findEnrollmentByCodigoJourney,
     findEnrollmentByUserAndCourse,
+    updateEnrollmentEstadoQuery,
     findAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatusQuery,
     updateJourneyEnrollmentData,
@@ -334,6 +335,15 @@ function updateEnrollmentSyncStatus(id, statusValue) {
     });
 }
 
+function updateEnrollmentEstado(id, estado) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateEnrollmentEstadoQuery(id, estado), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 // ─── HEALTH ───────────────────────────────────────────────────────────────────
 
 function checkDbConnection() {
@@ -379,6 +389,7 @@ module.exports = {
     findEnrollmentByUserAndCourse: findEnrollmentByUserAndCourseFn,
     listAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatus,
+    updateEnrollmentEstado,
     checkDbConnection,getEnrollmentsByUserId,
     resetPassword
 };

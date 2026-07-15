@@ -143,7 +143,7 @@ const clearUserMoodleId = (id) => ({
 });
 
 const findUserByEmailOrUsername = (email, username) => ({
-    text: `SELECT id FROM ${schema}.users WHERE email = $1 OR username = $2 LIMIT 1`,
+    text: `SELECT id, moodle_id, email FROM ${schema}.users WHERE email = $1 OR username = $2 LIMIT 1`,
     values: [email, username]
 });
 
@@ -414,8 +414,13 @@ function updateEnrollmentSyncStatusQuery(id, statusValue) {
 }
 
 const findEnrollmentByUserAndCourse = (userid, codigoJourney) => ({
-    text: `SELECT id FROM ${schema}.enrollments WHERE userid = $1 AND codigo_journey = $2 LIMIT 1`,
+    text: `SELECT id, role, courseid, moodle_enrollment_id, estado FROM ${schema}.enrollments WHERE userid = $1 AND codigo_journey = $2 LIMIT 1`,
     values: [userid, codigoJourney]
+});
+
+const updateEnrollmentEstadoQuery = (id, estado) => ({
+    text: `UPDATE ${schema}.enrollments SET estado = $2 WHERE id = $1`,
+    values: [id, estado]
 });
 
 const updateJourneyEnrollmentData = (data) => {
@@ -513,6 +518,7 @@ module.exports = {
     findEnrollmentByCodigoJourney,
     findAllEnrollmentsWithUsers,
     findEnrollmentByUserAndCourse,
+    updateEnrollmentEstadoQuery,
     updateEnrollmentSyncStatusQuery,
     updateJourneyEnrollmentData,
     deleteEnrollmentData,
