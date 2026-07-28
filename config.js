@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 module.exports = {
     api: {
         port: process.env.API_PORT || 3001,
@@ -9,8 +11,12 @@ module.exports = {
     jwt: {
         secret: process.env.JWT_SECRET || 'ConfSecret',
     },
-    postgresql: {
-        host: process.env.POSTGRESQL_HOST || 'postgrespascualbravo.cygtmjsaacoj.us-east-1.rds.amazonaws.com',
+    admin: {
+        email: process.env.ADMIN_EMAIL,
+        passwordHash: process.env.ADMIN_PASSWORD_HASH,
+    },
+     postgresql: {
+       host: process.env.POSTGRESQL_HOST || 'postgrespascualbravo.cygtmjsaacoj.us-east-1.rds.amazonaws.com',
         user: process.env.POSTGRESQL_USER || 'journey',
         password: process.env.POSTGRESQL_PASSWORD || '655HVycyfc579ihbi',
         database: process.env.POSTGRESQL_DB || 'journey',

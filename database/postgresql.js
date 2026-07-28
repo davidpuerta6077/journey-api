@@ -14,8 +14,11 @@ const {
     selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
     updateEnrollmentData, updateEnrollmentMoodleId, findEnrollmentByCodigoJourney,
     findEnrollmentByUserAndCourse,
+    updateEnrollmentEstadoQuery,
     findAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatusQuery,
+    updateJourneyEnrollmentData,
+    deleteEnrollmentData,
     healthCheck
 } = require('./querysets');
 
@@ -259,6 +262,24 @@ function updateEnrollment(data) {
     });
 }
 
+function updateJourneyEnrollment(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateJourneyEnrollmentData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function deleteEnrollment(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(deleteEnrollmentData(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 function getEnrollmentsForSync() {
     return new Promise((resolve, reject) => {
         pool.query(selectEnrollmentsForSync(), (err, data) => {
@@ -314,6 +335,15 @@ function updateEnrollmentSyncStatus(id, statusValue) {
     });
 }
 
+function updateEnrollmentEstado(id, estado) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateEnrollmentEstadoQuery(id, estado), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 // ─── HEALTH ───────────────────────────────────────────────────────────────────
 
 function checkDbConnection() {
@@ -351,12 +381,15 @@ module.exports = {
     updateCourseSyncStatus,
     insertEnrollment,
     updateEnrollment,
+    updateJourneyEnrollment,
+    deleteEnrollment,
     getEnrollmentsForSync,
     setEnrollmentMoodleId,
     findEnrollmentSicau,
     findEnrollmentByUserAndCourse: findEnrollmentByUserAndCourseFn,
     listAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatus,
+    updateEnrollmentEstado,
     checkDbConnection,getEnrollmentsByUserId,
     resetPassword
 };

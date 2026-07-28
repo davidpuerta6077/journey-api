@@ -112,9 +112,9 @@ router.post('/process-excel', async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta del archivo.', 400);
     try {
-        const result = await processExcelAndCreateUsers(filePath);
+        const result = await ctrl.processExcelAndCreateUsers(filePath);
         if (result.errors.length > 0) {
-            const errorExcelPath = await generateErrorExcel(result.errors);
+            const errorExcelPath = await ctrl.generateErrorExcel(result.errors);
             response.success(req, res, {
                 message:      'Proceso completado con errores.',
                 successCount: result.successCount,
@@ -405,57 +405,36 @@ router.get('/test', async (req, res) => {
 });
 /**
  * @swagger
- * /users/sicau:
- *   post:
- *     summary: Guardar usuarios provenientes del sistema SICAU
+ * /users/search:
+ *   get:
+ *     summary: Buscar usuarios por nombre, apellido, documento o email (para selects de autocompletado)
  *     tags: [Users]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               users:
- *                 type: array
- *                 items:
- *                   $ref: '#/components/schemas/User'
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema: { type: string }
+ *         description: Texto a buscar
  *     responses:
  *       200:
- *         description: Usuarios guardados
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:  { type: boolean, example: false }
- *                 status: { type: integer, example: 200 }
- *                 body:
- *                   type: object
- *                   properties:
- *                     results: { type: array, items: { type: object } }
+ *         description: Usuarios encontrados (máx. 20)
  *       500:
  *         description: Error interno
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/sicau', async (req, res, next) => {
+router.get('/search', async (req, res) => {
     try {
-        const items = req.body.users || req.body.items || req.body || [];
-        const lista = Array.isArray(items) ? items : [items];
-        const results = [];
-        for (const user of lista) {
-            const result = await ctrl.saveSicauUsuario(user);
-            results.push(result);
-        }
-        response.success(req, res, { results }, 200);
+        const q = (req.query.q || '').toLowerCase().trim();
+        const allUsers = await ctrl.list('users');
+        const filtered = q
+            ? allUsers.filter(u => `${u.firstname || ''} ${u.lastname || ''} ${u.documento || ''} ${u.email || ''}`.toLowerCase().includes(q))
+            : allUsers;
+        const safe = filtered
+            .slice(0, 20)
+            .map(({ id, firstname, lastname, documento, email, username }) => ({ id, firstname, lastname, documento, email, username }));
+        response.success(req, res, safe, 200);
     } catch (error) {
-        next(error);
+        response.error(req, res, error.message, 500);
     }
 });
-
 // ─── SYNC ─────────────────────────────────────────────────────────────────────
 /**
  * @swagger

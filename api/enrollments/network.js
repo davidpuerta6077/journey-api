@@ -427,9 +427,9 @@ router.post('/process-excel', async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta.', 400);
     try {
-        const result = await processExcelAndEnrolUsers(filePath);
+        const result = await ctrl.processExcelAndEnrolUsers(filePath);
         if (result.errors.length > 0) {
-            const errorExcelPath = await generateErrorExcel(result.errors);
+            const errorExcelPath = await ctrl.generateErrorExcel(result.errors);
             response.success(req, res, {
                 message:      'Proceso de matrículas con errores.',
                 successCount: result.successCount,
@@ -479,9 +479,9 @@ router.post('/process-novedades', async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta.', 400);
     try {
-        const result = await processExcelAndSuspendUsers(filePath);
+        const result = await ctrl.processExcelAndSuspendUsers(filePath);
         if (result.errors.length > 0) {
-            const errorExcelPath = await generateErrorExcel(result.errors);
+            const errorExcelPath = await ctrl.generateErrorExcel(result.errors);
             response.success(req, res, {
                 message:      'Proceso de novedades con errores.',
                 successCount: result.successCount,
@@ -719,6 +719,81 @@ router.post('/sync', async (req, res, next) => {
     try {
         const result = await syncService.syncEnrollments(req.body.items || []);
         response.success(req, res, result || 'Datos cargados correctamente', 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ─── RUTAS JOURNEY (CRUD manual desde el módulo Matrículas) ───────────────────
+
+/**
+ * @swagger
+ * /enrollments/journey:
+ *   post:
+ *     summary: Crear matrícula manualmente desde el módulo Matrículas
+ *     tags: [Enrollments]
+ *     responses:
+ *       200:
+ *         description: Matrícula creada
+ *       500:
+ *         description: Error interno
+ */
+router.post('/journey', async (req, res, next) => {
+    try {
+        const result = await ctrl.saveJourneyEnrollment(req.body);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /enrollments/{id}:
+ *   put:
+ *     summary: Editar matrícula
+ *     tags: [Enrollments]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Matrícula actualizada
+ *       500:
+ *         description: Error interno
+ */
+router.put('/:id', async (req, res, next) => {
+    try {
+        const result = await ctrl.updateJourneyEnrollment({ ...req.body, id: req.params.id });
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /enrollments/{id}:
+ *   delete:
+ *     summary: Eliminar matrícula
+ *     tags: [Enrollments]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Matrícula eliminada
+ *       500:
+ *         description: Error interno
+ */
+router.delete('/:id', async (req, res, next) => {
+    try {
+        await ctrl.deleteElement(req.params.id);
+        response.success(req, res, { deleted: true }, 200);
     } catch (error) {
         next(error);
     }
