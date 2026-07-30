@@ -7,6 +7,7 @@ const syncService = require('../../services/syncService');
 const path = require('path');
 const fs = require('fs');
 const { verifyToken } = require('../../utils/services/secure');
+const checkAuth = require('../../middleware/checkAuth');
 
 // ─── RUTAS EXCEL ──────────────────────────────────────────────────────────────
 
@@ -396,10 +397,10 @@ router.get('/get_users', async (req, res) => {
  *                     test_message: { type: string, example: "Api Users Working!" }
  *                     table:        { type: array, items: { type: object } }
  */
-router.get('/test', async (req, res) => {
+router.get('/test', checkAuth, async (req, res) => {
     try {
-        const data = await ctrl.list('logs');
-        response.success(req, res, { test_message: 'Api Users Working!', table: data }, 200);
+        // const data = await ctrl.list('logs');
+        response.success(req, res, { test_message: 'Api Users Working!' }, 200);
     } catch (error) {
         response.error(req, res, error.message, 500);
     }
