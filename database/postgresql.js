@@ -16,7 +16,7 @@ const {
     findEnrollmentByUserAndCourse,
     findAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatusQuery,
-    healthCheck
+    healthCheck, checkPermissions
 } = require('./querysets');
 
 const pool = new Pool({
@@ -325,6 +325,18 @@ function checkDbConnection() {
     });
 }
 
+
+// ___ PERMISSIONS ______________________________________________________________
+
+function checkPermissionsData (email, submoduleCode) {
+    return new Promise((resolve, reject) => {
+        pool.query(checkPermissions(email, submoduleCode), (err) => {
+            if (err) return reject(err);
+            resolve(true);
+        });
+    });
+}
+
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -358,5 +370,6 @@ module.exports = {
     listAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatus,
     checkDbConnection,getEnrollmentsByUserId,
-    resetPassword
+    resetPassword, 
+    checkPermissionsData
 };

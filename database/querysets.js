@@ -431,7 +431,26 @@ const healthCheck = () => ({
     values: []
 });
 
+
+// ___ PERMISSIONS ______________________________________________________________
+
+
+const checkPermissions = (email, submoduleCode) => ({
+    text: `SELECT 1
+        FROM platform_users u
+        JOIN roles r ON r.id = u.role_id
+        JOIN role_permissions rp ON rp.role_id = r.id
+        JOIN submodules s ON s.id = rp.submodule_id
+        WHERE u.email = $1 AND s.code = $2
+        LIMIT 1;
+      `,
+    values: [email, submoduleCode]
+});
+
+
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
+
+
 
 module.exports = {
     selectAllItems,
@@ -473,5 +492,8 @@ module.exports = {
     // moodle
     findMoodleUserByUsername,
     // health
-    healthCheck
+    healthCheck,
+
+    //Permission 
+    checkPermissions
 };
