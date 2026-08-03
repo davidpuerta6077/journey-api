@@ -405,6 +405,7 @@ router.get('/test', checkAuth, async (req, res) => {
         response.error(req, res, error.message, 500);
     }
 });
+
 /**
  * @swagger
  * /users/sicau:
