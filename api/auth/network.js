@@ -5,7 +5,6 @@ const { login } = require('./index')
 const checkAuth = require('../../middleware/checkAuth');
 
 router.post('/login', (req, res) => {
-    console.log(req.body)
     login(req.body.user_email)
         .then(token => {
             response.success(req, res, token, 200)
@@ -42,7 +41,8 @@ router.get('/permissions', checkAuth, (req, res) => {
                             { "submodule_id": 14, "submodule_code": "integration_apis" },
                             { "submodule_id": 15, "submodule_code": "reports" },
                             { "submodule_id": 16, "submodule_code": "statistics" },
-                            { "submodule_id": 17, "submodule_code": "settings" }
+                            { "submodule_id": 17, "submodule_code": "settings" },
+                            { "submodule_id": 18, "submodule_code": "search" }
                         ]
                     },
                     { "module_id": 2, "module_code": "support_center", "submodules": [] },

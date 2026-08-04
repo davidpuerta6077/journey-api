@@ -2,11 +2,10 @@
  * AwsAuthService.js
  * Servicio para manejar la autenticación con AWS Cognito en el Backend (Node.js)
  * 
- * INSTALACIÓN REQUERIDA:
- * npm install axios
  */
 
 const axios = require('axios');
+const config_aws = require('../config');
 
 class AwsAuthService {
   constructor() {
@@ -15,10 +14,10 @@ class AwsAuthService {
     
     // CONFIGURACIÓN (Mover a variables de entorno .env en producción)
     this.config = {
-      tokenEndpoint: process.env.AWS_TOKEN_ENDPOINT || 'https://us-east-1mcj7xwqxf.auth.us-east-1.amazoncognito.com/oauth2/token',
-      clientId: process.env.AWS_CLIENT_ID || '6d40dkmjqpf2n01giq8lkep52r',
-      clientSecret: process.env.AWS_CLIENT_SECRET || '185c5tteuhum87kfq40pfo9f97va4tetiqog5dcj56c557lq5tmn',
-      scope: process.env.AWS_SCOPE || 'default-m2m-resource-server-63o8qr/read'
+      tokenEndpoint: config_aws.aws.tokenEndpoint,
+      clientId: config_aws.aws.clientId,
+      clientSecret: config_aws.aws.clientSecret,
+      scope: config_aws.aws.scope
     };
   }
 
@@ -72,11 +71,11 @@ class AwsAuthService {
       // Calcular expiración absoluta (Ahora + Segundos de vida)
       this.tokenExpiration = Math.floor(Date.now() / 1000) + expires_in;
 
-      console.log('✅ Nuevo token AWS obtenido. Expira en:', expires_in, 'segundos');
+      console.log('Nuevo token AWS obtenido. Expira en:', expires_in, 'segundos');
       return this.token;
 
     } catch (error) {
-      console.error('❌ Error obteniendo token AWS:', error.response ? error.response.data : error.message);
+      console.error('Error obteniendo token AWS:', error.response ? error.response.data : error.message);
       throw new Error('Fallo crítico en autenticación AWS');
     }
   }
