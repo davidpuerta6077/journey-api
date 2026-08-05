@@ -63,6 +63,7 @@ router.post('/upload-excel', verifyToken(), (req, res) => {
         response.success(req, res, { filePath }, 200);
     });
 });
+
 /**
  * @swagger
  * /users/process-excel:
@@ -190,6 +191,7 @@ router.post('/add_user', async (req, res) => {
         response.error(req, res, error.message, 500);
     }
 });
+
 /**
  * @swagger
  * /users/update_user:
@@ -240,6 +242,7 @@ router.post('/update_user', async (req, res) => {
         response.error(req, res, error.message, 500);
     }
 });
+
 /**
  * @swagger
  * /users/delete_user:
@@ -327,7 +330,6 @@ router.post('/search_user', async (req, res) => {
     }
 });
 
-
 /**
  * @swagger
  * /users/get_users:
@@ -375,36 +377,7 @@ router.get('/get_users', async (req, res) => {
 });
 
 // ─── RUTAS DB ─────────────────────────────────────────────────────────────────
-/**
- * @swagger
- * /users/test:
- *   get:
- *     summary: Test de conexión a la base de datos
- *     tags: [Users]
- *     responses:
- *       200:
- *         description: API funcionando correctamente
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:  { type: boolean, example: false }
- *                 status: { type: integer, example: 200 }
- *                 body:
- *                   type: object
- *                   properties:
- *                     test_message: { type: string, example: "Api Users Working!" }
- *                     table:        { type: array, items: { type: object } }
- */
-router.get('/test', checkAuth, async (req, res) => {
-    try {
-        // const data = await ctrl.list('logs');
-        response.success(req, res, { test_message: 'Api Users Working!' }, 200);
-    } catch (error) {
-        response.error(req, res, error.message, 500);
-    }
-});
+
 
 /**
  * @swagger

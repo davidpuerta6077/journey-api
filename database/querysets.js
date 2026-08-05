@@ -44,17 +44,17 @@ const insertUsuarioData = (data) => {
 
     const values = [
         username, firstname, lastname, email, password,
-        city                   || 'Medellín',
-        country                || 'CO',
-        documento              || null,
-        correo_personal        || null,
-        telefono               || null,
-        celular                || null,
-        fecha_nacimiento       || null,
-        jornada                || null,
+        city || 'Medellín',
+        country || 'CO',
+        documento || null,
+        correo_personal || null,
+        telefono || null,
+        celular || null,
+        fecha_nacimiento || null,
+        jornada || null,
         departamento_academico || null,
-        plan_estudios          || null,
-        moodle_id              || null
+        plan_estudios || null,
+        moodle_id || null
     ];
 
     return { text, values };
@@ -78,15 +78,15 @@ const updateUsuarioData = (data) => {
 
     const values = [
         firstname, lastname, city, country, password,
-        moodle_id              || null,
-        documento              || null,
-        correo_personal        || null,
-        telefono               || null,
-        celular                || null,
-        fecha_nacimiento       || null,
-        jornada                || null,
+        moodle_id || null,
+        documento || null,
+        correo_personal || null,
+        telefono || null,
+        celular || null,
+        fecha_nacimiento || null,
+        jornada || null,
         departamento_academico || null,
-        plan_estudios          || null,
+        plan_estudios || null,
         id
     ];
 
@@ -111,16 +111,16 @@ const updateUsuarioJourney = (data) => {
 
     const values = [
         firstname, lastname, email,
-        city                   || 'Medellín',
-        country                || 'CO',
-        documento              || null,
-        correo_personal        || null,
-        telefono               || null,
-        celular                || null,
-        fecha_nacimiento       || null,
-        jornada                || null,
+        city || 'Medellín',
+        country || 'CO',
+        documento || null,
+        correo_personal || null,
+        telefono || null,
+        celular || null,
+        fecha_nacimiento || null,
+        jornada || null,
         departamento_academico || null,
-        plan_estudios          || null,
+        plan_estudios || null,
         id
     ];
 
@@ -243,24 +243,24 @@ const insertCourseData = (data) => {
     const values = [
         fullname,
         shortname,
-        categoryid        || null,
-        idnumber          || null,
-        summary           || null,
+        categoryid || null,
+        idnumber || null,
+        summary || null,
         visible == null ? true : visible,
-        format            || 'topics',
-        numsections       || 10,
-        moodle_id         || null,
-        seed_course_id    || null,
-        departamento      || null,
-        programa          || null,
-        docente           || null,
-        fecha_inicio      || null,
-        fecha_fin         || null,
-        periodo           || null,
-        grupo             || null,
+        format || 'topics',
+        numsections || 10,
+        moodle_id || null,
+        seed_course_id || null,
+        departamento || null,
+        programa || null,
+        docente || null,
+        fecha_inicio || null,
+        fecha_fin || null,
+        periodo || null,
+        grupo || null,
         codigo_asignatura || null,
         nombre_asignatura || null,
-        templatecourse    || null
+        templatecourse || null
     ];
 
     return { text, values };
@@ -281,13 +281,13 @@ const updateCourseData = (data) => {
 
     const values = [
         fullname,
-        categoryid     || null,
-        idnumber       || null,
-        summary        || null,
+        categoryid || null,
+        idnumber || null,
+        summary || null,
         visible == null ? true : visible,
-        format         || 'topics',
-        numsections    || 10,
-        moodle_id      || null,
+        format || 'topics',
+        numsections || 10,
+        moodle_id || null,
         seed_course_id || null,
         id
     ];
@@ -351,15 +351,15 @@ const insertEnrollmentData = (data) => {
     const values = [
         userid,
         courseid,
-        role                   || 'student',
-        moodle_enrollment_id   || null,
-        codigo_asignatura      || null,
-        nombre_asignatura      || null,
-        programa               || null,
-        periodo                || null,
-        grupo                  || null,
-        codigo_journey         || null,
-        estado                 || null,
+        role || 'student',
+        moodle_enrollment_id || null,
+        codigo_asignatura || null,
+        nombre_asignatura || null,
+        programa || null,
+        periodo || null,
+        grupo || null,
+        codigo_journey || null,
+        estado || null,
         fecha_creacion_journey || null
     ];
 
@@ -435,16 +435,56 @@ const healthCheck = () => ({
 // ___ PERMISSIONS ______________________________________________________________
 
 
-const checkPermissions = (email, submoduleCode) => ({
+const checkSubmodulePermissions = (email, submoduleCode) => ({
     text: `SELECT 1
-        FROM platform_users u
-        JOIN roles r ON r.id = u.role_id
-        JOIN role_permissions rp ON rp.role_id = r.id
-        JOIN submodules s ON s.id = rp.submodule_id
+        FROM test.platform_users u
+        JOIN test.roles r ON r.id = u.role_id
+        JOIN test.role_permissions rp ON rp.role_id = r.id
+        JOIN test.submodules s ON s.id = rp.submodule_id
         WHERE u.email = $1 AND s.code = $2
         LIMIT 1;
       `,
     values: [email, submoduleCode]
+});
+
+
+const checkPermissions = (email) => ({
+    text: `
+    SELECT json_build_object(
+        'role', r.name,
+        'modules', (
+            SELECT COALESCE(
+                json_agg(
+                    json_build_object(
+                        'module_id', m.id,
+                        'module_code', m.code,
+                        'submodules', COALESCE(
+                            (
+                                SELECT json_agg(
+                                    json_build_object(
+                                        'submodule_id', s.id,
+                                        'submodule_code', s.code
+                                    ) ORDER BY s.id
+                                )
+                                FROM test.submodules s
+                                INNER JOIN test.role_permissions rp ON rp.submodule_id = s.id
+                                WHERE s.module_id = m.id 
+                                  AND rp.role_id = r.id
+                            ), 
+                            '[]'::json
+                        )
+                    ) ORDER BY m.id
+                ), 
+                '[]'::json
+            )
+            FROM test.modules m
+        )
+    ) AS user_permissions
+    FROM test.platform_users u
+    INNER JOIN test.roles r ON u.role_id = r.id
+    WHERE u.email = $1
+    `,
+    values: [email]
 });
 
 
@@ -495,5 +535,6 @@ module.exports = {
     healthCheck,
 
     //Permission 
-    checkPermissions
+    checkPermissions, 
+    checkSubmodulePermissions
 };

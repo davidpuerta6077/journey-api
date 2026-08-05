@@ -1,13 +1,12 @@
-import postgresql from '../database/postgresql';
+const postgresql = require('../database/postgresql');
 
 function checkPermission(submoduleCode) {
   return async (req, res, next) => {
     try {
       const email = req.user.email; 
+      const result = await postgresql.checkSubmodulesPermissionsData(email, submoduleCode);
 
-      const result = await postgresql.checkPermissionsData(email, submoduleCode);
-
-      if (result.rows.length === 0) {
+      if (result[0]['?column?'] === 0) {
         return res.status(403).json({ message: "No tienes permiso para este recurso" });
       }
 

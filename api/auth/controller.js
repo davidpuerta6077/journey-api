@@ -4,6 +4,8 @@ const bcrypt = require('bcrypt');
 
 module.exports = (database) => {
     let store = database
+    let data = database;
+    if (!data) data = require('../../database/postgresql');
 
     const authUpsert = async (body) => {
         const authData = {}
@@ -61,9 +63,15 @@ module.exports = (database) => {
         return store.insertNewUser(user);
     };
 
+    async function permissions(email) {
+        return data.checkPermissionsData(email);
+    }
+
+
     return {
         authUpsert,
         login,
-        addElement
+        addElement, 
+        permissions
     }
 };
