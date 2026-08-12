@@ -16,8 +16,9 @@ router.post('/login', (req, res) => {
 });
 
 router.get('/permissions', async (req, res) => {
+    console.log("Query parameters:", req.query);
     const userEmail = req.query.user_email;
-    const responseData = await ctrl.permissions('desarrolloued.digital@pascualbravo.edu.co');
+    const responseData = await ctrl.permissions(userEmail);
     try {
         response.success(req, res, responseData[0], 200)
 

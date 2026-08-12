@@ -1,9 +1,11 @@
 const postgresql = require('../database/postgresql');
 
 function checkPermission(submoduleCode) {
+  console.log("Submodule code:", submoduleCode);
   return async (req, res, next) => {
     try {
       const email = req.user.email; 
+      console.log("Email del usuario:", email);
       const result = await postgresql.checkSubmodulesPermissionsData(email, submoduleCode);
 
       if (result[0]['?column?'] === 0) {
