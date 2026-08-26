@@ -58,7 +58,7 @@ router.get('/test_auth', checkAuth, async (req, res) => {
 });
 
 
-router.get('/test_module_access', checkPermission('sync_users'), async (req, res) => {
+router.get('/test_module_access', checkAuth, checkPermission('sync_users'), async (req, res) => {
     try {
         response.success(req, res, { test_message: 'Test de permiso para sync_users Working!'}, 200);
     } catch (error) {

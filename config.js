@@ -52,8 +52,8 @@ module.exports = {
         moodle_path: process.env.MOODLE_PATH || 'C:\\xampp\\htdocs\\MoodleCinco\\moodle'
     },
     aws: {
-        tokenEndpoint: process.env.AWS_TOKEN_ENDPOINT || 'https://us-east-1mcj7xwqxf.auth.us-east-1.amazoncognito.com/oauth2/token',
-        clientId: process.env.AWS_CLIENT_ID || '6d40dkmjqpf2n01giq8lkep52r',
+        tokenEndpoint: process.env.AWS_TOKEN_ENDPOINT || 'https://us-east-1ynphsrvag.auth.us-east-1.amazoncognito.com/oauth2/token',
+        clientId: process.env.AWS_CLIENT_ID || '5hpvb84h2hm3rfsf6mbfs936hc',
         clientSecret: process.env.AWS_CLIENT_SECRET || '185c5tteuhum87kfq40pfo9f97va4tetiqog5dcj56c557lq5tmn',
         scope: process.env.AWS_SCOPE || 'default-m2m-resource-server-63o8qr/read'
     }
