@@ -5,12 +5,14 @@ const config = require('../config');
 const fileUpload = require('express-fileupload');
 const cors = require('cors');
 const users = require('./users/network');
+const auth = require('./auth/network');
 const courses = require('./courses/network');
 const enrollments = require('./enrollments/network');
 const auth = require('./auth/network')
 const test = require('./test/network');
 const response = require('../network/response');
 const grades = require('./grades/network');
+const sicau = require('./SICAU/network');
 const ROOT = path.resolve(__dirname, '..');
 const swaggerUi   = require('swagger-ui-express');
 const swaggerSpec = require('../swagger');  
@@ -42,12 +44,15 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     }
 }));
 // ─── MÓDULOS ──────────────────────────────────────────────────────────────────
+app.use('/auth', auth);
 app.use('/users', users);
 app.use('/courses', courses);
 app.use('/enrollments', enrollments);
 app.use('/grades', grades);
 app.use(`/auth`, auth);
 app.use('/test', test);
+app.use('/sicau', sicau);
+
 
 // ─── PÁGINAS ──────────────────────────────────────────────────────────────────
 // app.get('/', (req, res) => {

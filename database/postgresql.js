@@ -14,9 +14,14 @@ const {
     selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
     updateEnrollmentData, updateEnrollmentMoodleId, findEnrollmentByCodigoJourney,
     findEnrollmentByUserAndCourse,
+    updateEnrollmentEstadoQuery,
     findAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatusQuery,
-    healthCheck, checkPermissions, checkSubmodulePermissions
+    healthCheck, checkPermissions, 
+    checkSubmodulePermissions,
+    updateJourneyEnrollmentData,
+    deleteEnrollmentData,
+    healthCheck
 } = require('./querysets');
 
 const pool = new Pool({
@@ -259,6 +264,24 @@ function updateEnrollment(data) {
     });
 }
 
+function updateJourneyEnrollment(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateJourneyEnrollmentData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function deleteEnrollment(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(deleteEnrollmentData(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 function getEnrollmentsForSync() {
     return new Promise((resolve, reject) => {
         pool.query(selectEnrollmentsForSync(), (err, data) => {
@@ -308,6 +331,15 @@ function listAllEnrollmentsWithUsers() {
 function updateEnrollmentSyncStatus(id, statusValue) {
     return new Promise((resolve, reject) => {
         pool.query(updateEnrollmentSyncStatusQuery(id, statusValue), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updateEnrollmentEstado(id, estado) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateEnrollmentEstadoQuery(id, estado), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -372,12 +404,15 @@ module.exports = {
     updateCourseSyncStatus,
     insertEnrollment,
     updateEnrollment,
+    updateJourneyEnrollment,
+    deleteEnrollment,
     getEnrollmentsForSync,
     setEnrollmentMoodleId,
     findEnrollmentSicau,
     findEnrollmentByUserAndCourse: findEnrollmentByUserAndCourseFn,
     listAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatus,
+    updateEnrollmentEstado,
     checkDbConnection,getEnrollmentsByUserId,
     resetPassword, 
     checkPermissionsData,

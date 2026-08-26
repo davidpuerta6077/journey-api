@@ -1,7 +1,6 @@
 const path = require('path');
 const xlsx = require('xlsx');
 const fs = require('fs');
-const { moodleRequest } = require('../../services/moodleService');
 
 module.exports = (injectedDB) => {
     let data = injectedDB;
@@ -48,38 +47,6 @@ module.exports = (injectedDB) => {
     // ✅ nuevo: marca usuario como no sincronizado y limpia moodle_id
     async function markAsUnsynchronized(id) {
         return data.updateUserUnsync(id);
-    }
-
-    // ─── SICAU ────────────────────────────────────────────────────────────────
-
-    async function saveSicauUsuario(user) {
-        const existing = await data.findUserSicau(user.email, user.username);
-
-        if (existing.length > 0) {
-            await data.updateUserFromSicau(user);
-            return { username: user.username, status: 'updated' };
-        } else {
-            await data.insertUser({
-                username:               user.username,
-                firstname:              user.firstname,
-                lastname:               user.lastname,
-                email:                  user.email,
-                password:               user.documento ? String(user.documento) : 'Pascual2024*',
-                city:                   user.city                   || 'Medellín',
-                country:                user.country                || 'CO',
-                documento:              user.documento              || null,
-                correo_personal:        user.correo_personal        || null,
-                telefono:               user.telefono               || null,
-                celular:                user.celular                || null,
-                fecha_nacimiento:       user.fecha_nacimiento       || null,
-                jornada:                user.jornada                || null,
-                departamento_academico: user.departamento_academico || null,
-                plan_estudios:          user.plan_estudios          || null,
-                moodle_id:              null,
-                sincronizado:           false
-            });
-            return { username: user.username, status: 'saved' };
-        }
     }
 
     // ─── EXCEL PROCESSOR ──────────────────────────────────────────────────────
@@ -139,27 +106,28 @@ module.exports = (injectedDB) => {
                 continue;
             }
             try {
-                const moodleResult = await moodleRequest('core_user_create_users', {
-                    'users[0][username]':  row.username.toLowerCase(),
-                    'users[0][firstname]': row.name,
-                    'users[0][lastname]':  row.last_name,
-                    'users[0][email]':     row.email,
-                    'users[0][password]':  row.password,
-                    'users[0][city]':      row.city    || 'Desconocido',
-                    'users[0][country]':   row.country || 'CO',
-                    'users[0][idnumber]':  row.document,
-                });
-                if (Array.isArray(moodleResult) && moodleResult.length > 0) {
-                    successCount++;
-                } else if (moodleResult && moodleResult.exception) {
-                    errors.push({ ...row, errors: `Error Moodle: ${moodleResult.message}` });
+                const username = row.username.toLowerCase();
+                const existing = await data.findUserSicau(row.email, username);
+                if (existing.length > 0) {
+                    errors.push({ ...row, errors: 'Ya existe un usuario con ese email o username' });
                     errorCount++;
-                } else {
-                    errors.push({ ...row, errors: 'Respuesta inesperada' });
-                    errorCount++;
+                    continue;
                 }
-            } catch (moodleApiError) {
-                errors.push({ ...row, errors: `Error API: ${moodleApiError.message}` });
+                await data.insertUser({
+                    username,
+                    firstname:    row.name,
+                    lastname:     row.last_name,
+                    email:        row.email,
+                    password:     row.password,
+                    city:         row.city    || 'Desconocido',
+                    country:      row.country || 'CO',
+                    documento:    row.document,
+                    moodle_id:    null,
+                    sincronizado: false
+                });
+                successCount++;
+            } catch (dbError) {
+                errors.push({ ...row, errors: `Error DB: ${dbError.message}` });
                 errorCount++;
             }
         }
@@ -231,7 +199,6 @@ async function itemByEmailData(TABLE, EMAIL) {
         getUserEnrollments,
         updateMoodleId,
         clearMoodleId,
-        saveSicauUsuario,
         generateErrorExcel,
         processExcelAndCreateUsers,
         markAsSynchronized,
