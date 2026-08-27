@@ -7,6 +7,8 @@ const syncService = require('../../services/syncService');
 const path = require('path');
 const fs = require('fs');
 const xlsx = require('xlsx');
+const checkAuth = require('../../middleware/checkAuth');
+const checkPermission = require('../../middleware/checkPermissions');
 
 // ─── HELPERS EXCEL ────────────────────────────────────────────────────────────
 
@@ -63,7 +65,7 @@ async function generateErrorExcel(errors) {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/enroll_users', async (req, res) => {
+router.post('/enroll_users', checkAuth, checkPermission("enroll_users"), async (req, res) => {
     try {
         const { userid, courseid, roleid } = req.body;
         const result = await enrolUserInMoodle(userid, courseid, roleid);
@@ -105,7 +107,7 @@ router.post('/enroll_users', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/unenroll_users', async (req, res) => {
+router.post('/unenroll_users', checkAuth, checkPermission("unenroll_users"), async (req, res) => {
     try {
         const result = await moodleRequest('enrol_manual_unenrol_users', {
             'enrolments[0][roleid]':   req.body.roleid,
@@ -153,7 +155,7 @@ router.post('/unenroll_users', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/add_user_and_enroll', async (req, res) => {
+router.post('/add_user_and_enroll', checkAuth, checkPermission("add_user_and_enroll"), async (req, res) => {
     try {
         const { username, firstname, lastname, email, password, roleid, courseid } = req.body;
         if (!email || !firstname || !lastname || !courseid) {
@@ -215,7 +217,7 @@ router.post('/add_user_and_enroll', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/suspend_enrollment', async (req, res) => {
+router.post('/suspend_enrollment', checkAuth, checkPermission("suspend_enrollment"), async (req, res) => {
     try {
         const { userid, courseid, roleid, suspend } = req.body;
         if (!userid || !courseid) return response.error(req, res, 'Faltan campos requeridos', 400);
@@ -265,7 +267,7 @@ router.post('/suspend_enrollment', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/suspend_multiple_enrollments', async (req, res) => {
+router.post('/suspend_multiple_enrollments', checkAuth, checkPermission("suspend_multiple_enrollments"), async (req, res) => {
     try {
         const { userid, roleid, courseids, suspend } = req.body;
         if (!userid || !courseids || !Array.isArray(courseids) || courseids.length === 0) {
@@ -331,7 +333,7 @@ router.post('/suspend_multiple_enrollments', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/reactivate_enrollment', async (req, res) => {
+router.post('/reactivate_enrollment', checkAuth, checkPermission("reactivate_enrollment"), async (req, res) => {
     try {
         const { userid, courseid, roleid } = req.body;
         if (!userid || !courseid) return response.error(req, res, 'Faltan campos requeridos', 400);
@@ -378,7 +380,7 @@ router.post('/reactivate_enrollment', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/upload-excel', async (req, res) => {
+router.post('/upload-excel', checkAuth, checkPermission("upload_excel_enrollments"), async (req, res) => {
     if (!req.files || Object.keys(req.files).length === 0) {
         return response.error(req, res, 'No se ha subido ningún archivo.', 400);
     }
@@ -423,7 +425,7 @@ router.post('/upload-excel', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/process-excel', async (req, res) => {
+router.post('/process-excel', checkAuth, checkPermission("process_excel_enrollments"), async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta.', 400);
     try {
@@ -475,7 +477,7 @@ router.post('/process-excel', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/process-novedades', async (req, res) => {
+router.post('/process-novedades', checkAuth, checkPermission("process_novedades"), async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta.', 400);
     try {
@@ -518,7 +520,7 @@ router.post('/process-novedades', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/list', async (req, res) => {
+router.get('/list', checkAuth, checkPermission("list_enrollments"), async (req, res) => {
     try {
         const list = await ctrl.listEnrollmentsWithUsers();
         response.success(req, res, list, 200);
@@ -556,7 +558,7 @@ router.get('/list', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/update_log', async (req, res) => {
+router.post('/update_log', checkAuth, checkPermission("update_log_enrollment"), async (req, res) => {
     try {
         await ctrl.updateElement(req.body);
         response.success(req, res, 'Log actualizado', 200);
@@ -644,7 +646,7 @@ router.post('/sicau', async (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/preview', async (req, res, next) => {
+router.get('/preview', checkAuth, checkPermission("list_enrollments"), async (req, res, next) => {
     try {
         const result = await ctrl.listEnrollmentsWithUsers();
         response.success(req, res, result, 200);
@@ -675,7 +677,7 @@ router.get('/preview', async (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/sync/preview', async (req, res, next) => {
+router.post('/sync/preview', checkAuth, checkPermission("sync_preview"), async (req, res, next) => {
     try {
         const result = await syncService.previewEnrollments();
         response.success(req, res, result, 200);
@@ -715,7 +717,7 @@ router.post('/sync/preview', async (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/sync', async (req, res, next) => {
+router.post('/sync', checkAuth, checkPermission("sync_enrollments"), async (req, res, next) => {
     try {
         const result = await syncService.syncEnrollments(req.body.items || []);
         response.success(req, res, result || 'Datos cargados correctamente', 200);
@@ -738,7 +740,7 @@ router.post('/sync', async (req, res, next) => {
  *       500:
  *         description: Error interno
  */
-router.post('/journey', async (req, res, next) => {
+router.post('/journey', checkAuth, checkPermission("add_enrollment_journey"), async (req, res, next) => {
     try {
         const result = await ctrl.saveJourneyEnrollment(req.body);
         response.success(req, res, result, 200);
@@ -764,7 +766,7 @@ router.post('/journey', async (req, res, next) => {
  *       500:
  *         description: Error interno
  */
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', checkAuth, checkPermission("update_enrollment_journey"), async (req, res, next) => {
     try {
         const result = await ctrl.updateJourneyEnrollment({ ...req.body, id: req.params.id });
         response.success(req, res, result, 200);
@@ -790,7 +792,7 @@ router.put('/:id', async (req, res, next) => {
  *       500:
  *         description: Error interno
  */
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', checkAuth, checkPermission("delete_enrollment_journey"), async (req, res, next) => {
     try {
         await ctrl.deleteElement(req.params.id);
         response.success(req, res, { deleted: true }, 200);
