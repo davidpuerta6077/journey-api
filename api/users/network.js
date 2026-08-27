@@ -6,8 +6,8 @@ const { moodleRequest } = require('../../services/moodleService');
 const syncService = require('../../services/syncService');
 const path = require('path');
 const fs = require('fs');
-const { verifyToken } = require('../../utils/services/secure');
 const checkAuth = require('../../middleware/checkAuth');
+const checkPermission = require('../../middleware/checkPermissions');
 
 // ─── RUTAS EXCEL ──────────────────────────────────────────────────────────────
 
@@ -49,7 +49,7 @@ const checkAuth = require('../../middleware/checkAuth');
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/upload-excel', verifyToken(), (req, res) => {
+router.post('/upload-excel', checkAuth, checkPermission("upload_excel_users"), (req, res) => {
     if (!req.files || !req.files.excel) {
         return response.error(req, res, 'No se recibió ningún archivo.', 400);
     }
@@ -111,7 +111,7 @@ router.post('/upload-excel', verifyToken(), (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/process-excel', async (req, res) => {
+router.post('/process-excel', checkAuth, checkPermission("process_excel_users"), async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta del archivo.', 400);
     try {
@@ -172,7 +172,7 @@ router.post('/process-excel', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/add_user', async (req, res) => {
+router.post('/add_user', checkAuth, checkPermission("add_user"), async (req, res) => {
     const { email, document: documento, firstname, lastname, city, country } = req.body;
     try {
         const result = await moodleRequest('core_user_create_users', {
@@ -227,7 +227,7 @@ router.post('/add_user', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/update_user', async (req, res) => {
+router.post('/update_user', checkAuth, checkPermission("update_user"), async (req, res) => {
     const params = { 'users[0][id]': req.body.id };
     if (req.body.firstname)               params['users[0][firstname]']  = req.body.firstname;
     if (req.body.lastname)                params['users[0][lastname]']   = req.body.lastname;
@@ -275,7 +275,7 @@ router.post('/update_user', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/delete_user', async (req, res) => {
+router.post('/delete_user', checkAuth, checkPermission("delete_user"), async (req, res) => {
     const userId = req.body.userids[0];
     try {
         const result = await moodleRequest('core_user_update_users', {
@@ -318,7 +318,7 @@ router.post('/delete_user', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/search_user', async (req, res) => {
+router.post('/search_user', checkAuth, checkPermission("search_user"), async (req, res) => {
     try {
         const result = await moodleRequest('core_user_get_users', {
             'criteria[0][key]':   req.body.key,
@@ -364,7 +364,7 @@ router.post('/search_user', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/get_users', async (req, res) => {
+router.get('/get_users', checkAuth, checkPermission("get_users"), async (req, res) => {
     try {
         const result = await moodleRequest('core_user_get_users', {
             'criteria[0][key]':   'lastname',
@@ -396,7 +396,7 @@ router.get('/get_users', async (req, res) => {
  *       500:
  *         description: Error interno
  */
-router.get('/search', async (req, res) => {
+router.get('/search', checkAuth, checkPermission("search_users"), async (req, res) => {
     try {
         const q = (req.query.q || '').toLowerCase().trim();
         const allUsers = await ctrl.list('users');
@@ -432,7 +432,7 @@ router.get('/search', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/sync/preview', async (req, res, next) => {
+router.post('/sync/preview', checkAuth, checkPermission("sync_preview"), async (req, res, next) => {
     try {
         const result = await syncService.previewStudents();
         response.success(req, res, result, 200);
@@ -471,7 +471,7 @@ router.post('/sync/preview', async (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/sync', async (req, res, next) => {
+router.post('/sync', checkAuth, checkPermission("sync_users"), async (req, res, next) => {
     try {
         const result = await syncService.syncStudents(req.body.items || []);
         response.success(req, res, result || 'Datos cargados correctamente', 200);
@@ -506,7 +506,7 @@ router.post('/sync', async (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/journey', async (req, res, next) => {
+router.post('/journey', checkAuth, checkPermission("add_user_journey"), async (req, res, next) => {
     try {
         const result = await ctrl.saveJourneyUsuario(req.body);
         response.success(req, res, result, 201);
@@ -541,7 +541,7 @@ router.post('/journey', async (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/reset-password/:id', async (req, res, next) => {
+router.post('/reset-password/:id', checkAuth, checkPermission("reset_password_user"), async (req, res, next) => {
     try {
         const result = await ctrl.resetUserPassword(req.params.id);
         response.success(req, res, result, 200);
@@ -583,7 +583,7 @@ router.post('/reset-password/:id', async (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/:id/enrollments', async (req, res, next) => {
+router.get('/:id/enrollments', checkAuth, checkPermission("get_user_enrollments"), async (req, res, next) => {
     try {
         const result = await ctrl.getUserEnrollments(req.params.id);
         response.success(req, res, result, 200);
@@ -647,7 +647,7 @@ router.get('/:id/enrollments', async (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', checkAuth, checkPermission("update_user_journey"), async (req, res, next) => {
     try {
         const result = await ctrl.updateJourneyUser({ ...req.body, id: req.params.id })
         response.success(req, res, result, 200)
@@ -656,7 +656,7 @@ router.put('/:id', async (req, res, next) => {
     }
 })
 
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', checkAuth, checkPermission("delete_user_journey"), async (req, res, next) => {
     try {
         await ctrl.deleteUser(req.params.id)
         response.success(req, res, 'Usuario eliminado', 200)
