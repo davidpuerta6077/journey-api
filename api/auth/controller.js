@@ -1,3 +1,10 @@
-const ctrl = require('./controller');
-const database = require('../../database/postgresql');
-module.exports = ctrl(database);
+module.exports = (injectedDB) => {
+    let data = injectedDB;
+    if (!data) 
+        data = require('../../database/postgresql');
+
+
+    return {
+
+    };
+};

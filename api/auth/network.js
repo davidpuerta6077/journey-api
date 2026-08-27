@@ -4,6 +4,7 @@ const response = require('../../network/response')
 const { login } = require('./index')
 const checkAuth = require('../../middleware/checkAuth');
 const ctrl = require('./index');
+const checkout = require('../../middleware/checkAuth');
 
 router.post('/login', (req, res) => {
     login(req.body.user_email)
@@ -15,7 +16,7 @@ router.post('/login', (req, res) => {
         });
 });
 
-router.get('/permissions', async (req, res) => {
+router.get('/permissions', checkAuth, async (req, res) => {
     console.log("Query parameters:", req.query);
     const userEmail = req.query.user_email;
     const responseData = await ctrl.permissions(userEmail);

@@ -8,7 +8,6 @@ const users = require('./users/network');
 const auth = require('./auth/network');
 const courses = require('./courses/network');
 const enrollments = require('./enrollments/network');
-const auth = require('./auth/network')
 const test = require('./test/network');
 const response = require('../network/response');
 const grades = require('./grades/network');

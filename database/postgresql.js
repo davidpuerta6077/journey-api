@@ -20,10 +20,9 @@ const {
     healthCheck, checkPermissions, 
     checkSubmodulePermissions,
     updateJourneyEnrollmentData,
-    deleteEnrollmentData,
-    healthCheck
+    deleteEnrollmentData
 } = require('./querysets');
-
+ 
 const pool = new Pool({
     database: config.postgresql.database,
     user:     config.postgresql.user,
