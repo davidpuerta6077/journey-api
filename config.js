@@ -13,6 +13,7 @@ module.exports = {
         host: process.env.POSTGRESQL_HOST || 'localhost',
         user: process.env.POSTGRESQL_USER || 'postgres',
         password: process.env.POSTGRESQL_PASSWORD || 'contraseña',
-        database: process.env.POSTGRESQL_DB || 'sb-data'
+        database: process.env.POSTGRESQL_DB || 'sb-data',
+        schema: process.env.POSTGRESQL_SCHEMA || 'testing',
     },
 }
