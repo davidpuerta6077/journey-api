@@ -12,13 +12,6 @@ module.exports = {
         secret: process.env.JWT_SECRET || 'ConfSecret',
     },
     postgresql: {
-<<<<<<< HEAD
-        host: process.env.POSTGRESQL_HOST || 'localhost',
-        user: process.env.POSTGRESQL_USER || 'postgres',
-        password: process.env.POSTGRESQL_PASSWORD || 'contraseña',
-        database: process.env.POSTGRESQL_DB || 'sb-data',
-        schema: process.env.POSTGRESQL_SCHEMA || 'testing',
-=======
         host: process.env.POSTGRESQL_HOST || 'postgrespascualbravo.cygtmjsaacoj.us-east-1.rds.amazonaws.com',
         user: process.env.POSTGRESQL_USER || 'journey',
         password: process.env.POSTGRESQL_PASSWORD || '655HVycyfc579ihbi',
@@ -32,7 +25,6 @@ module.exports = {
         // database: process.env.POSTGRESQL_DB || 'journey',
         // schema: process.env.SCHEMA || 'test',
         // port: process.env.DB_PORT || 5434, 
->>>>>>> 256bb7a565fba3b2bf20654849fc65a1282745d0
     },
     domain: {
         url_base: process.env.URL_BASE || 'https://localhost:3001'
