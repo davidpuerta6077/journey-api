@@ -420,63 +420,6 @@ router.get('/list', checkAuth, checkPermission("list_courses"), async (req, res)
     }
 });
 
-// ─── RUTA SICAU ───────────────────────────────────────────────────────────────
-
-/**
- * @swagger
- * /courses/sicau:
- *   post:
- *     summary: Guardar cursos provenientes del sistema SICAU
- *     tags: [Courses]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               courses:
- *                 type: array
- *                 items:
- *                   type: object
- *                   properties:
- *                     codigo_asignatura: { type: string, example: "FB0010" }
- *                     nombre_asignatura: { type: string, example: "Álgebra Lineal" }
- *                     programa:          { type: string, example: "Fundamentación" }
- *                     periodo:           { type: string, example: "20261" }
- *                     grupo:             { type: string, example: "G101" }
- *                     docente:           { type: string, example: "Johana Ramirez" }
- *                     fecha_inicio:      { type: string, example: "2026-01-15" }
- *                     fecha_fin:         { type: string, example: "2026-06-15" }
- *     responses:
- *       200:
- *         description: Cursos guardados
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
- *       500:
- *         description: Error interno
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.post('/sicau', async (req, res, next) => {
-    try {
-        const items = req.body.courses || req.body.items || req.body || [];
-        const lista = Array.isArray(items) ? items : [items];
-        const results = [];
-        for (const course of lista) {
-            const result = await ctrl.saveSicauCurso(course);
-            results.push(result);
-        }
-        response.success(req, res, { results }, 200);
-    } catch (error) {
-        next(error);
-    }
-});
-
 // ─── SYNC ─────────────────────────────────────────────────────────────────────
 
 /**

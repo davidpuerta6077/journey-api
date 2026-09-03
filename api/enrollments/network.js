@@ -567,65 +567,6 @@ router.post('/update_log', checkAuth, checkPermission("update_log_enrollment"), 
     }
 });
 
-// ─── RUTA SICAU ───────────────────────────────────────────────────────────────
-
-/**
- * @swagger
- * /enrollments/sicau:
- *   post:
- *     summary: Guardar matrículas provenientes del sistema SICAU
- *     tags: [Enrollments]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               enrollments:
- *                 type: array
- *                 items:
- *                   type: object
- *                   properties:
- *                     cedula:            { type: string, example: "1111111124" }
- *                     role:              { type: string, example: "ESTUDIANTE" }
- *                     codigo_asignatura: { type: string, example: "FB0010" }
- *                     nombre_asignatura: { type: string, example: "Álgebra Lineal" }
- *                     programa:          { type: string, example: "Fundamentación" }
- *                     periodo:           { type: string, example: "20261" }
- *                     grupo:             { type: string, example: "G101" }
- *                     estado:            { type: string, example: "Activa" }
- *     responses:
- *       200:
- *         description: Matrículas guardadas
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
- *       500:
- *         description: Error interno
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.post('/sicau', async (req, res, next) => {
-    try {
-        const items = req.body.enrollments || req.body.items || req.body || [];
-        const lista = Array.isArray(items) ? items : [items];
-        console.log('SICAU items recibidos:', JSON.stringify(lista, null, 2));
-        const results = [];
-        for (const enr of lista) {
-            const result = await ctrl.saveSicauMatricula(enr);
-            console.log('Resultado:', result);
-            results.push(result);
-        }
-        response.success(req, res, { results }, 200);
-    } catch (error) {
-        next(error);
-    }
-});
-
 /**
  * @swagger
  * /enrollments/preview:
