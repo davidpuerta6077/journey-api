@@ -255,7 +255,7 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
 
 /**
  * @swagger
- * /sicau/send_curso_matricula_sicau:
+ * /sicau//send_courses_enrollments_sicau:
  *   post:
  *     summary: Guardar un curso junto con sus matrículas en una sola operación (SICAU)
  *     description: Endpoint unificado que combina la creación/actualización de un curso con la matrícula de los usuarios asociados a él, evitando tener que llamar por separado a los endpoints de cursos y matrículas.
@@ -331,7 +331,7 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/send_curso_matricula_sicau', async (req, res, next) => {
+router.post('/send_courses_enrollments_sicau', async (req, res, next) => {
     try {
         const items = req.body.items || req.body || [];
         const lista = Array.isArray(items) ? items : [items];

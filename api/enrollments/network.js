@@ -618,7 +618,7 @@ router.get('/preview', checkAuth, checkPermission("list_enrollments"), async (re
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/sync/preview', checkAuth, checkPermission("sync_preview"), async (req, res, next) => {
+router.post('/sync/preview', checkAuth, checkPermission("sync_preview_enrollments"), async (req, res, next) => {
     try {
         const result = await syncService.previewEnrollments();
         response.success(req, res, result, 200);

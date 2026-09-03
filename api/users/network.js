@@ -432,7 +432,7 @@ router.get('/search', checkAuth, checkPermission("search_users"), async (req, re
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/sync/preview', checkAuth, checkPermission("sync_preview"), async (req, res, next) => {
+router.post('/sync/preview', checkAuth, checkPermission("sync_preview_users"), async (req, res, next) => {
     try {
         const result = await syncService.previewStudents();
         response.success(req, res, result, 200);

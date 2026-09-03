@@ -442,7 +442,7 @@ router.get('/list', checkAuth, checkPermission("list_courses"), async (req, res)
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/sync/preview', checkAuth, checkPermission("sync_preview"), async (req, res, next) => {
+router.post('/sync/preview', checkAuth, checkPermission("sync_preview_courses"), async (req, res, next) => {
     try {
         const result = await syncService.previewCourses();
         response.success(req, res, result, 200);
