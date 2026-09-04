@@ -20,6 +20,7 @@ const SUBMODULES = [
     { code: 'admin_roles',       name: 'Administrador - Roles' },
     { code: 'admin_modules',     name: 'Administrador - Módulos y Submódulos' },
     { code: 'admin_permissions', name: 'Administrador - Permisos' },
+    { code: 'admin_logs',        name: 'Administrador - Logs' },
 ];
 const GRANTED_ROLE_NAME = 'superadmin';
 

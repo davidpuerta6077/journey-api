@@ -76,6 +76,9 @@ web_modules/
 # Yarn Integrity file
 .yarn-integrity
 
+# User-uploaded runtime content (excel imports, avatars, etc.)
+uploads/
+
 # dotenv environment variable files
 .env
 .env.development.local

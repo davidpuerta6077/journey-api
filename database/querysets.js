@@ -485,7 +485,7 @@ const healthCheck = () => ({
 
 const selectPlatformUsers = () => ({
     text: `SELECT u.id, u.username, u.email, u.estado, u.created_at, u.updated_at,
-           u.last_login, u.created_by, u.role_id, r.name AS role_name
+           u.last_login, u.created_by, u.role_id, u.photo_url, r.name AS role_name
            FROM ${schema}.platform_users u
            LEFT JOIN ${schema}.roles r ON r.id = u.role_id
            ORDER BY u.id`,
@@ -495,6 +495,21 @@ const selectPlatformUsers = () => ({
 const findPlatformUserByEmailOrUsername = (email, username) => ({
     text: `SELECT id FROM ${schema}.platform_users WHERE email = $1 OR username = $2 LIMIT 1`,
     values: [email, username]
+});
+
+const findPlatformUserByEmail = (email) => ({
+    text: `SELECT u.id, u.username, u.email, u.estado, u.created_at, u.updated_at,
+           u.last_login, u.role_id, u.photo_url, r.name AS role_name
+           FROM ${schema}.platform_users u
+           LEFT JOIN ${schema}.roles r ON r.id = u.role_id
+           WHERE u.email = $1
+           LIMIT 1`,
+    values: [email]
+});
+
+const updatePlatformUserPhotoData = (email, photoUrl) => ({
+    text: `UPDATE ${schema}.platform_users SET photo_url = $1, updated_at = now() WHERE email = $2 RETURNING *`,
+    values: [photoUrl, email]
 });
 
 const insertPlatformUserData = (data) => {
@@ -747,9 +762,11 @@ module.exports = {
     // admin: platform users
     selectPlatformUsers,
     findPlatformUserByEmailOrUsername,
+    findPlatformUserByEmail,
     insertPlatformUserData,
     updatePlatformUserData,
     updatePlatformUserEstadoData,
+    updatePlatformUserPhotoData,
     // admin: roles
     selectRoles,
     insertRoleData,

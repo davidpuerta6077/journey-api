@@ -21,8 +21,8 @@ const {
     checkSubmodulePermissions,
     updateJourneyEnrollmentData,
     deleteEnrollmentData,
-    selectPlatformUsers, findPlatformUserByEmailOrUsername, insertPlatformUserData,
-    updatePlatformUserData, updatePlatformUserEstadoData,
+    selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData,
+    updatePlatformUserData, updatePlatformUserEstadoData, updatePlatformUserPhotoData,
     selectRoles, insertRoleData, updateRoleData,
     selectModulesAdmin, insertModuleData, updateModuleData,
     selectSubmodulesAdmin, insertSubmoduleData, updateSubmoduleData,
@@ -410,6 +410,24 @@ function updatePlatformUserEstado(id, estado) {
     });
 }
 
+function findPlatformUserByEmailFn(email) {
+    return new Promise((resolve, reject) => {
+        pool.query(findPlatformUserByEmail(email), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function updatePlatformUserPhoto(email, photoUrl) {
+    return new Promise((resolve, reject) => {
+        pool.query(updatePlatformUserPhotoData(email, photoUrl), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 // ─── ADMIN: ROLES ────────────────────────────────────────────────────────────────
 
 function listRoles() {
@@ -600,6 +618,8 @@ module.exports = {
     insertPlatformUser,
     updatePlatformUser,
     updatePlatformUserEstado,
+    findPlatformUserByEmail: findPlatformUserByEmailFn,
+    updatePlatformUserPhoto,
     // admin: roles
     listRoles,
     insertRole,
