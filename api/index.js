@@ -12,6 +12,7 @@ const test = require('./test/network');
 const response = require('../network/response');
 const grades = require('./grades/network');
 const sicau = require('./SICAU/network');
+const admin = require('./admin/network');
 const ROOT = path.resolve(__dirname, '..');
 const swaggerUi   = require('swagger-ui-express');
 const swaggerSpec = require('../swagger');  
@@ -51,6 +52,7 @@ app.use('/grades', grades);
 app.use(`/auth`, auth);
 app.use('/test', test);
 app.use('/sicau', sicau);
+app.use('/admin', admin);
 
 
 // ─── PÁGINAS ──────────────────────────────────────────────────────────────────

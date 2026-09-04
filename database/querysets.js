@@ -170,7 +170,7 @@ const updateUserSicau = (data) => ({
 
 function updateUserSyncStatusQuery(id, statusValue) {
     return {
-        text: 'UPDATE test.users SET sincronizado = $2 WHERE id = $1::integer',
+        text: `UPDATE ${schema}.users SET sincronizado = $2 WHERE id = $1::integer`,
         values: [id, statusValue]
     };
 }
@@ -178,7 +178,7 @@ function updateUserSyncStatusQuery(id, statusValue) {
 // ✅ nuevo: revierte sincronización y limpia moodle_id
 function updateUserUnsyncQuery(id) {
     return {
-        text: 'UPDATE test.users SET sincronizado = false, moodle_id = NULL WHERE id = $1::integer',
+        text: `UPDATE ${schema}.users SET sincronizado = false, moodle_id = NULL WHERE id = $1::integer`,
         values: [id]
     };
 }
@@ -229,7 +229,7 @@ const insertCourseData = (data) => {
     } = data;
 
     const text = `
-        INSERT INTO test.courses (
+        INSERT INTO ${schema}.courses (
             fullname, shortname, categoryid, idnumber, summary,
             visible, format, numsections, moodle_id, seed_course_id,
             departamento, programa, docente, fecha_inicio, fecha_fin,
@@ -481,15 +481,173 @@ const healthCheck = () => ({
 });
 
 
+// ─── ADMIN: PLATFORM USERS ─────────────────────────────────────────────────────
+
+const selectPlatformUsers = () => ({
+    text: `SELECT u.id, u.username, u.email, u.estado, u.created_at, u.updated_at,
+           u.last_login, u.created_by, u.role_id, r.name AS role_name
+           FROM ${schema}.platform_users u
+           LEFT JOIN ${schema}.roles r ON r.id = u.role_id
+           ORDER BY u.id`,
+    values: []
+});
+
+const findPlatformUserByEmailOrUsername = (email, username) => ({
+    text: `SELECT id FROM ${schema}.platform_users WHERE email = $1 OR username = $2 LIMIT 1`,
+    values: [email, username]
+});
+
+const insertPlatformUserData = (data) => {
+    const { username, email, role_id, created_by } = data;
+    const text = `
+        INSERT INTO ${schema}.platform_users (username, email, role_id, created_by)
+        VALUES ($1, $2, $3, $4)
+        RETURNING *
+    `;
+    const values = [username, email, role_id || null, created_by || null];
+    return { text, values };
+};
+
+const updatePlatformUserData = (id, data) => {
+    const { username, role_id } = data;
+    const text = `
+        UPDATE ${schema}.platform_users
+        SET username = $1, role_id = $2, updated_at = now()
+        WHERE id = $3
+        RETURNING *
+    `;
+    const values = [username, role_id || null, id];
+    return { text, values };
+};
+
+const updatePlatformUserEstadoData = (id, estado) => ({
+    text: `UPDATE ${schema}.platform_users SET estado = $1, updated_at = now() WHERE id = $2 RETURNING *`,
+    values: [estado, id]
+});
+
+// ─── ADMIN: ROLES ───────────────────────────────────────────────────────────────
+
+const selectRoles = () => ({
+    text: `SELECT id, name, description, is_system_default, created_at
+           FROM ${schema}.roles ORDER BY id`,
+    values: []
+});
+
+const insertRoleData = (data) => {
+    const { name, description } = data;
+    const text = `
+        INSERT INTO ${schema}.roles (name, description, is_system_default)
+        VALUES ($1, $2, false)
+        RETURNING *
+    `;
+    return { text, values: [name, description || null] };
+};
+
+const updateRoleData = (id, data) => {
+    const { name, description } = data;
+    const text = `
+        UPDATE ${schema}.roles SET name = $1, description = $2
+        WHERE id = $3
+        RETURNING *
+    `;
+    return { text, values: [name, description || null, id] };
+};
+
+// ─── ADMIN: MODULES ─────────────────────────────────────────────────────────────
+
+const selectModulesAdmin = () => ({
+    text: `SELECT id, code, name, created_at FROM ${schema}.modules ORDER BY id`,
+    values: []
+});
+
+const insertModuleData = (data) => {
+    const { code, name } = data;
+    const text = `
+        INSERT INTO ${schema}.modules (code, name)
+        VALUES ($1, $2)
+        RETURNING *
+    `;
+    return { text, values: [code, name] };
+};
+
+const updateModuleData = (id, data) => {
+    const { code, name } = data;
+    const text = `
+        UPDATE ${schema}.modules SET code = $1, name = $2
+        WHERE id = $3
+        RETURNING *
+    `;
+    return { text, values: [code, name, id] };
+};
+
+// ─── ADMIN: SUBMODULES ──────────────────────────────────────────────────────────
+
+const selectSubmodulesAdmin = () => ({
+    text: `SELECT s.id, s.module_id, s.code, s.name, s.created_at,
+           m.code AS module_code, m.name AS module_name
+           FROM ${schema}.submodules s
+           JOIN ${schema}.modules m ON m.id = s.module_id
+           ORDER BY s.module_id, s.id`,
+    values: []
+});
+
+const insertSubmoduleData = (data) => {
+    const { module_id, code, name } = data;
+    const text = `
+        INSERT INTO ${schema}.submodules (module_id, code, name)
+        VALUES ($1, $2, $3)
+        RETURNING *
+    `;
+    return { text, values: [module_id, code, name] };
+};
+
+const updateSubmoduleData = (id, data) => {
+    const { module_id, code, name } = data;
+    const text = `
+        UPDATE ${schema}.submodules SET module_id = $1, code = $2, name = $3
+        WHERE id = $4
+        RETURNING *
+    `;
+    return { text, values: [module_id, code, name, id] };
+};
+
+// ─── ADMIN: ROLE PERMISSIONS ────────────────────────────────────────────────────
+
+const selectRolePermissionsGrid = () => ({
+    text: `SELECT role_id, submodule_id FROM ${schema}.role_permissions`,
+    values: []
+});
+
+const findRolePermission = (role_id, submodule_id) => ({
+    text: `SELECT id FROM ${schema}.role_permissions WHERE role_id = $1 AND submodule_id = $2 LIMIT 1`,
+    values: [role_id, submodule_id]
+});
+
+const insertRolePermissionData = (data) => {
+    const { role_id, submodule_id, granted_by } = data;
+    const text = `
+        INSERT INTO ${schema}.role_permissions (role_id, submodule_id, granted_by)
+        VALUES ($1, $2, $3)
+        RETURNING *
+    `;
+    return { text, values: [role_id, submodule_id, granted_by || null] };
+};
+
+const deleteRolePermissionData = (role_id, submodule_id) => ({
+    text: `DELETE FROM ${schema}.role_permissions WHERE role_id = $1 AND submodule_id = $2`,
+    values: [role_id, submodule_id]
+});
+
+
 // ___ PERMISSIONS ______________________________________________________________
 
 
 const checkSubmodulePermissions = (email, submoduleCode) => ({
     text: `SELECT 1
-        FROM test.platform_users u
-        JOIN test.roles r ON r.id = u.role_id
-        JOIN test.role_permissions rp ON rp.role_id = r.id
-        JOIN test.submodules s ON s.id = rp.submodule_id
+        FROM ${schema}.platform_users u
+        JOIN ${schema}.roles r ON r.id = u.role_id
+        JOIN ${schema}.role_permissions rp ON rp.role_id = r.id
+        JOIN ${schema}.submodules s ON s.id = rp.submodule_id
         WHERE u.email = $1 AND s.code = $2
         LIMIT 1;
       `,
@@ -515,22 +673,22 @@ const checkPermissions = (email) => ({
                                         'submodule_code', s.code
                                     ) ORDER BY s.id
                                 )
-                                FROM test.submodules s
-                                INNER JOIN test.role_permissions rp ON rp.submodule_id = s.id
-                                WHERE s.module_id = m.id 
+                                FROM ${schema}.submodules s
+                                INNER JOIN ${schema}.role_permissions rp ON rp.submodule_id = s.id
+                                WHERE s.module_id = m.id
                                   AND rp.role_id = r.id
-                            ), 
+                            ),
                             '[]'::json
                         )
                     ) ORDER BY m.id
-                ), 
+                ),
                 '[]'::json
             )
-            FROM test.modules m
+            FROM ${schema}.modules m
         )
     ) AS user_permissions
-    FROM test.platform_users u
-    INNER JOIN test.roles r ON u.role_id = r.id
+    FROM ${schema}.platform_users u
+    INNER JOIN ${schema}.roles r ON u.role_id = r.id
     WHERE u.email = $1
     `,
     values: [email]
@@ -586,7 +744,31 @@ module.exports = {
     // health
     healthCheck,
 
-    //Permission 
-    checkPermissions, 
+    // admin: platform users
+    selectPlatformUsers,
+    findPlatformUserByEmailOrUsername,
+    insertPlatformUserData,
+    updatePlatformUserData,
+    updatePlatformUserEstadoData,
+    // admin: roles
+    selectRoles,
+    insertRoleData,
+    updateRoleData,
+    // admin: modules
+    selectModulesAdmin,
+    insertModuleData,
+    updateModuleData,
+    // admin: submodules
+    selectSubmodulesAdmin,
+    insertSubmoduleData,
+    updateSubmoduleData,
+    // admin: role permissions
+    selectRolePermissionsGrid,
+    findRolePermission,
+    insertRolePermissionData,
+    deleteRolePermissionData,
+
+    //Permission
+    checkPermissions,
     checkSubmodulePermissions
 };

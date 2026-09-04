@@ -17,10 +17,16 @@ const {
     updateEnrollmentEstadoQuery,
     findAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatusQuery,
-    healthCheck, checkPermissions, 
+    healthCheck, checkPermissions,
     checkSubmodulePermissions,
     updateJourneyEnrollmentData,
-    deleteEnrollmentData
+    deleteEnrollmentData,
+    selectPlatformUsers, findPlatformUserByEmailOrUsername, insertPlatformUserData,
+    updatePlatformUserData, updatePlatformUserEstadoData,
+    selectRoles, insertRoleData, updateRoleData,
+    selectModulesAdmin, insertModuleData, updateModuleData,
+    selectSubmodulesAdmin, insertSubmoduleData, updateSubmoduleData,
+    selectRolePermissionsGrid, findRolePermission, insertRolePermissionData, deleteRolePermissionData
 } = require('./querysets');
  
 const pool = new Pool({
@@ -357,6 +363,178 @@ function checkDbConnection() {
 }
 
 
+// ─── ADMIN: PLATFORM USERS ──────────────────────────────────────────────────────
+
+function listPlatformUsers() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectPlatformUsers(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function findPlatformUser(email, username) {
+    return new Promise((resolve, reject) => {
+        pool.query(findPlatformUserByEmailOrUsername(email, username), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function insertPlatformUser(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertPlatformUserData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updatePlatformUser(id, data) {
+    return new Promise((resolve, reject) => {
+        pool.query(updatePlatformUserData(id, data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updatePlatformUserEstado(id, estado) {
+    return new Promise((resolve, reject) => {
+        pool.query(updatePlatformUserEstadoData(id, estado), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+// ─── ADMIN: ROLES ────────────────────────────────────────────────────────────────
+
+function listRoles() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectRoles(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function insertRole(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertRoleData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updateRole(id, data) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateRoleData(id, data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+// ─── ADMIN: MODULES ──────────────────────────────────────────────────────────────
+
+function listModulesAdmin() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectModulesAdmin(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function insertModuleAdmin(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertModuleData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updateModuleAdmin(id, data) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateModuleData(id, data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+// ─── ADMIN: SUBMODULES ───────────────────────────────────────────────────────────
+
+function listSubmodulesAdmin() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectSubmodulesAdmin(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function insertSubmoduleAdmin(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertSubmoduleData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updateSubmoduleAdmin(id, data) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateSubmoduleData(id, data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+// ─── ADMIN: ROLE PERMISSIONS ─────────────────────────────────────────────────────
+
+function listRolePermissions() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectRolePermissionsGrid(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function findRolePermissionFn(role_id, submodule_id) {
+    return new Promise((resolve, reject) => {
+        pool.query(findRolePermission(role_id, submodule_id), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function grantRolePermission(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertRolePermissionData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function revokeRolePermission(role_id, submodule_id) {
+    return new Promise((resolve, reject) => {
+        pool.query(deleteRolePermissionData(role_id, submodule_id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 // ___ PERMISSIONS ______________________________________________________________
 
 function checkPermissionsData(email) {
@@ -413,7 +591,30 @@ module.exports = {
     updateEnrollmentSyncStatus,
     updateEnrollmentEstado,
     checkDbConnection,getEnrollmentsByUserId,
-    resetPassword, 
+    resetPassword,
     checkPermissionsData,
-    checkSubmodulesPermissionsData
+    checkSubmodulesPermissionsData,
+    // admin: platform users
+    listPlatformUsers,
+    findPlatformUser,
+    insertPlatformUser,
+    updatePlatformUser,
+    updatePlatformUserEstado,
+    // admin: roles
+    listRoles,
+    insertRole,
+    updateRole,
+    // admin: modules
+    listModulesAdmin,
+    insertModuleAdmin,
+    updateModuleAdmin,
+    // admin: submodules
+    listSubmodulesAdmin,
+    insertSubmoduleAdmin,
+    updateSubmoduleAdmin,
+    // admin: role permissions
+    listRolePermissions,
+    findRolePermission: findRolePermissionFn,
+    grantRolePermission,
+    revokeRolePermission
 };
