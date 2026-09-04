@@ -51,6 +51,37 @@ router.get('/me', checkAuth, async (req, res, next) => {
 
 /**
  * @swagger
+ * /auth/me:
+ *   put:
+ *     summary: Actualizar el username del usuario autenticado
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [username]
+ *             properties:
+ *               username: { type: string }
+ *     responses:
+ *       200: { description: Perfil actualizado }
+ *       400: { description: Username vacío }
+ *       409: { description: Username ya en uso }
+ */
+router.put('/me', checkAuth, async (req, res, next) => {
+    const username = (req.body.username || '').trim();
+    if (!username) return response.error(req, res, 'El username no puede estar vacío', 400);
+    try {
+        const updated = await ctrl.updateMyUsername(req.user.email, username);
+        response.success(req, res, updated, 200);
+    } catch (error) {
+        response.error(req, res, error.message, error.status || 500);
+    }
+});
+
+/**
+ * @swagger
  * /auth/me/foto:
  *   post:
  *     summary: Subir/actualizar la foto de perfil del usuario autenticado

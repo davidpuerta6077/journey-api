@@ -17,9 +17,24 @@ module.exports = (injectedDB) => {
         return result[0];
     };
 
+    async function updateMyUsername(email, username) {
+        try {
+            const result = await data.updatePlatformUserUsername(email, username);
+            return result[0];
+        } catch (err) {
+            if (err.code === '23505') {
+                const dupErr = new Error('Ese nombre de usuario ya está en uso');
+                dupErr.status = 409;
+                throw dupErr;
+            }
+            throw err;
+        }
+    };
+
     return {
         permissions,
         me,
-        updateMyPhoto
+        updateMyPhoto,
+        updateMyUsername
     };
 };

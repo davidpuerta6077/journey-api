@@ -512,6 +512,11 @@ const updatePlatformUserPhotoData = (email, photoUrl) => ({
     values: [photoUrl, email]
 });
 
+const updatePlatformUserUsernameData = (email, username) => ({
+    text: `UPDATE ${schema}.platform_users SET username = $1, updated_at = now() WHERE email = $2 RETURNING *`,
+    values: [username, email]
+});
+
 const insertPlatformUserData = (data) => {
     const { username, email, role_id, created_by } = data;
     const text = `
@@ -767,6 +772,7 @@ module.exports = {
     updatePlatformUserData,
     updatePlatformUserEstadoData,
     updatePlatformUserPhotoData,
+    updatePlatformUserUsernameData,
     // admin: roles
     selectRoles,
     insertRoleData,
