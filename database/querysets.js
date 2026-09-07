@@ -715,6 +715,24 @@ const checkPermissions = (email) => ({
 });
 
 
+// ___ VIRTUAL LABS ______________________________________________________________
+
+const selectLabsGrades = () => ({
+    text: `SELECT * FROM ${schema}.labs_grades ORDER BY id DESC`,
+    values: []
+});
+
+const insertLabGradeData = (data) => {
+    const { id_estudiante, correo, id_curso, calificacion } = data;
+    const text = `
+        INSERT INTO ${schema}.labs_grades (id_estudiante, correo, id_curso, calificacion)
+        VALUES ($1, $2, $3, $4)
+        RETURNING *
+    `;
+    return { text, values: [id_estudiante, correo, id_curso, calificacion] };
+};
+
+
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 
@@ -790,6 +808,9 @@ module.exports = {
     findRolePermission,
     insertRolePermissionData,
     deleteRolePermissionData,
+    // virtual labs
+    selectLabsGrades,
+    insertLabGradeData,
 
     //Permission
     checkPermissions,

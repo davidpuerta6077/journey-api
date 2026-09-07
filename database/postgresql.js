@@ -26,7 +26,8 @@ const {
     selectRoles, insertRoleData, updateRoleData,
     selectModulesAdmin, insertModuleData, updateModuleData,
     selectSubmodulesAdmin, insertSubmoduleData, updateSubmoduleData,
-    selectRolePermissionsGrid, findRolePermission, insertRolePermissionData, deleteRolePermissionData
+    selectRolePermissionsGrid, findRolePermission, insertRolePermissionData, deleteRolePermissionData,
+    selectLabsGrades, insertLabGradeData
 } = require('./querysets');
  
 const pool = new Pool({
@@ -582,6 +583,26 @@ function checkSubmodulesPermissionsData(email, submoduleCode) {
     });
 }
 
+// ___ VIRTUAL LABS ______________________________________________________________
+
+function listLabsGrades() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectLabsGrades(), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function insertLabGrade(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertLabGradeData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -645,6 +666,9 @@ module.exports = {
     // admin: role permissions
     listRolePermissions,
     findRolePermission: findRolePermissionFn,
+    // virtual labs
+    listLabsGrades,
+    insertLabGrade,
     grantRolePermission,
     revokeRolePermission
 };
