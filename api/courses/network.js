@@ -4,6 +4,7 @@ const response = require('../../network/response');
 const ctrl = require('./index');
 const { moodleRequest } = require('../../services/moodleService');
 const syncService = require('../../services/syncService');
+const { applyCourseRule } = require('../../services/sync/applyCourseRule');
 const checkAuth = require('../../middleware/checkAuth');
 const checkPermission = require('../../middleware/checkPermissions');
 
@@ -484,8 +485,49 @@ router.post('/sync/preview', checkAuth, checkPermission("sync_preview_courses"),
  */
 router.post('/sync', checkAuth, checkPermission("sync_courses"), async (req, res, next) => {
     try {
-        const result = await syncService.syncCourses(req.body.items || []);
+        const result = await syncService.syncCourses(req.body.items || [], req.user?.email);
         response.success(req, res, result || 'Datos cargados correctamente', 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /courses/apply_rule:
+ *   post:
+ *     summary: Resolver y guardar la regla (sync_rules) de los cursos seleccionados, sin crearlos aún en Moodle
+ *     description: Paso previo opcional a /courses/sync. Resuelve la regla aplicable por codigo_asignatura/programa/departamento, verifica que la semilla exista en Moodle, y guarda categoryid/seed_course_id en la fila local. No crea el curso en Moodle todavía.
+ *     tags: [Courses]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               items:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *     responses:
+ *       200:
+ *         description: Regla(s) aplicada(s)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post('/apply_rule', checkAuth, checkPermission("sync_courses"), async (req, res, next) => {
+    try {
+        const result = await applyCourseRule(req.body.items || [], req.user?.email);
+        response.success(req, res, result, 200);
     } catch (error) {
         next(error);
     }

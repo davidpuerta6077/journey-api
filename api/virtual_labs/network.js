@@ -27,7 +27,7 @@ const ctrl = require('./index');
  *       - in: query
  *         name: calificacion
  *         required: true
- *         schema: { type: integer }
+ *         schema: { type: number, format: double }
  *     responses:
  *       200: { description: Calificación registrada }
  *       400: { description: Faltan parámetros requeridos }

@@ -14,7 +14,7 @@ const {
     selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
     updateEnrollmentData, updateEnrollmentMoodleId, findEnrollmentByCodigoJourney,
     findEnrollmentByUserAndCourse,
-    updateEnrollmentEstadoQuery,
+    updateEnrollmentEstadoQuery, updateEnrollmentSyncFields,
     findAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatusQuery,
     healthCheck, checkPermissions,
@@ -27,7 +27,10 @@ const {
     selectModulesAdmin, insertModuleData, updateModuleData,
     selectSubmodulesAdmin, insertSubmoduleData, updateSubmoduleData,
     selectRolePermissionsGrid, findRolePermission, insertRolePermissionData, deleteRolePermissionData,
-    selectLabsGrades, insertLabGradeData
+    selectLabsGrades, insertLabGradeData,
+    resolveSyncRule, updateCourseSyncFields, insertLogData,
+    selectSyncRulesAdmin, findSyncRuleExactMatch, insertSyncRuleData,
+    updateSyncRuleData, deleteSyncRuleData
 } = require('./querysets');
  
 const pool = new Pool({
@@ -250,6 +253,84 @@ function updateCourseSyncStatus(id, statusValue) {
     });
 }
 
+function setCourseSyncFields(id, fields) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateCourseSyncFields(id, fields), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+// ─── SYNC RULES ─────────────────────────────────────────────────────────────────
+
+function findSyncRule(codigoAsignatura, programa, departamento) {
+    return new Promise((resolve, reject) => {
+        pool.query(resolveSyncRule(codigoAsignatura, programa, departamento), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+// ─── LOGS ───────────────────────────────────────────────────────────────────────
+
+function insertLog(type, description, username, entityType, entityId) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertLogData(type, description, username, entityType, entityId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+// ─── SYNC RULES ADMIN ─────────────────────────────────────────────────────────────
+
+function listSyncRulesAdmin() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectSyncRulesAdmin(), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function findSyncRuleExact(codigoAsignatura, programa, departamento, excludeId) {
+    return new Promise((resolve, reject) => {
+        pool.query(findSyncRuleExactMatch(codigoAsignatura, programa, departamento, excludeId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function insertSyncRuleAdmin(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertSyncRuleData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updateSyncRuleAdmin(id, data) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateSyncRuleData(id, data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function deleteSyncRuleAdmin(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(deleteSyncRuleData(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 // ─── ENROLLMENTS ──────────────────────────────────────────────────────────────
 
 function insertEnrollment(data) {
@@ -346,6 +427,15 @@ function updateEnrollmentSyncStatus(id, statusValue) {
 function updateEnrollmentEstado(id, estado) {
     return new Promise((resolve, reject) => {
         pool.query(updateEnrollmentEstadoQuery(id, estado), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function setEnrollmentSyncFields(id, fields) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateEnrollmentSyncFields(id, fields), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -627,6 +717,14 @@ module.exports = {
     findCourseSicau,
     findCourseByShortnameFn,
     updateCourseSyncStatus,
+    setCourseSyncFields,
+    findSyncRule,
+    insertLog,
+    listSyncRulesAdmin,
+    findSyncRuleExact,
+    insertSyncRuleAdmin,
+    updateSyncRuleAdmin,
+    deleteSyncRuleAdmin,
     insertEnrollment,
     updateEnrollment,
     updateJourneyEnrollment,
@@ -638,6 +736,7 @@ module.exports = {
     listAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatus,
     updateEnrollmentEstado,
+    setEnrollmentSyncFields,
     checkDbConnection,getEnrollmentsByUserId,
     resetPassword,
     checkPermissionsData,

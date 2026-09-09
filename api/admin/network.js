@@ -361,6 +361,164 @@ router.put('/submodulos/:id', checkAuth, checkPermission('admin_modules'), async
     }
 });
 
+// ─── REGLAS DE SINCRONIZACIÓN (sync_rules) ─────────────────────────────────────────
+
+/**
+ * @swagger
+ * /admin/reglas:
+ *   get:
+ *     summary: Listar reglas de sincronización (programa/departamento/codigo_asignatura → semilla + categoría Moodle)
+ *     tags: [Admin]
+ *     responses:
+ *       200: { description: Lista de reglas }
+ */
+router.get('/reglas', checkAuth, checkPermission('rules_active'), async (req, res, next) => {
+    try {
+        const result = await ctrl.listReglas();
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/reglas:
+ *   post:
+ *     summary: Crear regla de sincronización
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [seed_shortname, categoryid]
+ *             properties:
+ *               codigo_asignatura: { type: string }
+ *               programa:          { type: string }
+ *               departamento:      { type: string }
+ *               seed_shortname:    { type: string }
+ *               categoryid:        { type: integer }
+ *               activo:            { type: boolean }
+ *     responses:
+ *       200: { description: Regla creada }
+ *       409: { description: Ya existe una regla activa con esa combinación }
+ */
+router.post('/reglas', checkAuth, checkPermission('rules_active'), async (req, res, next) => {
+    try {
+        const result = await ctrl.createRegla(req.body);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/reglas/{id}:
+ *   put:
+ *     summary: Editar regla de sincronización
+ *     tags: [Admin]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               codigo_asignatura: { type: string }
+ *               programa:          { type: string }
+ *               departamento:      { type: string }
+ *               seed_shortname:    { type: string }
+ *               categoryid:        { type: integer }
+ *               activo:            { type: boolean }
+ *     responses:
+ *       200: { description: Regla actualizada }
+ *       409: { description: Ya existe otra regla activa con esa combinación }
+ */
+router.put('/reglas/:id', checkAuth, checkPermission('rules_active'), async (req, res, next) => {
+    try {
+        const result = await ctrl.updateRegla(req.params.id, req.body);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/reglas/{id}:
+ *   delete:
+ *     summary: Eliminar regla de sincronización
+ *     tags: [Admin]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Regla eliminada }
+ */
+router.delete('/reglas/:id', checkAuth, checkPermission('rules_active'), async (req, res, next) => {
+    try {
+        const result = await ctrl.deleteRegla(req.params.id);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ─── PLANTILLAS (catálogo en vivo de Moodle: categorías y cursos semilla) ──────────
+
+/**
+ * @swagger
+ * /admin/moodle_categorias:
+ *   get:
+ *     summary: Listar categorías de Moodle (en vivo, para elegir categoryid al crear una regla)
+ *     tags: [Admin]
+ *     responses:
+ *       200: { description: Lista de categorías de Moodle }
+ */
+router.get('/moodle_categorias', checkAuth, checkPermission('rules_templates'), async (req, res, next) => {
+    try {
+        const result = await ctrl.listMoodleCategorias();
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/moodle_semillas:
+ *   get:
+ *     summary: Listar los cursos de la categoría de semillas en Moodle en vivo
+ *     tags: [Admin]
+ *     parameters:
+ *       - in: query
+ *         name: categoryid
+ *         required: false
+ *         schema: { type: integer }
+ *         description: "Categoría de Moodle donde viven las semillas (por defecto 1)"
+ *     responses:
+ *       200: { description: Lista de cursos semilla encontrados en Moodle }
+ */
+router.get('/moodle_semillas', checkAuth, checkPermission('rules_templates'), async (req, res, next) => {
+    try {
+        const categoryId = req.query.categoryid ? Number(req.query.categoryid) : undefined;
+        const result = await ctrl.listMoodleSemillas(categoryId);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
 // ─── PERMISOS ─────────────────────────────────────────────────────────────────────
 
 /**

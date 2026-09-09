@@ -1,3 +1,6 @@
+const { moodleRequest } = require('../../services/moodleService');
+const { assertMoodleOk } = require('../../services/moodleAssert');
+
 module.exports = (injectedDB) => {
     let data = injectedDB;
     if (!data) data = require('../../database/postgresql');
@@ -85,6 +88,100 @@ module.exports = (injectedDB) => {
         return result[0];
     }
 
+    // ─── SYNC RULES ─────────────────────────────────────────────────────────────
+
+    async function listReglas() {
+        return data.listSyncRulesAdmin();
+    }
+
+    async function createRegla(body) {
+        const { codigo_asignatura, programa, departamento, seed_shortname, categoryid, activo } = body;
+        if (!seed_shortname || !categoryid) {
+            const err = new Error('seed_shortname y categoryid son obligatorios');
+            err.status = 400;
+            throw err;
+        }
+        const existing = await data.findSyncRuleExact(codigo_asignatura, programa, departamento);
+        if (existing.length > 0) {
+            const err = new Error('Ya existe una regla activa con esa combinación de código/programa/departamento');
+            err.status = 409;
+            throw err;
+        }
+        const result = await data.insertSyncRuleAdmin({ codigo_asignatura, programa, departamento, seed_shortname, categoryid, activo });
+        return result[0];
+    }
+
+    async function updateRegla(id, body) {
+        const { codigo_asignatura, programa, departamento, seed_shortname, categoryid, activo } = body;
+        if (!seed_shortname || !categoryid) {
+            const err = new Error('seed_shortname y categoryid son obligatorios');
+            err.status = 400;
+            throw err;
+        }
+        const existing = await data.findSyncRuleExact(codigo_asignatura, programa, departamento, Number(id));
+        if (existing.length > 0) {
+            const err = new Error('Ya existe otra regla activa con esa combinación de código/programa/departamento');
+            err.status = 409;
+            throw err;
+        }
+        const result = await data.updateSyncRuleAdmin(id, { codigo_asignatura, programa, departamento, seed_shortname, categoryid, activo });
+        return result[0];
+    }
+
+    async function deleteRegla(id) {
+        await data.deleteSyncRuleAdmin(id);
+        return { id: Number(id), deleted: true };
+    }
+
+    // Catálogo en vivo de Moodle (para la pantalla Reglas > Plantillas): no se
+    // guarda nada localmente, solo se lee de Moodle para ayudar a llenar el
+    // formulario de reglas con valores reales (categoryid y seed_shortname).
+    async function listMoodleCategorias() {
+        const result = await moodleRequest('core_course_get_categories', {});
+        assertMoodleOk(result, 'Error listando categorías de Moodle');
+        return result;
+    }
+
+    // categoryid de la categoría de Moodle donde viven los cursos semilla.
+    // core_course_search_courses no está habilitado en el servicio externo de Moodle,
+    // así que se listan por categoría con core_course_get_courses_by_field (la misma
+    // función que ya usa syncCourses.js, confirmada habilitada).
+    const SEMILLAS_CATEGORY_ID = 1;
+
+    // core_course_get_courses_by_field(field:'category') solo trae cursos que están
+    // DIRECTAMENTE en esa categoría, no en sus subcategorías. Para traer también las
+    // semillas guardadas en subcategorías, primero se resuelve el árbol de categorías
+    // (por su campo "path", ej. "/1/5/12") y se consulta cada una que cuelgue de la
+    // categoría raíz.
+    async function resolveDescendantCategoryIds(rootCategoryId) {
+        const categorias = await listMoodleCategorias();
+        return categorias
+            .filter(cat => String(cat.path || '').split('/').filter(Boolean).map(Number).includes(rootCategoryId))
+            .map(cat => cat.id);
+    }
+
+    async function listMoodleSemillas(categoryId = SEMILLAS_CATEGORY_ID) {
+        const categoryIds = await resolveDescendantCategoryIds(categoryId);
+        if (!categoryIds.includes(categoryId)) categoryIds.push(categoryId);
+
+        const coursesByCategory = await Promise.all(
+            categoryIds.map(id => moodleRequest('core_course_get_courses_by_field', { field: 'category', value: id }))
+        );
+
+        const allCourses = [];
+        const seenIds = new Set();
+        coursesByCategory.forEach(result => {
+            assertMoodleOk(result, 'Error buscando cursos semilla en Moodle');
+            (result?.courses || []).forEach(course => {
+                if (!seenIds.has(course.id)) {
+                    seenIds.add(course.id);
+                    allCourses.push(course);
+                }
+            });
+        });
+        return allCourses;
+    }
+
     // ─── PERMISOS ───────────────────────────────────────────────────────────────
 
     async function getPermisosMatrix() {
@@ -137,6 +234,8 @@ module.exports = (injectedDB) => {
         listRoles, createRole, updateRole,
         listModulos, createModulo, updateModulo,
         listSubmodulos, createSubmodulo, updateSubmodulo,
+        listReglas, createRegla, updateRegla, deleteRegla,
+        listMoodleCategorias, listMoodleSemillas,
         getPermisosMatrix, grantPermiso, revokePermiso
     };
 };

@@ -89,6 +89,14 @@ module.exports = (injectedDB) => {
         return data.updateEnrollmentSyncStatus(id, true);
     }
 
+    async function markEnrollmentSyncFailed(id) {
+        return data.updateEnrollmentSyncStatus(id, false);
+    }
+
+    async function setEnrollmentSyncFields(id, fields) {
+        return data.setEnrollmentSyncFields(id, fields);
+    }
+
     // ─── JOURNEY ──────────────────────────────────────────────────────────────
 
     async function saveJourneyEnrollment(enr) {
@@ -341,6 +349,8 @@ module.exports = (injectedDB) => {
         listEnrollmentsForSync,
         updateEnrollmentMoodleId,
         markEnrollmentAsSynchronized,
+        markEnrollmentSyncFailed,
+        setEnrollmentSyncFields,
         saveJourneyEnrollment,
         updateJourneyEnrollment,
         listEnrollmentsWithUsers,

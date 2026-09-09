@@ -28,12 +28,34 @@ module.exports = (injectedDB) => {
         return data.updateCourseSyncStatus(id, true);
     }
 
+    async function markCourseSyncFailed(id) {
+        return data.updateCourseSyncStatus(id, false);
+    }
+
+    async function setCourseSyncFields(id, fields) {
+        return data.setCourseSyncFields(id, fields);
+    }
+
+    async function resolveSyncRule(codigoAsignatura, programa, departamento) {
+        const rows = await data.findSyncRule(codigoAsignatura, programa, departamento);
+        return rows[0] || null;
+    }
+
+    async function findByIdnumber(idnumber) {
+        const rows = await data.findCourseSicau(idnumber);
+        return rows[0] || null;
+    }
+
     return {
         list,
         addElement,
         updateElement,
         listCoursesForSync,
         updateCourseMoodleId,
-        markCourseAsSynchronized
+        markCourseAsSynchronized,
+        markCourseSyncFailed,
+        setCourseSyncFields,
+        resolveSyncRule,
+        findByIdnumber
     };
 };

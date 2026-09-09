@@ -660,7 +660,7 @@ router.post('/sync/preview', checkAuth, checkPermission("sync_preview_enrollment
  */
 router.post('/sync', checkAuth, checkPermission("sync_enrollments"), async (req, res, next) => {
     try {
-        const result = await syncService.syncEnrollments(req.body.items || []);
+        const result = await syncService.syncEnrollments(req.body.items || [], req.user?.email);
         response.success(req, res, result || 'Datos cargados correctamente', 200);
     } catch (error) {
         next(error);

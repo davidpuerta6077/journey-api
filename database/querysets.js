@@ -423,6 +423,17 @@ const updateEnrollmentEstadoQuery = (id, estado) => ({
     values: [id, estado]
 });
 
+// Usada por el sync de matrículas: re-vincula courseid (por si aún era null),
+// guarda el id real de la matrícula en Moodle y marca sincronizado = true.
+const updateEnrollmentSyncFields = (id, { courseid, moodle_enrollment_id, sincronizado }) => ({
+    text: `
+        UPDATE ${schema}.enrollments
+        SET courseid = $1, moodle_enrollment_id = $2, sincronizado = $3
+        WHERE id = $4
+    `,
+    values: [courseid || null, moodle_enrollment_id || null, sincronizado, id]
+});
+
 const updateJourneyEnrollmentData = (data) => {
     const {
         id, userid, courseid, role,
@@ -471,6 +482,21 @@ const deleteEnrollmentData = (id) => ({
 const findMoodleUserByUsername = (username) => ({
     text: 'SELECT id, username FROM mdl_user WHERE username = ? AND deleted = 0 LIMIT 1',
     values: [username]
+});
+
+// El webservice manual de matriculación de Moodle no devuelve el id interno de la
+// matrícula (mdl_user_enrolments.id); se lee directo de su BD tras enrolar/suspender.
+// Esquema estándar de Moodle (mdl_user_enrolments/mdl_enrol), estable desde 2.x a 4.x.
+const findMoodleEnrolmentId = (courseId, userId) => ({
+    text: `
+        SELECT ue.id
+        FROM mdl_user_enrolments ue
+        INNER JOIN mdl_enrol e ON e.id = ue.enrolid
+        WHERE e.courseid = ? AND ue.userid = ? AND e.enrol = 'manual'
+        ORDER BY ue.id DESC
+        LIMIT 1
+    `,
+    values: [courseId, userId]
 });
 
 // ─── HEALTH ───────────────────────────────────────────────────────────────────
@@ -733,6 +759,119 @@ const insertLabGradeData = (data) => {
 };
 
 
+// ___ SYNC RULES ________________________________________________________________
+
+// Resuelve la regla mas especifica que matchee: codigo_asignatura (peso 4) >
+// programa+departamento (peso 3) > departamento solo (peso 1) > regla comodin
+// con las tres columnas en NULL (peso 0), si existe.
+const resolveSyncRule = (codigoAsignatura, programa, departamento) => ({
+    text: `
+        SELECT *,
+            (CASE WHEN codigo_asignatura IS NOT NULL THEN 4 ELSE 0 END +
+             CASE WHEN programa          IS NOT NULL THEN 2 ELSE 0 END +
+             CASE WHEN departamento      IS NOT NULL THEN 1 ELSE 0 END) AS specificity
+        FROM ${schema}.sync_rules
+        WHERE activo = true
+          AND (codigo_asignatura IS NULL OR codigo_asignatura = $1)
+          AND (programa          IS NULL OR programa          = $2)
+          AND (departamento      IS NULL OR departamento      = $3)
+        ORDER BY specificity DESC, id ASC
+        LIMIT 1
+    `,
+    values: [codigoAsignatura || null, programa || null, departamento || null]
+});
+
+// ___ SYNC RULES ADMIN (CRUD para /admin/reglas) _________________________________
+
+const selectSyncRulesAdmin = () => ({
+    text: `SELECT * FROM ${schema}.sync_rules ORDER BY id DESC`,
+    values: []
+});
+
+// Match exacto (no jerárquico) contra otras reglas activas, para evitar ambigüedad
+// al crear/editar. excludeId se usa al editar, para no chocar contra sí misma.
+const findSyncRuleExactMatch = (codigoAsignatura, programa, departamento, excludeId) => ({
+    text: `
+        SELECT id FROM ${schema}.sync_rules
+        WHERE activo = true
+          AND COALESCE(codigo_asignatura, '') = COALESCE($1, '')
+          AND COALESCE(programa, '')          = COALESCE($2, '')
+          AND COALESCE(departamento, '')      = COALESCE($3, '')
+          AND ($4::integer IS NULL OR id != $4)
+        LIMIT 1
+    `,
+    values: [codigoAsignatura || null, programa || null, departamento || null, excludeId || null]
+});
+
+const insertSyncRuleData = (data) => {
+    const { codigo_asignatura, programa, departamento, seed_shortname, categoryid, activo } = data;
+    return {
+        text: `
+            INSERT INTO ${schema}.sync_rules (codigo_asignatura, programa, departamento, seed_shortname, categoryid, activo)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING *
+        `,
+        values: [
+            codigo_asignatura || null,
+            programa || null,
+            departamento || null,
+            seed_shortname,
+            categoryid,
+            activo == null ? true : activo
+        ]
+    };
+};
+
+const updateSyncRuleData = (id, data) => {
+    const { codigo_asignatura, programa, departamento, seed_shortname, categoryid, activo } = data;
+    return {
+        text: `
+            UPDATE ${schema}.sync_rules
+            SET codigo_asignatura = $1, programa = $2, departamento = $3,
+                seed_shortname = $4, categoryid = $5, activo = $6, updated_at = now()
+            WHERE id = $7
+            RETURNING *
+        `,
+        values: [
+            codigo_asignatura || null,
+            programa || null,
+            departamento || null,
+            seed_shortname,
+            categoryid,
+            activo == null ? true : activo,
+            id
+        ]
+    };
+};
+
+const deleteSyncRuleData = (id) => ({
+    text: `DELETE FROM ${schema}.sync_rules WHERE id = $1`,
+    values: [id]
+});
+
+// ___ COURSE SYNC (Moodle) _______________________________________________________
+
+const updateCourseSyncFields = (id, { moodle_id, seed_course_id, categoryid }) => ({
+    text: `
+        UPDATE ${schema}.courses
+        SET moodle_id = $1, seed_course_id = $2, categoryid = $3
+        WHERE id = $4
+    `,
+    values: [moodle_id || null, seed_course_id || null, categoryid || null, id]
+});
+
+// ___ LOGS ________________________________________________________________________
+
+const insertLogData = (type, description, username, entityType, entityId) => ({
+    text: `
+        INSERT INTO ${schema}.logs (type, description, username, entity_type, entity_id)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING *
+    `,
+    values: [type, description, username || null, entityType || null, entityId || null]
+});
+
+
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 
@@ -774,11 +913,13 @@ module.exports = {
     findAllEnrollmentsWithUsers,
     findEnrollmentByUserAndCourse,
     updateEnrollmentEstadoQuery,
+    updateEnrollmentSyncFields,
     updateEnrollmentSyncStatusQuery,
     updateJourneyEnrollmentData,
     deleteEnrollmentData,
     // moodle
     findMoodleUserByUsername,
+    findMoodleEnrolmentId,
     // health
     healthCheck,
 
@@ -811,6 +952,16 @@ module.exports = {
     // virtual labs
     selectLabsGrades,
     insertLabGradeData,
+    // sync rules
+    resolveSyncRule,
+    updateCourseSyncFields,
+    selectSyncRulesAdmin,
+    findSyncRuleExactMatch,
+    insertSyncRuleData,
+    updateSyncRuleData,
+    deleteSyncRuleData,
+    // logs
+    insertLogData,
 
     //Permission
     checkPermissions,
