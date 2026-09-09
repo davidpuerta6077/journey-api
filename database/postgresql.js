@@ -29,6 +29,7 @@ const {
     selectRolePermissionsGrid, findRolePermission, insertRolePermissionData, deleteRolePermissionData,
     selectLabsGrades, insertLabGradeData,
     resolveSyncRule, updateCourseSyncFields, insertLogData, selectLogsData,
+    updateUserNormalizedData, updateCourseNormalizedData,
     selectSyncRulesAdmin, findSyncRuleExactMatch, insertSyncRuleData,
     updateSyncRuleData, deleteSyncRuleData
 } = require('./querysets');
@@ -287,6 +288,26 @@ function insertLog(type, description, username, entityType, entityId) {
 function listLogs(limit) {
     return new Promise((resolve, reject) => {
         pool.query(selectLogsData(limit), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+// ─── NORMALIZACIÓN ────────────────────────────────────────────────────────────
+
+function updateUserNormalized(id, fields) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateUserNormalizedData(id, fields), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updateCourseNormalized(id, fields) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateCourseNormalizedData(id, fields), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -730,6 +751,8 @@ module.exports = {
     findSyncRule,
     insertLog,
     listLogs,
+    updateUserNormalized,
+    updateCourseNormalized,
     listSyncRulesAdmin,
     findSyncRuleExact,
     insertSyncRuleAdmin,

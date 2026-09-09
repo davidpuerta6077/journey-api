@@ -894,6 +894,28 @@ const selectLogsData = (limit) => ({
     values: [limit]
 });
 
+// ___ NORMALIZACIÓN ______________________________________________________________
+// Updates acotados a los campos que se normalizan antes de sincronizar, para no
+// interferir con updateUsuarioData / updateCourseData.
+
+const updateUserNormalizedData = (id, { firstname, lastname, email, correo_personal }) => ({
+    text: `
+        UPDATE ${schema}.users
+        SET firstname = $1, lastname = $2, email = $3, correo_personal = $4
+        WHERE id = $5
+    `,
+    values: [firstname, lastname, email, correo_personal ?? null, id]
+});
+
+const updateCourseNormalizedData = (id, { fullname, shortname, nombre_asignatura }) => ({
+    text: `
+        UPDATE ${schema}.courses
+        SET fullname = $1, shortname = $2, nombre_asignatura = $3
+        WHERE id = $4
+    `,
+    values: [fullname, shortname, nombre_asignatura ?? null, id]
+});
+
 
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
@@ -986,6 +1008,9 @@ module.exports = {
     // logs
     insertLogData,
     selectLogsData,
+    // normalización
+    updateUserNormalizedData,
+    updateCourseNormalizedData,
 
     //Permission
     checkPermissions,

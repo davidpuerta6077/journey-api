@@ -474,7 +474,7 @@ router.post('/sync/preview', checkAuth, checkPermission("sync_preview_users"), a
  */
 router.post('/sync', checkAuth, checkPermission("sync_users"), saveLog("sync_users"), async (req, res, next) => {
     try {
-        const result = await syncService.syncStudents(req.body.items || []);
+        const result = await syncService.syncStudents(req.body.items || [], req.user?.email);
         response.success(req, res, result || 'Datos cargados correctamente', 200);
     } catch (error) {
         next(error);

@@ -46,6 +46,11 @@ module.exports = (injectedDB) => {
         return rows[0] || null;
     }
 
+    // Persiste los campos normalizados (fullname, shortname, nombre_asignatura).
+    async function applyNormalization(id, fields) {
+        return data.updateCourseNormalized(id, fields);
+    }
+
     return {
         list,
         addElement,
@@ -56,6 +61,7 @@ module.exports = (injectedDB) => {
         markCourseSyncFailed,
         setCourseSyncFields,
         resolveSyncRule,
-        findByIdnumber
+        findByIdnumber,
+        applyNormalization
     };
 };

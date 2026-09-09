@@ -2,6 +2,9 @@ const coursesCtrl = require('../../api/courses/index');
 const { moodleRequest } = require('../moodleService');
 const { logSyncError } = require('../syncLog');
 const { assertMoodleOk } = require('../moodleAssert');
+const { normalizeCourse, difiere } = require('../normalize');
+
+const CAMPOS_NORM = ['fullname', 'shortname', 'nombre_asignatura'];
 
 async function syncCourses(items = [], username = 'system') {
     const results = [];
@@ -13,6 +16,17 @@ async function syncCourses(items = [], username = 'system') {
             if (!course.id) {
                 throw new Error('Sin ID de curso');
             }
+
+            // Normalizar antes de mandar a Moodle: limpiar espacios en
+            // fullname/shortname y capitalizar nombre_asignatura. Si cambió algo,
+            // se persiste también en la BD de Journey.
+            const norm = normalizeCourse(course);
+            if (difiere(course, norm, CAMPOS_NORM)) {
+                await coursesCtrl.applyNormalization(course.id, norm);
+            }
+            if (norm.fullname != null) course.fullname = norm.fullname;
+            if (norm.shortname != null) course.shortname = norm.shortname;
+            if (norm.nombre_asignatura != null) course.nombre_asignatura = norm.nombre_asignatura;
 
             // ─── Idempotencia: el curso ya existe en Moodle ────────────────────
             // No se recrea; solo se actualiza la metadata que pudo cambiar
