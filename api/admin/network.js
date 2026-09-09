@@ -519,6 +519,52 @@ router.get('/moodle_semillas', checkAuth, checkPermission('rules_templates'), as
     }
 });
 
+/**
+ * @swagger
+ * /admin/moodle_categorias:
+ *   post:
+ *     summary: Crear una categoría nueva en Moodle (para usarla como destino de una regla)
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name:   { type: string }
+ *               parent: { type: integer, description: "categoryid padre (0 = raíz)" }
+ *     responses:
+ *       200: { description: Categoría creada }
+ */
+router.post('/moodle_categorias', checkAuth, checkPermission('rules_active'), async (req, res, next) => {
+    try {
+        const result = await ctrl.createMoodleCategoria(req.body);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/asignaturas:
+ *   get:
+ *     summary: Listar códigos y nombres de asignatura ya vistos en cursos sincronizados (para el buscador del formulario de reglas)
+ *     tags: [Admin]
+ *     responses:
+ *       200: { description: Lista de asignaturas }
+ */
+router.get('/asignaturas', checkAuth, checkPermission('rules_active'), async (req, res, next) => {
+    try {
+        const result = await ctrl.listAsignaturas();
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
 // ─── PERMISOS ─────────────────────────────────────────────────────────────────────
 
 /**

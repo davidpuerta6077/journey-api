@@ -22,15 +22,21 @@ async function applyCourseRule(items = [], username = 'system') {
                 throw new Error('El curso ya está sincronizado en Moodle; no aplica re-resolver la regla');
             }
 
-            const rule = await coursesCtrl.resolveSyncRule(
-                course.codigo_asignatura,
-                course.programa,
-                course.departamento
-            );
+            // Si el usuario eligió a mano una regla puntual en Sync Cursos, se usa esa
+            // en vez de resolverla automáticamente por codigo_asignatura/programa/departamento.
+            const rule = course.rule_id
+                ? await coursesCtrl.getSyncRuleById(course.rule_id)
+                : await coursesCtrl.resolveSyncRule(
+                    course.codigo_asignatura,
+                    course.programa,
+                    course.departamento
+                );
             if (!rule) {
                 throw new Error(
-                    `No se encontró una regla de sincronización (sync_rules) aplicable a ` +
-                    `codigo_asignatura=${course.codigo_asignatura}, programa=${course.programa}, departamento=${course.departamento}`
+                    course.rule_id
+                        ? `La regla seleccionada (id ${course.rule_id}) no existe o está inactiva`
+                        : `No se encontró una regla de sincronización (sync_rules) aplicable a ` +
+                          `codigo_asignatura=${course.codigo_asignatura}, programa=${course.programa}, departamento=${course.departamento}`
                 );
             }
 

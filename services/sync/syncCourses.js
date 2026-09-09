@@ -2,6 +2,15 @@ const coursesCtrl = require('../../api/courses/index');
 const { moodleRequest } = require('../moodleService');
 const { logSyncError } = require('../syncLog');
 const { assertMoodleOk } = require('../moodleAssert');
+const { duplicateSeedCourse } = require('./duplicateSeedCourse');
+
+// Moodle espera startdate/enddate como timestamp Unix (segundos); fecha_inicio/
+// fecha_fin llegan de SICAU como fecha/timestamp de Postgres.
+function toUnixTimestamp(value) {
+    if (!value) return null;
+    const ms = new Date(value).getTime();
+    return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
+}
 
 async function syncCourses(items = [], username = 'system') {
     const results = [];
@@ -14,15 +23,21 @@ async function syncCourses(items = [], username = 'system') {
                 throw new Error('Sin ID de curso');
             }
 
+            await coursesCtrl.markCourseSyncing(course.id);
+
             // ─── Idempotencia: el curso ya existe en Moodle ────────────────────
             // No se recrea; solo se actualiza la metadata que pudo cambiar
             // (fechas, docente, nombre, etc. ya viven en fullname/shortname).
             if (course.moodle_id) {
+                const startdate = toUnixTimestamp(course.fecha_inicio);
+                const enddate   = toUnixTimestamp(course.fecha_fin);
                 const updateResp = await moodleRequest('core_course_update_courses', {
                     'courses[0][id]':        course.moodle_id,
                     'courses[0][fullname]':  course.fullname,
                     'courses[0][shortname]': course.shortname,
-                    'courses[0][idnumber]':  course.idnumber
+                    'courses[0][idnumber]':  course.idnumber,
+                    ...(startdate ? { 'courses[0][startdate]': startdate } : {}),
+                    ...(enddate   ? { 'courses[0][enddate]':   enddate }   : {})
                 });
                 assertMoodleOk(updateResp, 'Error actualizando metadata del curso existente');
 
@@ -35,22 +50,28 @@ async function syncCourses(items = [], username = 'system') {
                 continue;
             }
 
-            // ─── No existe todavía: usar la regla pre-aplicada (botón "Aplicar
-            // regla" en Sync Cursos) si ya está guardada, o resolverla ahora ────
-            let categoryid = course.categoryid;
-            let semillaId  = course.seed_course_id;
+            // ─── No existe todavía: resolver semilla/categoría ─────────────────
+            // Si el usuario eligió a mano una regla puntual (rule_id, desde el
+            // selector de Sync Cursos), esa manda siempre, aunque el curso ya
+            // tuviera categoryid/seed_course_id de una corrida anterior.
+            let categoryid = course.rule_id ? null : course.categoryid;
+            let semillaId  = course.rule_id ? null : course.seed_course_id;
             let seedShortnameUsado = semillaId ? `id ${semillaId} (regla ya aplicada)` : null;
 
             if (!semillaId || !categoryid) {
-                const rule = await coursesCtrl.resolveSyncRule(
-                    course.codigo_asignatura,
-                    course.programa,
-                    course.departamento
-                );
+                const rule = course.rule_id
+                    ? await coursesCtrl.getSyncRuleById(course.rule_id)
+                    : await coursesCtrl.resolveSyncRule(
+                        course.codigo_asignatura,
+                        course.programa,
+                        course.departamento
+                    );
                 if (!rule) {
                     throw new Error(
-                        `No se encontró una regla de sincronización (sync_rules) aplicable a ` +
-                        `codigo_asignatura=${course.codigo_asignatura}, programa=${course.programa}, departamento=${course.departamento}`
+                        course.rule_id
+                            ? `La regla seleccionada (id ${course.rule_id}) no existe o está inactiva`
+                            : `No se encontró una regla de sincronización (sync_rules) aplicable a ` +
+                              `codigo_asignatura=${course.codigo_asignatura}, programa=${course.programa}, departamento=${course.departamento}`
                     );
                 }
 
@@ -67,38 +88,30 @@ async function syncCourses(items = [], username = 'system') {
                 seedShortnameUsado = rule.seed_shortname;
             }
 
-            // 2. Duplicar el curso semilla en la categoría resuelta por la regla
-            const duplicado = await moodleRequest('core_course_duplicate_course', {
-                'courseid':   semillaId,
-                'fullname':   course.fullname,
-                'shortname':  course.shortname,
-                'categoryid': categoryid,
-                'visible':    1
+            // 2. Duplicar el curso semilla en la categoría resuelta por la regla,
+            // y fijar el idnumber (código journey)/fechas del curso duplicado
+            // (la semilla trae sus propias fechas, que no aplican al periodo
+            // real del curso nuevo).
+            const { moodle_id } = await duplicateSeedCourse({
+                semillaId,
+                categoryid,
+                fullname: course.fullname,
+                shortname: course.shortname,
+                idnumber: course.idnumber,
+                fecha_inicio: course.fecha_inicio,
+                fecha_fin: course.fecha_fin
             });
-            assertMoodleOk(duplicado, 'Error duplicando el curso semilla');
-            if (!duplicado?.id) {
-                throw new Error('Moodle no devolvió el ID del curso duplicado');
-            }
 
-            // 3. Fijar el idnumber (código journey) del curso duplicado
-            const idnumberResp = await moodleRequest('core_course_update_courses', {
-                'courses[0][id]':        duplicado.id,
-                'courses[0][idnumber]':  course.idnumber,
-                'courses[0][fullname]':  course.fullname,
-                'courses[0][shortname]': course.shortname
-            });
-            assertMoodleOk(idnumberResp, 'Error fijando el idnumber del curso');
-
-            // 4. Guardar moodle_id/seed_course_id/categoryid y marcar como sincronizado
+            // 3. Guardar moodle_id/seed_course_id/categoryid y marcar como sincronizado
             await coursesCtrl.setCourseSyncFields(course.id, {
-                moodle_id: duplicado.id,
+                moodle_id,
                 seed_course_id: semillaId,
                 categoryid: categoryid
             });
             await coursesCtrl.markCourseAsSynchronized(course.id);
 
             result.status = 'success';
-            result.moodle_id = duplicado.id;
+            result.moodle_id = moodle_id;
             result.message = `Curso creado en Moodle desde semilla ${seedShortnameUsado}`;
 
         } catch (error) {
@@ -106,7 +119,7 @@ async function syncCourses(items = [], username = 'system') {
             result.status = 'error';
             result.error = error.message;
             if (course.id) {
-                await coursesCtrl.markCourseSyncFailed(course.id);
+                await coursesCtrl.markCourseSyncFailed(course.id, error.message);
                 await logSyncError('course', course.id, error.message, username);
             }
         }

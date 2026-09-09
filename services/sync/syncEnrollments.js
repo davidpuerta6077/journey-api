@@ -6,11 +6,13 @@ const { logSyncError } = require('../syncLog');
 const { getMoodleEnrolmentId } = require('../moodle/getMoodleEnrolment');
 
 // Rol local (ya normalizado a string de Moodle por el módulo de ingreso SICAU:
-// ESTUDIANTE→student, DOCENTE→editingteacher) → roleid numérico que espera Moodle.
+// ESTUDIANTE→student, DOCENTE→editingteacher, TUTOR→teacher; "gestor" solo se
+// asigna manualmente desde Módulos > Matrículas) → roleid numérico que espera Moodle.
 const ROLE_ID_MAP = {
     student:        5,
     editingteacher: 3,
-    teacher:        4
+    teacher:        4,
+    gestor:         1
 };
 
 // Mapeo de estado académico (SICAU + edición manual) → acción sobre la matrícula en Moodle.
