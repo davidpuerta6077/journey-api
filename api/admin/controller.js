@@ -229,6 +229,12 @@ module.exports = (injectedDB) => {
         return { role_id, submodule_id, revoked: true };
     }
 
+    // ─── LOGS ───────────────────────────────────────────────────────────────────
+
+    async function listLogs() {
+        return data.listLogs(300);
+    }
+
     return {
         listUsuarios, createUsuario, updateUsuario, setUsuarioEstado,
         listRoles, createRole, updateRole,
@@ -236,6 +242,7 @@ module.exports = (injectedDB) => {
         listSubmodulos, createSubmodulo, updateSubmodulo,
         listReglas, createRegla, updateRegla, deleteRegla,
         listMoodleCategorias, listMoodleSemillas,
-        getPermisosMatrix, grantPermiso, revokePermiso
+        getPermisosMatrix, grantPermiso, revokePermiso,
+        listLogs
     };
 };

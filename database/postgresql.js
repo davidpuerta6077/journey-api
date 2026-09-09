@@ -28,7 +28,7 @@ const {
     selectSubmodulesAdmin, insertSubmoduleData, updateSubmoduleData,
     selectRolePermissionsGrid, findRolePermission, insertRolePermissionData, deleteRolePermissionData,
     selectLabsGrades, insertLabGradeData,
-    resolveSyncRule, updateCourseSyncFields, insertLogData,
+    resolveSyncRule, updateCourseSyncFields, insertLogData, selectLogsData,
     selectSyncRulesAdmin, findSyncRuleExactMatch, insertSyncRuleData,
     updateSyncRuleData, deleteSyncRuleData
 } = require('./querysets');
@@ -278,6 +278,15 @@ function findSyncRule(codigoAsignatura, programa, departamento) {
 function insertLog(type, description, username, entityType, entityId) {
     return new Promise((resolve, reject) => {
         pool.query(insertLogData(type, description, username, entityType, entityId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function listLogs(limit) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectLogsData(limit), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -720,6 +729,7 @@ module.exports = {
     setCourseSyncFields,
     findSyncRule,
     insertLog,
+    listLogs,
     listSyncRulesAdmin,
     findSyncRuleExact,
     insertSyncRuleAdmin,

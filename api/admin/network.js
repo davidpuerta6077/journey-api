@@ -4,6 +4,7 @@ const response = require('../../network/response');
 const ctrl = require('./index');
 const checkAuth = require('../../middleware/checkAuth');
 const checkPermission = require('../../middleware/checkPermissions');
+const saveLog = require('../../middleware/saveLog');
 
 // ─── USUARIOS DE PLATAFORMA ─────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ router.get('/usuarios', checkAuth, checkPermission('admin_users'), async (req, r
  *       200: { description: Usuario de plataforma creado }
  *       409: { description: Ya existe un usuario con ese email o username }
  */
-router.post('/usuarios', checkAuth, checkPermission('admin_users'), async (req, res, next) => {
+router.post('/usuarios', checkAuth, checkPermission('admin_users'), saveLog('admin_users'), async (req, res, next) => {
     try {
         const result = await ctrl.createUsuario(req.body, null);
         response.success(req, res, result, 200);
@@ -78,7 +79,7 @@ router.post('/usuarios', checkAuth, checkPermission('admin_users'), async (req, 
  *     responses:
  *       200: { description: Usuario de plataforma actualizado }
  */
-router.put('/usuarios/:id', checkAuth, checkPermission('admin_users'), async (req, res, next) => {
+router.put('/usuarios/:id', checkAuth, checkPermission('admin_users'), saveLog('admin_users'), async (req, res, next) => {
     try {
         const result = await ctrl.updateUsuario(req.params.id, req.body);
         response.success(req, res, result, 200);
@@ -110,7 +111,7 @@ router.put('/usuarios/:id', checkAuth, checkPermission('admin_users'), async (re
  *     responses:
  *       200: { description: Estado actualizado }
  */
-router.post('/usuarios/:id/estado', checkAuth, checkPermission('admin_users'), async (req, res, next) => {
+router.post('/usuarios/:id/estado', checkAuth, checkPermission('admin_users'), saveLog('admin_users'), async (req, res, next) => {
     try {
         const result = await ctrl.setUsuarioEstado(req.params.id, !!req.body.estado);
         response.success(req, res, result, 200);
@@ -158,7 +159,7 @@ router.get('/roles', checkAuth, checkPermission('admin_roles'), async (req, res,
  *     responses:
  *       200: { description: Rol creado }
  */
-router.post('/roles', checkAuth, checkPermission('admin_roles'), async (req, res, next) => {
+router.post('/roles', checkAuth, checkPermission('admin_roles'), saveLog('admin_roles'), async (req, res, next) => {
     try {
         const result = await ctrl.createRole(req.body);
         response.success(req, res, result, 200);
@@ -190,7 +191,7 @@ router.post('/roles', checkAuth, checkPermission('admin_roles'), async (req, res
  *     responses:
  *       200: { description: Rol actualizado }
  */
-router.put('/roles/:id', checkAuth, checkPermission('admin_roles'), async (req, res, next) => {
+router.put('/roles/:id', checkAuth, checkPermission('admin_roles'), saveLog('admin_roles'), async (req, res, next) => {
     try {
         const result = await ctrl.updateRole(req.params.id, req.body);
         response.success(req, res, result, 200);
@@ -238,7 +239,7 @@ router.get('/modulos', checkAuth, checkPermission('admin_modules'), async (req, 
  *     responses:
  *       200: { description: Módulo creado }
  */
-router.post('/modulos', checkAuth, checkPermission('admin_modules'), async (req, res, next) => {
+router.post('/modulos', checkAuth, checkPermission('admin_modules'), saveLog('admin_modules'), async (req, res, next) => {
     try {
         const result = await ctrl.createModulo(req.body);
         response.success(req, res, result, 200);
@@ -270,7 +271,7 @@ router.post('/modulos', checkAuth, checkPermission('admin_modules'), async (req,
  *     responses:
  *       200: { description: Módulo actualizado }
  */
-router.put('/modulos/:id', checkAuth, checkPermission('admin_modules'), async (req, res, next) => {
+router.put('/modulos/:id', checkAuth, checkPermission('admin_modules'), saveLog('admin_modules'), async (req, res, next) => {
     try {
         const result = await ctrl.updateModulo(req.params.id, req.body);
         response.success(req, res, result, 200);
@@ -319,7 +320,7 @@ router.get('/submodulos', checkAuth, checkPermission('admin_modules'), async (re
  *     responses:
  *       200: { description: Submódulo creado }
  */
-router.post('/submodulos', checkAuth, checkPermission('admin_modules'), async (req, res, next) => {
+router.post('/submodulos', checkAuth, checkPermission('admin_modules'), saveLog('admin_modules'), async (req, res, next) => {
     try {
         const result = await ctrl.createSubmodulo(req.body);
         response.success(req, res, result, 200);
@@ -352,7 +353,7 @@ router.post('/submodulos', checkAuth, checkPermission('admin_modules'), async (r
  *     responses:
  *       200: { description: Submódulo actualizado }
  */
-router.put('/submodulos/:id', checkAuth, checkPermission('admin_modules'), async (req, res, next) => {
+router.put('/submodulos/:id', checkAuth, checkPermission('admin_modules'), saveLog('admin_modules'), async (req, res, next) => {
     try {
         const result = await ctrl.updateSubmodulo(req.params.id, req.body);
         response.success(req, res, result, 200);
@@ -405,7 +406,7 @@ router.get('/reglas', checkAuth, checkPermission('rules_active'), async (req, re
  *       200: { description: Regla creada }
  *       409: { description: Ya existe una regla activa con esa combinación }
  */
-router.post('/reglas', checkAuth, checkPermission('rules_active'), async (req, res, next) => {
+router.post('/reglas', checkAuth, checkPermission('rules_active'), saveLog('rules_active'), async (req, res, next) => {
     try {
         const result = await ctrl.createRegla(req.body);
         response.success(req, res, result, 200);
@@ -442,7 +443,7 @@ router.post('/reglas', checkAuth, checkPermission('rules_active'), async (req, r
  *       200: { description: Regla actualizada }
  *       409: { description: Ya existe otra regla activa con esa combinación }
  */
-router.put('/reglas/:id', checkAuth, checkPermission('rules_active'), async (req, res, next) => {
+router.put('/reglas/:id', checkAuth, checkPermission('rules_active'), saveLog('rules_active'), async (req, res, next) => {
     try {
         const result = await ctrl.updateRegla(req.params.id, req.body);
         response.success(req, res, result, 200);
@@ -465,7 +466,7 @@ router.put('/reglas/:id', checkAuth, checkPermission('rules_active'), async (req
  *     responses:
  *       200: { description: Regla eliminada }
  */
-router.delete('/reglas/:id', checkAuth, checkPermission('rules_active'), async (req, res, next) => {
+router.delete('/reglas/:id', checkAuth, checkPermission('rules_active'), saveLog('rules_active'), async (req, res, next) => {
     try {
         const result = await ctrl.deleteRegla(req.params.id);
         response.success(req, res, result, 200);
@@ -558,7 +559,7 @@ router.get('/permisos', checkAuth, checkPermission('admin_permissions'), async (
  *     responses:
  *       200: { description: Permiso otorgado }
  */
-router.post('/permisos/grant', checkAuth, checkPermission('admin_permissions'), async (req, res, next) => {
+router.post('/permisos/grant', checkAuth, checkPermission('admin_permissions'), saveLog('admin_permissions'), async (req, res, next) => {
     try {
         const result = await ctrl.grantPermiso(req.body, null);
         response.success(req, res, result, 200);
@@ -586,9 +587,29 @@ router.post('/permisos/grant', checkAuth, checkPermission('admin_permissions'), 
  *     responses:
  *       200: { description: Permiso revocado }
  */
-router.post('/permisos/revoke', checkAuth, checkPermission('admin_permissions'), async (req, res, next) => {
+router.post('/permisos/revoke', checkAuth, checkPermission('admin_permissions'), saveLog('admin_permissions'), async (req, res, next) => {
     try {
         const result = await ctrl.revokePermiso(req.body);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ─── LOGS ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /admin/logs:
+ *   get:
+ *     summary: Listar registros de auditoría (últimos 300, más recientes primero)
+ *     tags: [Admin]
+ *     responses:
+ *       200: { description: Lista de logs (usuario, aplicación, descripción, fecha) }
+ */
+router.get('/logs', checkAuth, checkPermission('admin_logs'), async (req, res, next) => {
+    try {
+        const result = await ctrl.listLogs();
         response.success(req, res, result, 200);
     } catch (error) {
         next(error);

@@ -871,6 +871,29 @@ const insertLogData = (type, description, username, entityType, entityId) => ({
     values: [type, description, username || null, entityType || null, entityId || null]
 });
 
+// entity_type guarda el código de submódulo (el mismo que checkPermission).
+// Se resuelve contra submodules/modules: modules.name es la categoría principal
+// del menú lateral (Journey Sync, Administrador, ...) y submodules.name el módulo.
+// El front puede afinar el nombre con el árbol del menú (menuItems).
+const selectLogsData = (limit) => ({
+    text: `
+        SELECT l.id,
+               l.date,
+               l.type,
+               l.description,
+               l.username,
+               l.entity_type,
+               m.name  AS aplicacion,
+               sm.name AS modulo
+        FROM ${schema}.logs l
+        LEFT JOIN ${schema}.submodules sm ON sm.code = l.entity_type
+        LEFT JOIN ${schema}.modules m ON m.id = sm.module_id
+        ORDER BY l.date DESC
+        LIMIT $1
+    `,
+    values: [limit]
+});
+
 
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
@@ -962,6 +985,7 @@ module.exports = {
     deleteSyncRuleData,
     // logs
     insertLogData,
+    selectLogsData,
 
     //Permission
     checkPermissions,
