@@ -64,9 +64,31 @@ module.exports = (injectedDB) => {
         const idnumber  = `${codigo_asignatura}${periodo}${grupo}`;
         const templatecourse = `SEMILLA-${codigo_asignatura}`;
 
-        // Verificar si ya existe
-        const existing = await data.findCourseByShortnameFn(shortname);
+        // Verificar si ya existe: por idnumber (codigo_asignatura+periodo+grupo),
+        // el código journey -único- de "este grupo en este periodo", NO por
+        // shortname. El shortname incluye nombre_asignatura, así que si SICAU
+        // corrige el nombre de la asignatura (como pasó: mismo grupo/periodo,
+        // pero cambió de "Gestión de Inventarios" a "Dibujo Técnico") el
+        // shortname cambia y buscar por ahí no lo encuentra: se insertaba como
+        // curso nuevo y al sincronizar se duplicaba la semilla otra vez con el
+        // mismo idnumber que el curso original, chocando porque el idnumber
+        // tiene que ser único en Moodle.
+        const existing = await data.findCourseSicau(idnumber);
         if (existing.length > 0) {
+            const curso = existing[0];
+            const cambioDocente   = (curso.docente || null) !== (docente || null);
+            const cambioAsignatura = (curso.nombre_asignatura || null) !== (nombre_asignatura || null);
+            if (cambioDocente || cambioAsignatura) {
+                // Si el curso ya existe en Moodle (moodle_id), no es un curso nuevo,
+                // solo cambió su metadata: se marca "novedad" para que Módulo
+                // Cursos lo muestre en amarillo con opción de actualizar en Moodle
+                // (no se vuelve a duplicar). Si nunca se creó en Moodle, sigue
+                // "pendiente": todavía necesita el ciclo completo de duplicado en
+                // Sync Cursos, no un simple update de metadata.
+                const estadoDestino = curso.moodle_id ? 'novedad' : 'pendiente';
+                await data.updateCourseFromSicau(curso.id, { docente, fullname, shortname, nombre_asignatura, estado_sync: estadoDestino });
+                return { idnumber, status: 'updated_docente' };
+            }
             return { idnumber, status: 'exists' };
         }
 
