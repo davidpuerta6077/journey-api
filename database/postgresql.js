@@ -32,7 +32,12 @@ const {
     resolveSyncRule, updateCourseSyncFields, insertLogData, selectLogsData,
     updateUserNormalizedData, updateCourseNormalizedData,
     selectSyncRulesAdmin, selectSyncRuleById, findSyncRuleExactMatch, insertSyncRuleData,
-    updateSyncRuleData, deleteSyncRuleData
+    updateSyncRuleData, deleteSyncRuleData,
+    selectAllReports,
+    selectReportById,
+    insertReportData,
+    updateReportData,
+    deleteReportData,
 } = require('./querysets');
  
 const pool = new Pool({
@@ -769,6 +774,53 @@ function insertLabGrade(data) {
     });
 }
 
+// ─── REPORTS ──────────────────────────────────────────────────────────────────
+
+function listReports() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectAllReports(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function findReportById(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectReportById(id), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows[0] || null);
+        });
+    });
+}
+
+function insertReport(dataIn) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertReportData(dataIn), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updateReport(id, dataIn) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateReportData(id, dataIn), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function deleteReport(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(deleteReportData(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -853,5 +905,11 @@ module.exports = {
     listLabsGrades,
     insertLabGrade,
     grantRolePermission,
-    revokeRolePermission
+    revokeRolePermission,
+    // reports
+    listReports,
+    findReportById,
+    insertReport,
+    updateReport,
+    deleteReport,
 };

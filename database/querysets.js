@@ -553,6 +553,45 @@ const findMoodleEnrolmentId = (courseId, userId) => ({
     values: [courseId, userId]
 });
 
+// Conteo de cursos y estudiantes (rol 'student') por categoría de Moodle.
+// - categoryId null  => todas las categorías.
+// - categoryId + incluirSubcategorias => la categoría indicada y todas las que
+//   cuelgan de ella (mdl_course_categories.path, ej. "/1/5/12").
+// Esquema estándar de Moodle (mdl_course/mdl_course_categories/mdl_context/
+// mdl_role_assignments/mdl_role), estable de 2.x a 4.x.
+const countCoursesStudentsByCategory = ({ categoryId = null, incluirSubcategorias = true }) => {
+    const where = [];
+    const values = [];
+    if (categoryId != null) {
+        if (incluirSubcategorias) {
+            where.push(`(cc.id = ? OR cc.path LIKE CONCAT((SELECT path FROM mdl_course_categories WHERE id = ?), '/%'))`);
+            values.push(categoryId, categoryId);
+        } else {
+            where.push(`cc.id = ?`);
+            values.push(categoryId);
+        }
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    return {
+        text: `
+            SELECT cc.id   AS categoria_id,
+                   cc.name AS categoria,
+                   cc.path AS path,
+                   COUNT(DISTINCT c.id) AS cursos,
+                   COUNT(DISTINCT CASE WHEN r.shortname = 'student' THEN ra.userid END) AS estudiantes
+            FROM mdl_course_categories cc
+            LEFT JOIN mdl_course c            ON c.category = cc.id AND c.id <> 1
+            LEFT JOIN mdl_context ctx         ON ctx.instanceid = c.id AND ctx.contextlevel = 50
+            LEFT JOIN mdl_role_assignments ra ON ra.contextid = ctx.id
+            LEFT JOIN mdl_role r              ON r.id = ra.roleid
+            ${whereSql}
+            GROUP BY cc.id, cc.name, cc.path
+            ORDER BY cc.name
+        `,
+        values
+    };
+};
+
 // ─── HEALTH ───────────────────────────────────────────────────────────────────
 
 const healthCheck = () => ({
@@ -978,6 +1017,43 @@ const updateCourseNormalizedData = (id, { fullname, shortname, nombre_asignatura
 });
 
 
+// ─── REPORTS ──────────────────────────────────────────────────────────────────
+
+const selectAllReports = () => ({
+    text: `SELECT * FROM ${schema}.reports ORDER BY created_at DESC`,
+    values: []
+});
+
+const selectReportById = (id) => ({
+    text: `SELECT * FROM ${schema}.reports WHERE id = $1`,
+    values: [id]
+});
+
+const insertReportData = ({ nombre, tipo, params, descripcion, created_by }) => ({
+    text: `
+        INSERT INTO ${schema}.reports (nombre, tipo, params, descripcion, created_by)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING *
+    `,
+    values: [nombre, tipo, params ?? {}, descripcion ?? null, created_by ?? null]
+});
+
+const updateReportData = (id, { nombre, params, descripcion }) => ({
+    text: `
+        UPDATE ${schema}.reports
+        SET nombre = $1, params = $2, descripcion = $3, updated_at = now()
+        WHERE id = $4
+        RETURNING *
+    `,
+    values: [nombre, params ?? {}, descripcion ?? null, id]
+});
+
+const deleteReportData = (id) => ({
+    text: `DELETE FROM ${schema}.reports WHERE id = $1`,
+    values: [id]
+});
+
+
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 
@@ -1030,6 +1106,7 @@ module.exports = {
     // moodle
     findMoodleUserByUsername,
     findMoodleEnrolmentId,
+    countCoursesStudentsByCategory,
     // health
     healthCheck,
 
@@ -1077,6 +1154,12 @@ module.exports = {
     // normalización
     updateUserNormalizedData,
     updateCourseNormalizedData,
+    // reports
+    selectAllReports,
+    selectReportById,
+    insertReportData,
+    updateReportData,
+    deleteReportData,
 
     //Permission
     checkPermissions,
