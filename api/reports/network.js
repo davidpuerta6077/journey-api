@@ -52,7 +52,9 @@ router.get('/tipos', checkAuth, checkPermission(PERM), async (req, res, next) =>
  *       200: { description: Resultado del reporte }
  *       400: { description: Tipo no soportado o faltan datos }
  */
-router.post('/run', checkAuth, checkPermission(PERM), saveLog(PERM), async (req, res, next) => {
+router.post('/run', checkAuth, checkPermission(PERM),
+    saveLog(PERM, { descripcion: (req) => `Previsualizó un reporte ad-hoc de tipo "${req.body?.tipo || '—'}"` }),
+    async (req, res, next) => {
     try {
         const result = await ctrl.ejecutarAdHoc(req.body.tipo, req.body.params || {});
         response.success(req, res, result, 200);
@@ -118,7 +120,13 @@ router.get('/:id', checkAuth, checkPermission(PERM), async (req, res, next) => {
  *       200: { description: Resultado del reporte }
  *       404: { description: Reporte no encontrado }
  */
-router.get('/:id/run', checkAuth, checkPermission(PERM), async (req, res, next) => {
+router.get('/:id/run', checkAuth, checkPermission(PERM),
+    saveLog(PERM, {
+        incluirGet: true,
+        entityId: (req) => req.params.id,
+        descripcion: (req) => `Ejecutó el reporte #${req.params.id}`,
+    }),
+    async (req, res, next) => {
     try {
         const result = await ctrl.ejecutarReporte(req.params.id);
         response.success(req, res, result, 200);
@@ -149,7 +157,9 @@ router.get('/:id/run', checkAuth, checkPermission(PERM), async (req, res, next) 
  *       200: { description: Reporte creado }
  *       400: { description: Faltan datos o tipo no soportado }
  */
-router.post('/', checkAuth, checkPermission(PERM), saveLog(PERM), async (req, res, next) => {
+router.post('/', checkAuth, checkPermission(PERM),
+    saveLog(PERM, { descripcion: (req) => `Creó el reporte "${req.body?.nombre || '—'}" (tipo: ${req.body?.tipo || '—'})` }),
+    async (req, res, next) => {
     try {
         const result = await ctrl.createReporte(req.body, req.user.email);
         response.success(req, res, result, 200);
@@ -183,7 +193,12 @@ router.post('/', checkAuth, checkPermission(PERM), saveLog(PERM), async (req, re
  *       200: { description: Reporte actualizado }
  *       404: { description: Reporte no encontrado }
  */
-router.put('/:id', checkAuth, checkPermission(PERM), saveLog(PERM), async (req, res, next) => {
+router.put('/:id', checkAuth, checkPermission(PERM),
+    saveLog(PERM, {
+        entityId: (req) => req.params.id,
+        descripcion: (req) => `Editó el reporte #${req.params.id}${req.body?.nombre ? ` ("${req.body.nombre}")` : ''}`,
+    }),
+    async (req, res, next) => {
     try {
         const result = await ctrl.updateReporte(req.params.id, req.body);
         response.success(req, res, result, 200);
@@ -207,7 +222,12 @@ router.put('/:id', checkAuth, checkPermission(PERM), saveLog(PERM), async (req, 
  *       200: { description: Reporte eliminado }
  *       404: { description: Reporte no encontrado }
  */
-router.delete('/:id', checkAuth, checkPermission(PERM), saveLog(PERM), async (req, res, next) => {
+router.delete('/:id', checkAuth, checkPermission(PERM),
+    saveLog(PERM, {
+        entityId: (req) => req.params.id,
+        descripcion: (req) => `Eliminó el reporte #${req.params.id}`,
+    }),
+    async (req, res, next) => {
     try {
         const result = await ctrl.deleteReporte(req.params.id);
         response.success(req, res, result, 200);
