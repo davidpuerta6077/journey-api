@@ -1,20 +1,13 @@
 const db = require('../../../database/postgresql');
-const config = require('../../../config');
 const { meta, normEnum } = require('../_util');
-const schema = config.postgresql.schema;
 
 async function virtualLabsGrades(params = {}) {
     const agruparPor = normEnum(params.agruparPor, ['curso', 'estudiante', 'detalle'], 'curso');
 
-    let text;
     let columns;
     let mapRow;
 
     if (agruparPor === 'estudiante') {
-        text = `SELECT id_estudiante, correo, COUNT(*)::int AS calificaciones,
-                       ROUND(AVG(calificacion)::numeric,2) AS promedio
-                FROM ${schema}.labs_grades
-                GROUP BY id_estudiante, correo ORDER BY promedio DESC NULLS LAST`;
         columns = [
             { key: 'id_estudiante', label: 'Estudiante' },
             { key: 'correo', label: 'Correo' },
@@ -23,8 +16,6 @@ async function virtualLabsGrades(params = {}) {
         ];
         mapRow = (r) => ({ id_estudiante: r.id_estudiante, correo: r.correo, calificaciones: r.calificaciones, promedio: r.promedio });
     } else if (agruparPor === 'detalle') {
-        text = `SELECT id, id_estudiante, correo, id_curso, calificacion, created_at
-                FROM ${schema}.labs_grades ORDER BY created_at DESC`;
         columns = [
             { key: 'id', label: 'ID' },
             { key: 'id_estudiante', label: 'Estudiante' },
@@ -42,10 +33,6 @@ async function virtualLabsGrades(params = {}) {
             created_at: r.created_at,
         });
     } else {
-        text = `SELECT id_curso, COUNT(*)::int AS calificaciones,
-                       ROUND(AVG(calificacion)::numeric,2) AS promedio,
-                       MIN(calificacion) AS minima, MAX(calificacion) AS maxima
-                FROM ${schema}.labs_grades GROUP BY id_curso ORDER BY id_curso`;
         columns = [
             { key: 'id_curso', label: 'Curso' },
             { key: 'calificaciones', label: 'N.º calificaciones' },
@@ -62,7 +49,7 @@ async function virtualLabsGrades(params = {}) {
         });
     }
 
-    const rows = await db.query({ text, values: [] });
+    const rows = await db.reportVirtualLabsGrades({ agruparPor });
     return {
         columns,
         rows: rows.map(mapRow),

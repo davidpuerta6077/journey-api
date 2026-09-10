@@ -1,16 +1,8 @@
 const db = require('../../../database/postgresql');
-const config = require('../../../config');
 const { meta } = require('../_util');
-const schema = config.postgresql.schema;
 
 async function usersNotSynced(params = {}) {
-    const rows = await db.query({
-        text: `SELECT id, username, firstname, lastname, email, moodle_id, sincronizado
-               FROM ${schema}.users
-               WHERE sincronizado IS NOT TRUE OR moodle_id IS NULL
-               ORDER BY id DESC`,
-        values: [],
-    });
+    const rows = await db.reportUsersNotSynced();
     return {
         columns: [
             { key: 'id', label: 'ID' },

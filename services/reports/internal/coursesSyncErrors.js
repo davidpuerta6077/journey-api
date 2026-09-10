@@ -1,16 +1,8 @@
 const db = require('../../../database/postgresql');
-const config = require('../../../config');
 const { meta } = require('../_util');
-const schema = config.postgresql.schema;
 
 async function coursesSyncErrors(params = {}) {
-    const rows = await db.query({
-        text: `SELECT id, shortname, fullname, estado_sync, ultimo_error_sync
-               FROM ${schema}.courses
-               WHERE estado_sync = 'error' OR (ultimo_error_sync IS NOT NULL AND ultimo_error_sync <> '')
-               ORDER BY id DESC`,
-        values: [],
-    });
+    const rows = await db.reportCoursesSyncErrors();
     return {
         columns: [
             { key: 'id', label: 'ID' },

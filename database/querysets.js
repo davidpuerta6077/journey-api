@@ -1053,6 +1053,130 @@ const deleteReportData = (id) => ({
     values: [id]
 });
 
+// SQL de los generadores del módulo Reportes (services/reports/). Los wrappers
+// Promise viven en postgresql.js; los generadores llaman db.reportX(...).
+
+const reportCoursesBySyncStatus = () => ({
+    text: `SELECT COALESCE(estado_sync,'(sin estado)') AS estado, COUNT(*)::int AS cantidad
+           FROM ${schema}.courses GROUP BY 1 ORDER BY cantidad DESC`,
+    values: []
+});
+
+const reportCoursesSyncErrors = () => ({
+    text: `SELECT id, shortname, fullname, estado_sync, ultimo_error_sync
+           FROM ${schema}.courses
+           WHERE estado_sync = 'error' OR (ultimo_error_sync IS NOT NULL AND ultimo_error_sync <> '')
+           ORDER BY id DESC`,
+    values: []
+});
+
+const reportUsersNotSynced = () => ({
+    text: `SELECT id, username, firstname, lastname, email, moodle_id, sincronizado
+           FROM ${schema}.users
+           WHERE sincronizado IS NOT TRUE OR moodle_id IS NULL
+           ORDER BY id DESC`,
+    values: []
+});
+
+const reportEnrollmentsByStatus = () => ({
+    text: `SELECT COALESCE(estado,'(sin estado)') AS estado, COALESCE(sincronizado,false) AS sincronizado, COUNT(*)::int AS cantidad
+           FROM ${schema}.enrollments GROUP BY 1,2 ORDER BY cantidad DESC`,
+    values: []
+});
+
+// Dinámico por agruparPor (igual que countCoursesStudentsByCategory). dias va
+// por values; agruparPor elige el text por rama, nunca se interpola.
+const reportAuditActivity = ({ dias, agruparPor }) => {
+    let text;
+    if (agruparPor === 'modulo') {
+        text = `SELECT COALESCE(m.name,'(sin módulo)') AS aplicacion,
+                       COALESCE(sm.name, l.entity_type, '(sin submódulo)') AS modulo,
+                       COUNT(*)::int AS acciones
+                FROM ${schema}.logs l
+                LEFT JOIN ${schema}.submodules sm ON sm.code = l.entity_type
+                LEFT JOIN ${schema}.modules m ON m.id = sm.module_id
+                WHERE l.date >= now() - ($1 || ' days')::interval
+                GROUP BY 1,2 ORDER BY acciones DESC`;
+    } else if (agruparPor === 'dia') {
+        text = `SELECT to_char(date_trunc('day', date),'YYYY-MM-DD') AS dia, COUNT(*)::int AS acciones
+                FROM ${schema}.logs
+                WHERE date >= now() - ($1 || ' days')::interval
+                GROUP BY 1 ORDER BY dia DESC`;
+    } else {
+        text = `SELECT COALESCE(username,'(anónimo)') AS usuario, COUNT(*)::int AS acciones
+                FROM ${schema}.logs
+                WHERE date >= now() - ($1 || ' days')::interval
+                GROUP BY 1 ORDER BY acciones DESC`;
+    }
+    return { text, values: [String(dias)] };
+};
+
+const reportPlatformUsersByRole = () => ({
+    text: `SELECT r.name AS rol,
+                  COUNT(pu.id)::int AS usuarios,
+                  (COUNT(pu.id) FILTER (WHERE pu.estado IS TRUE))::int AS activos,
+                  (COUNT(pu.id) FILTER (WHERE pu.last_login IS NOT NULL))::int AS con_ingreso
+           FROM ${schema}.roles r
+           LEFT JOIN ${schema}.platform_users pu ON pu.role_id = r.id
+           GROUP BY r.name ORDER BY usuarios DESC`,
+    values: []
+});
+
+const reportSyncRules = () => ({
+    text: `SELECT sr.id, sr.codigo_asignatura, sr.programa, sr.departamento, sr.seed_shortname,
+                  sr.categoryid, sr.activo, COUNT(c.id)::int AS cursos_asociados
+           FROM ${schema}.sync_rules sr
+           LEFT JOIN ${schema}.courses c ON c.codigo_asignatura = sr.codigo_asignatura
+           GROUP BY sr.id ORDER BY sr.activo DESC, sr.id`,
+    values: []
+});
+
+// Dinámico por agruparPor.
+const reportVirtualLabsGrades = ({ agruparPor }) => {
+    let text;
+    if (agruparPor === 'estudiante') {
+        text = `SELECT id_estudiante, correo, COUNT(*)::int AS calificaciones,
+                       ROUND(AVG(calificacion)::numeric,2) AS promedio
+                FROM ${schema}.labs_grades
+                GROUP BY id_estudiante, correo ORDER BY promedio DESC NULLS LAST`;
+    } else if (agruparPor === 'detalle') {
+        text = `SELECT id, id_estudiante, correo, id_curso, calificacion, created_at
+                FROM ${schema}.labs_grades ORDER BY created_at DESC`;
+    } else {
+        text = `SELECT id_curso, COUNT(*)::int AS calificaciones,
+                       ROUND(AVG(calificacion)::numeric,2) AS promedio,
+                       MIN(calificacion) AS minima, MAX(calificacion) AS maxima
+                FROM ${schema}.labs_grades GROUP BY id_curso ORDER BY id_curso`;
+    }
+    return { text, values: [] };
+};
+
+const reportPermissionsMatrix = () => ({
+    text: `SELECT r.name AS rol, m.name AS aplicacion, sm.name AS submodulo
+           FROM ${schema}.role_permissions rp
+           JOIN ${schema}.roles r ON r.id = rp.role_id
+           JOIN ${schema}.submodules sm ON sm.id = rp.submodule_id
+           JOIN ${schema}.modules m ON m.id = sm.module_id
+           ORDER BY r.name, m.name, sm.name`,
+    values: []
+});
+
+// syncDiscrepancies: solo el SELECT de courses; la comparación se queda en el generador.
+const reportCoursesForDiscrepancy = () => ({
+    text: `SELECT id, shortname, moodle_id, estado_sync FROM ${schema}.courses`,
+    values: []
+});
+
+const reportCourseById = (id) => ({
+    text: `SELECT id, shortname, moodle_id FROM ${schema}.courses WHERE id = $1`,
+    values: [id]
+});
+
+const reportEnrollmentCountByCourse = (courseid) => ({
+    text: `SELECT COUNT(*)::int AS n FROM ${schema}.enrollments WHERE courseid = $1`,
+    values: [courseid]
+});
+
 
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
@@ -1160,6 +1284,18 @@ module.exports = {
     insertReportData,
     updateReportData,
     deleteReportData,
+    reportCoursesBySyncStatus,
+    reportCoursesSyncErrors,
+    reportUsersNotSynced,
+    reportEnrollmentsByStatus,
+    reportAuditActivity,
+    reportPlatformUsersByRole,
+    reportSyncRules,
+    reportVirtualLabsGrades,
+    reportPermissionsMatrix,
+    reportCoursesForDiscrepancy,
+    reportCourseById,
+    reportEnrollmentCountByCourse,
 
     //Permission
     checkPermissions,

@@ -1,16 +1,11 @@
 const db = require('../../../database/postgresql');
-const config = require('../../../config');
 const { getCategorias, filtrarCategorias, getCursosDeCategoria } = require('../moodle/_moodleRest');
 const { meta, normCategoryId } = require('../_util');
-const schema = config.postgresql.schema;
 
 async function syncDiscrepancies(params = {}) {
     const categoryId = normCategoryId(params.categoryId);
 
-    const cursosJ = await db.query({
-        text: `SELECT id, shortname, fullname, moodle_id, estado_sync FROM ${schema}.courses`,
-        values: [],
-    });
+    const cursosJ = await db.reportCoursesForDiscrepancy();
 
     const cats = filtrarCategorias(await getCategorias(), categoryId, true);
     const moodleCursos = [];

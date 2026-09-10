@@ -1,8 +1,6 @@
 const db = require('../../../database/postgresql');
-const config = require('../../../config');
 const { getEnrolados, tieneRol } = require('../moodle/_moodleRest');
 const { meta } = require('../_util');
-const schema = config.postgresql.schema;
 
 async function enrollmentMoodleVsJourney(params = {}) {
     const courseid = Number(params.courseid);
@@ -12,20 +10,14 @@ async function enrollmentMoodleVsJourney(params = {}) {
         throw err;
     }
 
-    const [curso] = await db.query({
-        text: `SELECT id, shortname, fullname, moodle_id FROM ${schema}.courses WHERE id = $1`,
-        values: [courseid],
-    });
+    const [curso] = await db.reportCourseById(courseid);
     if (!curso) {
         const err = new Error('Curso Journey ' + courseid + ' no encontrado');
         err.status = 400;
         throw err;
     }
 
-    const [{ n }] = await db.query({
-        text: `SELECT COUNT(*)::int AS n FROM ${schema}.enrollments WHERE courseid = $1`,
-        values: [courseid],
-    });
+    const [{ n }] = await db.reportEnrollmentCountByCourse(courseid);
 
     let enMoodle = null;
     if (curso.moodle_id) {

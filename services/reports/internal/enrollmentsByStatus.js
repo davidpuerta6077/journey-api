@@ -1,14 +1,8 @@
 const db = require('../../../database/postgresql');
-const config = require('../../../config');
 const { meta } = require('../_util');
-const schema = config.postgresql.schema;
 
 async function enrollmentsByStatus(params = {}) {
-    const rows = await db.query({
-        text: `SELECT COALESCE(estado,'(sin estado)') AS estado, COALESCE(sincronizado,false) AS sincronizado, COUNT(*)::int AS cantidad
-               FROM ${schema}.enrollments GROUP BY 1,2 ORDER BY cantidad DESC`,
-        values: [],
-    });
+    const rows = await db.reportEnrollmentsByStatus();
     return {
         columns: [
             { key: 'estado', label: 'Estado' },

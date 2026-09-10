@@ -38,6 +38,18 @@ const {
     insertReportData,
     updateReportData,
     deleteReportData,
+    reportCoursesBySyncStatus: qReportCoursesBySyncStatus,
+    reportCoursesSyncErrors: qReportCoursesSyncErrors,
+    reportUsersNotSynced: qReportUsersNotSynced,
+    reportEnrollmentsByStatus: qReportEnrollmentsByStatus,
+    reportAuditActivity: qReportAuditActivity,
+    reportPlatformUsersByRole: qReportPlatformUsersByRole,
+    reportSyncRules: qReportSyncRules,
+    reportVirtualLabsGrades: qReportVirtualLabsGrades,
+    reportPermissionsMatrix: qReportPermissionsMatrix,
+    reportCoursesForDiscrepancy: qReportCoursesForDiscrepancy,
+    reportCourseById: qReportCourseById,
+    reportEnrollmentCountByCourse: qReportEnrollmentCountByCourse,
 } = require('./querysets');
  
 const pool = new Pool({
@@ -821,6 +833,116 @@ function deleteReport(id) {
     });
 }
 
+// ─── REPORTS: GENERADORES ─────────────────────────────────────────────────────
+
+function reportCoursesBySyncStatus() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportCoursesBySyncStatus(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportCoursesSyncErrors() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportCoursesSyncErrors(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportUsersNotSynced() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportUsersNotSynced(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportEnrollmentsByStatus() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportEnrollmentsByStatus(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportAuditActivity({ dias, agruparPor }) {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportAuditActivity({ dias, agruparPor }), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportPlatformUsersByRole() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportPlatformUsersByRole(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportSyncRules() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportSyncRules(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportVirtualLabsGrades({ agruparPor }) {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportVirtualLabsGrades({ agruparPor }), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportPermissionsMatrix() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportPermissionsMatrix(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportCoursesForDiscrepancy() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportCoursesForDiscrepancy(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportCourseById(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportCourseById(id), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportEnrollmentCountByCourse(courseid) {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportEnrollmentCountByCourse(courseid), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -912,4 +1034,16 @@ module.exports = {
     insertReport,
     updateReport,
     deleteReport,
+    reportCoursesBySyncStatus,
+    reportCoursesSyncErrors,
+    reportUsersNotSynced,
+    reportEnrollmentsByStatus,
+    reportAuditActivity,
+    reportPlatformUsersByRole,
+    reportSyncRules,
+    reportVirtualLabsGrades,
+    reportPermissionsMatrix,
+    reportCoursesForDiscrepancy,
+    reportCourseById,
+    reportEnrollmentCountByCourse,
 };
