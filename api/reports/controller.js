@@ -19,6 +19,16 @@ module.exports = (injectedDB) => {
     let data = injectedDB;
     if (!data) data = require('../../database/postgresql');
 
+    function normParams(p) {
+        if (p == null) return {};
+        if (typeof p !== 'object' || Array.isArray(p)) {
+            const err = new Error('params debe ser un objeto');
+            err.status = 400;
+            throw err;
+        }
+        return p;
+    }
+
     function tiposDisponibles() {
         return TIPOS;
     }
@@ -28,7 +38,13 @@ module.exports = (injectedDB) => {
     }
 
     async function getReporte(id) {
-        const report = await data.findReportById(id);
+        const nid = Number(id);
+        if (!Number.isInteger(nid) || nid <= 0) {
+            const err = new Error('id de reporte inválido');
+            err.status = 400;
+            throw err;
+        }
+        const report = await data.findReportById(nid);
         if (!report) {
             const err = new Error('Reporte no encontrado');
             err.status = 404;
@@ -52,7 +68,7 @@ module.exports = (injectedDB) => {
         const rows = await data.insertReport({
             nombre,
             tipo,
-            params: body.params || {},
+            params: normParams(body.params),
             descripcion: body.descripcion || null,
             created_by: createdByEmail || null,
         });
@@ -60,11 +76,16 @@ module.exports = (injectedDB) => {
     }
 
     async function updateReporte(id, body) {
-        await getReporte(id);
+        const actual = await getReporte(id);
+        if (body.nombre !== undefined && !body.nombre) {
+            const err = new Error('nombre no puede quedar vacío');
+            err.status = 400;
+            throw err;
+        }
         const rows = await data.updateReport(id, {
-            nombre: body.nombre,
-            params: body.params || {},
-            descripcion: body.descripcion || null,
+            nombre: body.nombre ?? actual.nombre,
+            params: body.params !== undefined ? normParams(body.params) : actual.params,
+            descripcion: body.descripcion ?? actual.descripcion,
         });
         return rows[0];
     }
