@@ -3,7 +3,7 @@ const { meta, normInt } = require('../_util');
 
 async function studentsAtRiskCourse(params = {}) {
     const courseid = Number(params.courseid);
-    if (!Number.isFinite(courseid)) {
+    if (params.courseid === '' || params.courseid == null || !Number.isInteger(courseid) || courseid <= 0) {
         const err = new Error('courseid es obligatorio y numérico');
         err.status = 400;
         throw err;

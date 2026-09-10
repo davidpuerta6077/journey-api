@@ -6,7 +6,7 @@ const schema = config.postgresql.schema;
 
 async function enrollmentMoodleVsJourney(params = {}) {
     const courseid = Number(params.courseid);
-    if (!Number.isFinite(courseid)) {
+    if (params.courseid === '' || params.courseid == null || !Number.isInteger(courseid) || courseid <= 0) {
         const err = new Error('courseid (id de curso Journey) es obligatorio');
         err.status = 400;
         throw err;
