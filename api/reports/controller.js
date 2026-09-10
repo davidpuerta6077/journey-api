@@ -3,7 +3,7 @@ const { runReport } = require('../../services/reports/runReport');
 // Catálogo estático de tipos de reporte disponibles. El front lo consume para
 // armar el formulario de parámetros de forma dinámica. Al agregar un tipo nuevo:
 // 1) generador en services/reports/, 2) línea en runReport, 3) entrada en ./tipos.
-const TIPOS = require('./tipos');
+const TIPOS = require('../../services/reports/tipos');
 
 module.exports = (injectedDB) => {
     let data = injectedDB;

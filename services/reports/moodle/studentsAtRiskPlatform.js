@@ -1,5 +1,5 @@
-const { getCategorias, filtrarCategorias, getCursosDeCategoria, getEnrolados, tieneRol, diasDesde, fechaCorta } = require('./_moodleRest');
-const { meta, normCategoryId, normInt } = require('../_util');
+const { getCategorias, filtrarCategorias, getCursosDeCategoria, getEnrolados, tieneRol, diasDesde, fechaCorta } = require('./moodleRest');
+const { meta, normCategoryId, normInt } = require('../util');
 
 async function studentsAtRiskPlatform(params = {}) {
     const diasSinAcceso = normInt(params.diasSinAcceso, 30);

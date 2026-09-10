@@ -1,5 +1,5 @@
-const { getCategorias, filtrarCategorias, getCursosDeCategoria } = require('./_moodleRest');
-const { meta, normCategoryId } = require('../_util');
+const { getCategorias, filtrarCategorias, getCursosDeCategoria } = require('./moodleRest');
+const { meta, normCategoryId } = require('../util');
 
 async function hiddenCourses(params = {}) {
     const categoryId = normCategoryId(params.categoryId);

@@ -5,7 +5,7 @@ const ctrl = require('./index');
 const checkAuth = require('../../middleware/checkAuth');
 const checkPermission = require('../../middleware/checkPermissions');
 const saveLog = require('../../middleware/saveLog');
-const TIPOS = require('./tipos');
+const TIPOS = require('../../services/reports/tipos');
 
 const PERM = 'reports';
 
@@ -59,13 +59,13 @@ router.get('/tipos', checkAuth, checkPermission(PERM), async (req, res, next) =>
 router.post('/run', checkAuth, checkPermission(PERM),
     saveLog(PERM, { descripcion: (req) => `Previsualizó un reporte ad-hoc: ${labelTipo(req.body?.tipo)}` }),
     async (req, res, next) => {
-    try {
-        const result = await ctrl.ejecutarAdHoc(req.body.tipo, req.body.params || {});
-        response.success(req, res, result, 200);
-    } catch (error) {
-        next(error);
-    }
-});
+        try {
+            const result = await ctrl.ejecutarAdHoc(req.body.tipo, req.body.params || {});
+            response.success(req, res, result, 200);
+        } catch (error) {
+            next(error);
+        }
+    });
 
 /**
  * @swagger
@@ -131,13 +131,13 @@ router.get('/:id/run', checkAuth, checkPermission(PERM),
         descripcion: (req) => `Ejecutó el reporte "${req.reporteNombre || ('#' + req.params.id)}"`,
     }),
     async (req, res, next) => {
-    try {
-        const result = await ctrl.ejecutarReporte(req.params.id, (def) => { req.reporteNombre = def.nombre; });
-        response.success(req, res, result, 200);
-    } catch (error) {
-        next(error);
-    }
-});
+        try {
+            const result = await ctrl.ejecutarReporte(req.params.id, (def) => { req.reporteNombre = def.nombre; });
+            response.success(req, res, result, 200);
+        } catch (error) {
+            next(error);
+        }
+    });
 
 /**
  * @swagger
@@ -164,13 +164,13 @@ router.get('/:id/run', checkAuth, checkPermission(PERM),
 router.post('/', checkAuth, checkPermission(PERM),
     saveLog(PERM, { descripcion: (req) => `Creó el reporte "${req.body?.nombre || '—'}" (${labelTipo(req.body?.tipo)})` }),
     async (req, res, next) => {
-    try {
-        const result = await ctrl.createReporte(req.body, req.user.email);
-        response.success(req, res, result, 200);
-    } catch (error) {
-        next(error);
-    }
-});
+        try {
+            const result = await ctrl.createReporte(req.body, req.user.email);
+            response.success(req, res, result, 200);
+        } catch (error) {
+            next(error);
+        }
+    });
 
 /**
  * @swagger
@@ -203,14 +203,14 @@ router.put('/:id', checkAuth, checkPermission(PERM),
         descripcion: (req) => `Editó el reporte "${req.reporteNombre || ('#' + req.params.id)}"`,
     }),
     async (req, res, next) => {
-    try {
-        const result = await ctrl.updateReporte(req.params.id, req.body);
-        req.reporteNombre = result?.nombre;
-        response.success(req, res, result, 200);
-    } catch (error) {
-        next(error);
-    }
-});
+        try {
+            const result = await ctrl.updateReporte(req.params.id, req.body);
+            req.reporteNombre = result?.nombre;
+            response.success(req, res, result, 200);
+        } catch (error) {
+            next(error);
+        }
+    });
 
 /**
  * @swagger
@@ -233,13 +233,13 @@ router.delete('/:id', checkAuth, checkPermission(PERM),
         descripcion: (req) => `Eliminó el reporte "${req.reporteNombre || ('#' + req.params.id)}"`,
     }),
     async (req, res, next) => {
-    try {
-        const result = await ctrl.deleteReporte(req.params.id);
-        req.reporteNombre = result?.nombre;
-        response.success(req, res, result, 200);
-    } catch (error) {
-        next(error);
-    }
-});
+        try {
+            const result = await ctrl.deleteReporte(req.params.id);
+            req.reporteNombre = result?.nombre;
+            response.success(req, res, result, 200);
+        } catch (error) {
+            next(error);
+        }
+    });
 
 module.exports = router;

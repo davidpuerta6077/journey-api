@@ -1,5 +1,5 @@
-const { resumenPorCurso } = require('./_moodleRest');
-const { meta, normCategoryId, normInt } = require('../_util');
+const { resumenPorCurso } = require('./moodleRest');
+const { meta, normCategoryId, normInt } = require('../util');
 
 async function coursesWithoutStudents(params = {}) {
     const maxEstudiantes = normInt(params.maxEstudiantes, 1, { min: 0 });

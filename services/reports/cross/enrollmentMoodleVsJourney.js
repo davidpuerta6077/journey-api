@@ -1,6 +1,6 @@
 const db = require('../../../database/postgresql');
-const { getEnrolados, tieneRol } = require('../moodle/_moodleRest');
-const { meta } = require('../_util');
+const { getEnrolados, tieneRol } = require('../moodle/moodleRest');
+const { meta } = require('../util');
 
 async function enrollmentMoodleVsJourney(params = {}) {
     const courseid = Number(params.courseid);

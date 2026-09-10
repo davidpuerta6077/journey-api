@@ -1,5 +1,5 @@
-const { resumenPorCurso } = require('./_moodleRest');
-const { meta, normCategoryId } = require('../_util');
+const { resumenPorCurso } = require('./moodleRest');
+const { meta, normCategoryId } = require('../util');
 
 async function coursesWithoutTeacher(params = {}) {
     const categoryId = normCategoryId(params.categoryId);

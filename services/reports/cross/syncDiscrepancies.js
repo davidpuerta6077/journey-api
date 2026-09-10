@@ -1,6 +1,6 @@
 const db = require('../../../database/postgresql');
-const { getCategorias, filtrarCategorias, getCursosDeCategoria } = require('../moodle/_moodleRest');
-const { meta, normCategoryId } = require('../_util');
+const { getCategorias, filtrarCategorias, getCursosDeCategoria } = require('../moodle/moodleRest');
+const { meta, normCategoryId } = require('../util');
 
 async function syncDiscrepancies(params = {}) {
     const categoryId = normCategoryId(params.categoryId);

@@ -1,5 +1,5 @@
 const db = require('../../../database/postgresql');
-const { meta, normInt, normEnum } = require('../_util');
+const { meta, normInt, normEnum } = require('../util');
 
 async function auditActivity(params = {}) {
     const dias = normInt(params.dias, 30);

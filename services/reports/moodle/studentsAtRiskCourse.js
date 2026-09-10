@@ -1,5 +1,5 @@
-const { getEnrolados, tieneRol, diasDesde, fechaCorta } = require('./_moodleRest');
-const { meta, normInt } = require('../_util');
+const { getEnrolados, tieneRol, diasDesde, fechaCorta } = require('./moodleRest');
+const { meta, normInt } = require('../util');
 
 async function studentsAtRiskCourse(params = {}) {
     const courseid = Number(params.courseid);

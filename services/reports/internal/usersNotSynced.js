@@ -1,5 +1,5 @@
 const db = require('../../../database/postgresql');
-const { meta } = require('../_util');
+const { meta } = require('../util');
 
 async function usersNotSynced(params = {}) {
     const rows = await db.reportUsersNotSynced();

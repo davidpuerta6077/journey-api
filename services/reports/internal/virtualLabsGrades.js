@@ -1,5 +1,5 @@
 const db = require('../../../database/postgresql');
-const { meta, normEnum } = require('../_util');
+const { meta, normEnum } = require('../util');
 
 async function virtualLabsGrades(params = {}) {
     const agruparPor = normEnum(params.agruparPor, ['curso', 'estudiante', 'detalle'], 'curso');
