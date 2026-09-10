@@ -14,6 +14,7 @@ const grades = require('./grades/network');
 const sicau = require('./SICAU/network');
 const admin = require('./admin/network');
 const virtualLabs = require('./virtual_labs/network');
+const reports = require('./reports/network');
 const ROOT = path.resolve(__dirname, '..');
 const swaggerUi   = require('swagger-ui-express');
 const swaggerSpec = require('../swagger');  
@@ -55,6 +56,7 @@ app.use('/test', test);
 app.use('/sicau', sicau);
 app.use('/admin', admin);
 app.use('/virtual_labs', virtualLabs);
+app.use('/reports', reports);
 
 
 // ─── PÁGINAS ──────────────────────────────────────────────────────────────────
