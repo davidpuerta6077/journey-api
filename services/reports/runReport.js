@@ -1,6 +1,6 @@
 // Registro de generadores de reporte. Cada valor es una función
 // (params) => Promise<{ columns, rows, meta }>. Agregar un tipo = agregar
-// una línea acá + su generador + su entrada en api/reports/tipos.js.
+// una línea acá + su generador + su entrada en ./tipos.js.
 const generadores = {
     moodle_courses_by_category: require('./moodle/coursesByCategory').coursesByCategory,
 

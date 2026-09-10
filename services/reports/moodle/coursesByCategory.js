@@ -1,7 +1,7 @@
 const moodleDB = require('../../../database/mysqlMoodle');
 const queries = require('../../../database/querysets');
-const { moodleRequest } = require('../../moodleService');
-const { assertMoodleOk } = require('../../moodleAssert');
+const { getCategorias, filtrarCategorias, getCursosDeCategoria, getEnrolados, tieneRol } = require('./moodleRest');
+const { normCategoryId } = require('../util');
 
 // Reporte 'moodle_courses_by_category': conteo de cursos y estudiantes (rol
 // 'student') por categoría de Moodle. Devuelve el formato unificado
@@ -37,16 +37,12 @@ function esErrorDeConexion(err) {
 }
 
 function normalizarParams(params = {}) {
-    const n = Number(params.categoryId);
-    const categoryId = params.categoryId != null && params.categoryId !== '' && Number.isFinite(n)
-        ? n
-        : null;
     const incluirSubcategorias = params.incluirSubcategorias === true || params.incluirSubcategorias === 'true'
         ? true
         : params.incluirSubcategorias === false || params.incluirSubcategorias === 'false'
         ? false
         : true; // default
-    return { categoryId, incluirSubcategorias };
+    return { categoryId: normCategoryId(params.categoryId), incluirSubcategorias };
 }
 
 // ─── Fuente 1: BD MySQL de Moodle ────────────────────────────────────────────
@@ -63,46 +59,32 @@ async function desdeDB({ categoryId, incluirSubcategorias }) {
 
 // ─── Fuente 2: REST API de Moodle (fallback) ─────────────────────────────────
 async function desdeREST({ categoryId, incluirSubcategorias }) {
-    const categorias = assertMoodleOk(
-        await moodleRequest('core_course_get_categories', {}),
-        'Error listando categorías de Moodle'
-    );
-
-    let objetivo = categorias;
-    if (categoryId != null) {
-        const raiz = categorias.find((c) => Number(c.id) === categoryId);
-        if (!raiz) return [];
-        objetivo = incluirSubcategorias
-            ? categorias.filter((c) => Number(c.id) === categoryId
-                || String(c.path || '').split('/').filter(Boolean).map(Number).includes(categoryId))
-            : [raiz];
-    }
+    const objetivo = filtrarCategorias(await getCategorias(), categoryId, incluirSubcategorias);
 
     const filas = [];
     for (const cat of objetivo) {
-        const res = await moodleRequest('core_course_get_courses_by_field', { field: 'category', value: cat.id });
-        const cursos = res && Array.isArray(res.courses)
-            ? res.courses.filter((c) => c.id !== 1)
-            : [];
+        const cursos = await getCursosDeCategoria(cat.id);
 
-        // Conteo de estudiantes: una llamada por curso. Si el webservice
-        // core_enrol_get_enrolled_users no está habilitado o falla, se deja
-        // estudiantes = null en esa categoría en vez de romper todo el reporte.
-        let estudiantes = 0;
+        // Conteo de estudiantes alineado con la rama BD (COUNT(DISTINCT ra.userid)):
+        // un estudiante matriculado en varios cursos de la categoría cuenta 1 vez.
+        // Una llamada por curso; si core_enrol_get_enrolled_users no está
+        // habilitado o falla, se deja estudiantes = null en esa categoría en vez
+        // de romper todo el reporte.
+        const alumnos = new Set();
         let contable = true;
         for (const curso of cursos) {
-            const enrol = await moodleRequest('core_enrol_get_enrolled_users', { courseid: curso.id });
-            if (!Array.isArray(enrol)) { contable = false; break; }
-            estudiantes += enrol.filter((u) =>
-                Array.isArray(u.roles) && u.roles.some((r) => r.shortname === 'student')
-            ).length;
+            const enrol = await getEnrolados(curso.id);
+            if (!enrol) { contable = false; break; }
+            for (const u of enrol) {
+                if (tieneRol(u, 'student')) alumnos.add(u.id);
+            }
         }
 
         filas.push({
             categoria: cat.name,
             path: cat.path,
             cursos: cursos.length,
-            estudiantes: contable ? estudiantes : null,
+            estudiantes: contable ? alumnos.size : null,
         });
     }
     return filas;
