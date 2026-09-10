@@ -81,13 +81,17 @@ module.exports = (injectedDB) => {
     }
 
     async function deleteReporte(id) {
-        await getReporte(id);
+        const def = await getReporte(id);
         await data.deleteReport(id);
-        return { id: Number(id) };
+        return { id: def.id, nombre: def.nombre };
     }
 
-    async function ejecutarReporte(id) {
+    // onDef: callback opcional que recibe la definición ya cargada (para que la
+    // capa de red pueda registrar el nombre del reporte en la auditoría sin
+    // hacer una segunda consulta).
+    async function ejecutarReporte(id, onDef) {
         const def = await getReporte(id);
+        if (typeof onDef === 'function') onDef(def);
         return runReport(def.tipo, def.params || {});
     }
 

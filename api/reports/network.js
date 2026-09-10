@@ -5,8 +5,12 @@ const ctrl = require('./index');
 const checkAuth = require('../../middleware/checkAuth');
 const checkPermission = require('../../middleware/checkPermissions');
 const saveLog = require('../../middleware/saveLog');
+const TIPOS = require('./tipos');
 
 const PERM = 'reports';
+
+// Nombre legible de un tipo de reporte para la auditoría (cae al código si no está).
+const labelTipo = (tipo) => (TIPOS.find((t) => t.tipo === tipo) || {}).label || tipo || '—';
 
 /**
  * @swagger
@@ -53,7 +57,7 @@ router.get('/tipos', checkAuth, checkPermission(PERM), async (req, res, next) =>
  *       400: { description: Tipo no soportado o faltan datos }
  */
 router.post('/run', checkAuth, checkPermission(PERM),
-    saveLog(PERM, { descripcion: (req) => `Previsualizó un reporte ad-hoc de tipo "${req.body?.tipo || '—'}"` }),
+    saveLog(PERM, { descripcion: (req) => `Previsualizó un reporte ad-hoc: ${labelTipo(req.body?.tipo)}` }),
     async (req, res, next) => {
     try {
         const result = await ctrl.ejecutarAdHoc(req.body.tipo, req.body.params || {});
@@ -124,11 +128,11 @@ router.get('/:id/run', checkAuth, checkPermission(PERM),
     saveLog(PERM, {
         incluirGet: true,
         entityId: (req) => req.params.id,
-        descripcion: (req) => `Ejecutó el reporte #${req.params.id}`,
+        descripcion: (req) => `Ejecutó el reporte "${req.reporteNombre || ('#' + req.params.id)}"`,
     }),
     async (req, res, next) => {
     try {
-        const result = await ctrl.ejecutarReporte(req.params.id);
+        const result = await ctrl.ejecutarReporte(req.params.id, (def) => { req.reporteNombre = def.nombre; });
         response.success(req, res, result, 200);
     } catch (error) {
         next(error);
@@ -158,7 +162,7 @@ router.get('/:id/run', checkAuth, checkPermission(PERM),
  *       400: { description: Faltan datos o tipo no soportado }
  */
 router.post('/', checkAuth, checkPermission(PERM),
-    saveLog(PERM, { descripcion: (req) => `Creó el reporte "${req.body?.nombre || '—'}" (tipo: ${req.body?.tipo || '—'})` }),
+    saveLog(PERM, { descripcion: (req) => `Creó el reporte "${req.body?.nombre || '—'}" (${labelTipo(req.body?.tipo)})` }),
     async (req, res, next) => {
     try {
         const result = await ctrl.createReporte(req.body, req.user.email);
@@ -196,11 +200,12 @@ router.post('/', checkAuth, checkPermission(PERM),
 router.put('/:id', checkAuth, checkPermission(PERM),
     saveLog(PERM, {
         entityId: (req) => req.params.id,
-        descripcion: (req) => `Editó el reporte #${req.params.id}${req.body?.nombre ? ` ("${req.body.nombre}")` : ''}`,
+        descripcion: (req) => `Editó el reporte "${req.reporteNombre || ('#' + req.params.id)}"`,
     }),
     async (req, res, next) => {
     try {
         const result = await ctrl.updateReporte(req.params.id, req.body);
+        req.reporteNombre = result?.nombre;
         response.success(req, res, result, 200);
     } catch (error) {
         next(error);
@@ -225,11 +230,12 @@ router.put('/:id', checkAuth, checkPermission(PERM),
 router.delete('/:id', checkAuth, checkPermission(PERM),
     saveLog(PERM, {
         entityId: (req) => req.params.id,
-        descripcion: (req) => `Eliminó el reporte #${req.params.id}`,
+        descripcion: (req) => `Eliminó el reporte "${req.reporteNombre || ('#' + req.params.id)}"`,
     }),
     async (req, res, next) => {
     try {
         const result = await ctrl.deleteReporte(req.params.id);
+        req.reporteNombre = result?.nombre;
         response.success(req, res, result, 200);
     } catch (error) {
         next(error);
