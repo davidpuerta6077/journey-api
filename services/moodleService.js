@@ -4,7 +4,7 @@ const config = require('../config');
 
 const agent = new https.Agent({ rejectUnauthorized: false });
 
-const moodleRequest = async (wsfunction, params) => {
+const moodleRequest = async (wsfunction, params, timeoutMs = 15000) => {
   try {
     const data = new URLSearchParams({
       wstoken: config.moodle_token,
@@ -19,7 +19,7 @@ const res = await axios.post(
       {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         httpsAgent: agent,
-        timeout: 15000
+        timeout: timeoutMs
       }
     );
 

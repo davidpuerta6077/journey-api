@@ -8,9 +8,10 @@ const {
     findUserByDocumento, updateUserSicau,
     updateUserSyncStatusQuery, updateUserUnsyncQuery,selectEnrollmentsByUserId,
     updateUserPassword,
-    selectAllCourses, selectCoursesForSync, insertCourseData, updateCourseData,
+    selectAllCourses, selectCoursesForSync, selectDistinctAsignaturas, insertCourseData, updateCourseData,
     updateCourseMoodleId, findCourseByIdnumber, findCourseByShortname,
-    updateCourseSyncStatusQuery,
+    updateCourseSyncStatusQuery, updateCourseSyncingQuery, updateCourseSyncErrorQuery,
+    updateCourseFromSicauQuery,
     selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
     updateEnrollmentData, updateEnrollmentMoodleId, findEnrollmentByCodigoJourney,
     findEnrollmentByUserAndCourse,
@@ -30,7 +31,7 @@ const {
     selectLabsGrades, insertLabGradeData,
     resolveSyncRule, updateCourseSyncFields, insertLogData, selectLogsData,
     updateUserNormalizedData, updateCourseNormalizedData,
-    selectSyncRulesAdmin, findSyncRuleExactMatch, insertSyncRuleData,
+    selectSyncRulesAdmin, selectSyncRuleById, findSyncRuleExactMatch, insertSyncRuleData,
     updateSyncRuleData, deleteSyncRuleData
 } = require('./querysets');
  
@@ -218,6 +219,15 @@ function getCoursesForSync() {
     });
 }
 
+function getDistinctAsignaturas() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectDistinctAsignaturas(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
 function setCourseMoodleId(id, moodleId) {
     return new Promise((resolve, reject) => {
         pool.query(updateCourseMoodleId(id, moodleId), (err, data) => {
@@ -254,6 +264,33 @@ function updateCourseSyncStatus(id, statusValue) {
     });
 }
 
+function markCourseSyncing(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateCourseSyncingQuery(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function markCourseSyncError(id, errorMessage) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateCourseSyncErrorQuery(id, errorMessage), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updateCourseFromSicau(id, fields) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateCourseFromSicauQuery(id, fields), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 function setCourseSyncFields(id, fields) {
     return new Promise((resolve, reject) => {
         pool.query(updateCourseSyncFields(id, fields), (err, result) => {
@@ -268,6 +305,15 @@ function setCourseSyncFields(id, fields) {
 function findSyncRule(codigoAsignatura, programa, departamento) {
     return new Promise((resolve, reject) => {
         pool.query(resolveSyncRule(codigoAsignatura, programa, departamento), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function findSyncRuleById(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectSyncRuleById(id), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -743,12 +789,17 @@ module.exports = {
     insertCourse,
     updateCourse,
     getCoursesForSync,
+    getDistinctAsignaturas,
     setCourseMoodleId,
     findCourseSicau,
     findCourseByShortnameFn,
     updateCourseSyncStatus,
+    markCourseSyncing,
+    markCourseSyncError,
+    updateCourseFromSicau,
     setCourseSyncFields,
     findSyncRule,
+    findSyncRuleById,
     insertLog,
     listLogs,
     updateUserNormalized,

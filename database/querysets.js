@@ -206,17 +206,71 @@ const selectAllCourses = () => ({
 });
 
 const selectCoursesForSync = () => ({
-    text: `SELECT id, fullname, shortname, categoryid, idnumber, summary, visible, format, 
-           numsections, moodle_id, sincronizado, departamento, programa, docente, 
+    text: `SELECT id, fullname, shortname, categoryid, idnumber, summary, visible, format,
+           numsections, moodle_id, sincronizado, estado_sync, ultimo_error_sync,
+           departamento, programa, docente,
            fecha_inicio, fecha_fin, periodo, grupo, codigo_asignatura, nombre_asignatura, templatecourse
            FROM ${schema}.courses ORDER BY id DESC`,
     values: []
 });
 
+// Catálogo de asignaturas ya conocidas (vistas en cursos sincronizados), para
+// que el formulario de Reglas ofrezca un buscador/desplegable en vez de pedir
+// que el usuario recuerde el código de memoria.
+const selectDistinctAsignaturas = () => ({
+    text: `
+        SELECT codigo_asignatura, MAX(nombre_asignatura) AS nombre_asignatura
+        FROM ${schema}.courses
+        WHERE codigo_asignatura IS NOT NULL AND codigo_asignatura != ''
+        GROUP BY codigo_asignatura
+        ORDER BY codigo_asignatura
+    `,
+    values: []
+});
+
 function updateCourseSyncStatusQuery(id, statusValue) {
     return {
-        text: `UPDATE ${schema}.courses SET sincronizado = $2 WHERE id = $1::integer`,
-        values: [id, statusValue]
+        text: `UPDATE ${schema}.courses
+               SET sincronizado = $2,
+                   estado_sync = $3,
+                   ultimo_error_sync = CASE WHEN $2 THEN NULL ELSE ultimo_error_sync END
+               WHERE id = $1::integer`,
+        values: [id, statusValue, statusValue ? 'sincronizado' : 'error']
+    };
+}
+
+// Estado intermedio mientras Moodle procesa la duplicación (puede tardar
+// minutos con varias copias de la misma semilla en la misma corrida).
+function updateCourseSyncingQuery(id) {
+    return {
+        text: `UPDATE ${schema}.courses SET estado_sync = 'sincronizando', ultimo_error_sync = NULL WHERE id = $1::integer`,
+        values: [id]
+    };
+}
+
+function updateCourseSyncErrorQuery(id, errorMessage) {
+    return {
+        text: `UPDATE ${schema}.courses
+               SET sincronizado = false, estado_sync = 'error', ultimo_error_sync = $2
+               WHERE id = $1::integer`,
+        values: [id, errorMessage || null]
+    };
+}
+
+// El nombre de la asignatura o el docente cambiaron en SICAU para un curso que
+// ya existía localmente (mismo idnumber = codigo_asignatura+periodo+grupo, el
+// código journey -único- de ese grupo en ese periodo). estado_sync lo decide
+// el caller: "novedad" si el curso ya existe en Moodle (moodle_id, solo hace
+// falta empujarle la metadata nueva desde Módulo Cursos) o "pendiente" si
+// nunca se creó (todavía necesita el ciclo completo de duplicado en Sync
+// Cursos, no un simple update).
+function updateCourseFromSicauQuery(id, { docente, fullname, shortname, nombre_asignatura, estado_sync }) {
+    return {
+        text: `UPDATE ${schema}.courses
+               SET docente = $2, fullname = $3, shortname = $4, nombre_asignatura = $5,
+                   sincronizado = false, estado_sync = $6
+               WHERE id = $1::integer`,
+        values: [id, docente || null, fullname, shortname, nombre_asignatura || null, estado_sync]
     };
 }
 
@@ -306,7 +360,7 @@ const findCourseByIdnumber = (idnumber) => ({
 });
 
 const findCourseByShortname = (shortname) => ({
-    text: `SELECT id FROM ${schema}.courses WHERE shortname = $1 LIMIT 1`,
+    text: `SELECT id, docente FROM ${schema}.courses WHERE shortname = $1 LIMIT 1`,
     values: [shortname]
 });
 
@@ -788,6 +842,13 @@ const selectSyncRulesAdmin = () => ({
     values: []
 });
 
+// Regla puntual, elegida a mano por el usuario en Sync Cursos (en vez de dejar
+// que se resuelva automáticamente por codigo_asignatura/programa/departamento).
+const selectSyncRuleById = (id) => ({
+    text: `SELECT * FROM ${schema}.sync_rules WHERE id = $1 AND activo = true LIMIT 1`,
+    values: [id]
+});
+
 // Match exacto (no jerárquico) contra otras reglas activas, para evitar ambigüedad
 // al crear/editar. excludeId se usa al editar, para no chocar contra sí misma.
 const findSyncRuleExactMatch = (codigoAsignatura, programa, departamento, excludeId) => ({
@@ -942,12 +1003,16 @@ module.exports = {
     // courses
     selectAllCourses,
     selectCoursesForSync,
+    selectDistinctAsignaturas,
     insertCourseData,
     updateCourseData,
     updateCourseMoodleId,
     findCourseByIdnumber,
     findCourseByShortname,
     updateCourseSyncStatusQuery,
+    updateCourseSyncingQuery,
+    updateCourseSyncErrorQuery,
+    updateCourseFromSicauQuery,
     // enrollments
     selectAllEnrollments,
     selectEnrollmentsForSync,
@@ -1001,6 +1066,7 @@ module.exports = {
     resolveSyncRule,
     updateCourseSyncFields,
     selectSyncRulesAdmin,
+    selectSyncRuleById,
     findSyncRuleExactMatch,
     insertSyncRuleData,
     updateSyncRuleData,

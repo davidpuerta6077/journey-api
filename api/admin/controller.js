@@ -160,6 +160,29 @@ module.exports = (injectedDB) => {
             .map(cat => cat.id);
     }
 
+    // Categoría nueva de Moodle, creada directamente desde Journey al armar una
+    // regla (evita que el usuario tenga que ir a Moodle a crearla primero).
+    async function createMoodleCategoria(body) {
+        const { name, parent } = body;
+        if (!name) {
+            const err = new Error('El nombre de la categoría es obligatorio');
+            err.status = 400;
+            throw err;
+        }
+        const result = await moodleRequest('core_course_create_categories', {
+            'categories[0][name]': name,
+            'categories[0][parent]': parent || 0
+        });
+        assertMoodleOk(result, 'Error creando la categoría en Moodle');
+        return result?.[0];
+    }
+
+    // Catálogo de asignaturas ya vistas en cursos sincronizados, para que el
+    // formulario de reglas ofrezca un buscador en vez de pedir el código de memoria.
+    async function listAsignaturas() {
+        return data.getDistinctAsignaturas();
+    }
+
     async function listMoodleSemillas(categoryId = SEMILLAS_CATEGORY_ID) {
         const categoryIds = await resolveDescendantCategoryIds(categoryId);
         if (!categoryIds.includes(categoryId)) categoryIds.push(categoryId);
@@ -241,7 +264,7 @@ module.exports = (injectedDB) => {
         listModulos, createModulo, updateModulo,
         listSubmodulos, createSubmodulo, updateSubmodulo,
         listReglas, createRegla, updateRegla, deleteRegla,
-        listMoodleCategorias, listMoodleSemillas,
+        listMoodleCategorias, listMoodleSemillas, createMoodleCategoria, listAsignaturas,
         getPermisosMatrix, grantPermiso, revokePermiso,
         listLogs
     };

@@ -5,6 +5,7 @@ const ctrl = require('./index');
 const { moodleRequest } = require('../../services/moodleService');
 const syncService = require('../../services/syncService');
 const { applyCourseRule } = require('../../services/sync/applyCourseRule');
+const { createCourseManually } = require('../../services/sync/createCourseManually');
 const checkAuth = require('../../middleware/checkAuth');
 const checkPermission = require('../../middleware/checkPermissions');
 const saveLog = require('../../middleware/saveLog');
@@ -422,6 +423,50 @@ router.get('/list', checkAuth, checkPermission("list_courses"), async (req, res)
     }
 });
 
+/**
+ * @swagger
+ * /courses/create_manual:
+ *   post:
+ *     summary: Crear un curso manualmente duplicando una semilla, con los datos elegidos a mano
+ *     description: A diferencia de /courses/sync, no resuelve la semilla/categoría por sync_rules a partir de datos de SICAU -- el usuario indica la semilla (por shortname) y llena fullname/shortname/idnumber/docente/etc. El curso queda duplicado y ya sincronizado en la base local.
+ *     tags: [Courses]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [seed_shortname, categoryid, fullname, shortname]
+ *             properties:
+ *               seed_shortname: { type: string, example: "SEMILLA-FB0010" }
+ *               categoryid:     { type: integer, example: 8 }
+ *               fullname:       { type: string }
+ *               shortname:      { type: string }
+ *               idnumber:       { type: string }
+ *               docente:        { type: string }
+ *     responses:
+ *       200:
+ *         description: Curso creado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error creando el curso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post('/create_manual', checkAuth, checkPermission("add_course"), async (req, res) => {
+    try {
+        const result = await createCourseManually(req.body || {});
+        response.success(req, res, result, 200);
+    } catch (error) {
+        response.error(req, res, error.message, 500);
+    }
+});
+
 // ─── SYNC ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -486,8 +531,24 @@ router.post('/sync/preview', checkAuth, checkPermission("sync_preview_courses"),
  */
 router.post('/sync', checkAuth, checkPermission("sync_courses"), saveLog("sync_courses"), async (req, res, next) => {
     try {
-        const result = await syncService.syncCourses(req.body.items || [], req.user?.email);
-        response.success(req, res, result || 'Datos cargados correctamente', 200);
+        const items = req.body.items || [];
+
+        // Duplicar la semilla en Moodle (core_course_duplicate_course) es una
+        // operación pesada de backup+restore; con 10-15 copias en una sola
+        // corrida el proceso completo puede tardar varios minutos. En vez de
+        // dejar el request HTTP colgado esperando a que termine todo (lo que
+        // fácilmente se topa con timeouts intermedios de proxy/gateway), se
+        // marca cada curso como "sincronizando" y se responde de inmediato; el
+        // front hace polling de /sync/preview para ver el estado final de
+        // cada uno (sincronizado o error) a medida que Moodle va terminando.
+        await Promise.all(
+            items.filter(i => i.id).map(i => ctrl.markCourseSyncing(i.id))
+        );
+        response.success(req, res, { queued: items.length }, 202);
+
+        syncService.syncCourses(items, req.user?.email).catch(error => {
+            console.error('Error en sincronización de cursos en background:', error.message);
+        });
     } catch (error) {
         next(error);
     }
