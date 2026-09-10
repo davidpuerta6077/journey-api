@@ -73,4 +73,4 @@ async function resumenPorCurso(categoryId) {
     return out;
 }
 
-module.exports = { getCategorias, filtrarCategorias, getCursosDeCategoria, getEnrolados, tieneRol, esProfesor, diasDesde, fechaCorta, resumenPorCurso };
+module.exports = { getCategorias, filtrarCategorias, getCursosDeCategoria, getEnrolados, tieneRol, diasDesde, fechaCorta, resumenPorCurso };

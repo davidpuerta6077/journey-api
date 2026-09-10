@@ -17,7 +17,7 @@ async function studentsAtRiskCourse(params = {}) {
 
     const estudiantes = enrolados.filter((u) => tieneRol(u, 'student'));
     const enRiesgo = estudiantes.filter(
-        (u) => u.lastcourseaccess === 0 || !u.lastcourseaccess || diasDesde(u.lastcourseaccess) >= diasSinAcceso
+        (u) => !u.lastcourseaccess || diasDesde(u.lastcourseaccess) >= diasSinAcceso
     );
 
     return {

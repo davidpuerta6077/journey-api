@@ -72,7 +72,7 @@ module.exports = (injectedDB) => {
             err.status = 400;
             throw err;
         }
-        const rows = await data.updateReport(id, {
+        const rows = await data.updateReport(actual.id, {
             nombre: body.nombre ?? actual.nombre,
             params: body.params !== undefined ? normParams(body.params) : actual.params,
             descripcion: body.descripcion ?? actual.descripcion,
@@ -82,7 +82,7 @@ module.exports = (injectedDB) => {
 
     async function deleteReporte(id) {
         const def = await getReporte(id);
-        await data.deleteReport(id);
+        await data.deleteReport(def.id);
         return { id: def.id, nombre: def.nombre };
     }
 

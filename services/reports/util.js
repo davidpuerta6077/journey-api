@@ -4,7 +4,7 @@ function normCategoryId(v) {
 }
 function normInt(v, def, { min = 1 } = {}) {
     const n = Number(v);
-    return Number.isFinite(n) && Number.isInteger(n) && n >= min ? n : def;
+    return Number.isInteger(n) && n >= min ? n : def;
 }
 function normEnum(v, allowed, def) {
     return allowed.includes(v) ? v : def;

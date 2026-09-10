@@ -37,14 +37,14 @@ function saveLog(submoduleCode, options = {}) {
       try {
         if (typeof descripcion === 'function') accion = descripcion(req, res) || porDefecto;
         else if (typeof descripcion === 'string') accion = descripcion;
-      } catch (e) {
+      } catch {
         accion = porDefecto;
       }
 
       let eid = null;
       try {
         eid = typeof entityId === 'function' ? entityId(req) : (entityId ?? null);
-      } catch (e) {
+      } catch {
         eid = null;
       }
 
