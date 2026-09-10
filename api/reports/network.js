@@ -56,8 +56,10 @@ router.get('/tipos', checkAuth, checkPermission(PERM), async (req, res, next) =>
  *       200: { description: Resultado del reporte }
  *       400: { description: Tipo no soportado o faltan datos }
  */
+// La previsualización no se audita: es una consulta de solo lectura que el
+// usuario dispara varias veces mientras ajusta parámetros y solo inundaría
+// la tabla `logs`. Se audita la creación (POST /), la edición y el borrado.
 router.post('/run', checkAuth, checkPermission(PERM),
-    saveLog(PERM, { descripcion: (req) => `Previsualizó un reporte ad-hoc: ${labelTipo(req.body?.tipo)}` }),
     async (req, res, next) => {
         try {
             const result = await ctrl.ejecutarAdHoc(req.body.tipo, req.body.params || {});
@@ -124,15 +126,14 @@ router.get('/:id', checkAuth, checkPermission(PERM), async (req, res, next) => {
  *       200: { description: Resultado del reporte }
  *       404: { description: Reporte no encontrado }
  */
+// No se audita: la vista de detalle ejecuta este GET automáticamente al montar
+// y en cada "Re-ejecutar", con lo que una sola visita generaría varias filas
+// en `logs`. La ejecución de un reporte guardado es idempotente y de solo
+// lectura, así que no aporta a la auditoría.
 router.get('/:id/run', checkAuth, checkPermission(PERM),
-    saveLog(PERM, {
-        incluirGet: true,
-        entityId: (req) => req.params.id,
-        descripcion: (req) => `Ejecutó el reporte "${req.reporteNombre || ('#' + req.params.id)}"`,
-    }),
     async (req, res, next) => {
         try {
-            const result = await ctrl.ejecutarReporte(req.params.id, (def) => { req.reporteNombre = def.nombre; });
+            const result = await ctrl.ejecutarReporte(req.params.id);
             response.success(req, res, result, 200);
         } catch (error) {
             next(error);
