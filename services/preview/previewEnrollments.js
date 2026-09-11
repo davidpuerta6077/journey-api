@@ -18,9 +18,9 @@ async function previewEnrollments() {
             const moodleUser = Array.isArray(result) && result.length > 0 ? result[0] : null;
             userExistsInMoodle = !!moodleUser;
 
-            if (userExistsInMoodle && enr.sincronizado && enr.user_moodle_id) {
+            if (userExistsInMoodle && enr.sincronizado) {
                 const courses = await moodleRequest('core_enrol_get_users_courses', {
-                    'userid': enr.user_moodle_id
+                    'userid': moodleUser.id
                 });
                 if (Array.isArray(courses)) {
                     inMoodle = courses.some(c => c.idnumber === enr.codigo_journey);

@@ -5,6 +5,17 @@ const ROLE_MAP = {
     'TUTOR':      'teacher'
 };
 
+// SICAU manda el grupo como número plano (ej. "105"), pero el código de curso
+// journey siempre debe llevar la "G" al frente (ej. "G105") para que el
+// idnumber/codigo_journey quede como FB001020261G105. Si ya viene con G
+// (mayúscula o minúscula) no se duplica.
+function normalizeGrupo(grupo) {
+    if (grupo === null || grupo === undefined) return grupo;
+    const g = String(grupo).trim();
+    if (!g) return g;
+    return /^G/i.test(g) ? `G${g.slice(1)}` : `G${g}`;
+}
+
 module.exports = (injectedDB) => {
     let data = injectedDB;
     if (!data) data = require('../../database/postgresql');
@@ -48,11 +59,12 @@ module.exports = (injectedDB) => {
             programa,
             departamento,
             periodo,
-            grupo,
+            grupo: grupoRaw,
             docente,
             fecha_inicio,
             fecha_fin
         } = course;
+        const grupo = normalizeGrupo(grupoRaw);
 
         // Construir campos derivados
         const periodoFormateado = periodo
@@ -129,7 +141,8 @@ module.exports = (injectedDB) => {
         const userid = userResult[0].id;
 
         // 2. Generar código Journey del curso (sin cédula)
-        const codigoJourney = `${enr.codigo_asignatura}${enr.periodo}${enr.grupo}`;
+        const grupo = normalizeGrupo(enr.grupo);
+        const codigoJourney = `${enr.codigo_asignatura}${enr.periodo}${grupo}`;
 
         // 3. Buscar courseid por codigo_journey
         const courseResult = await data.findCourseSicau(codigoJourney);
@@ -153,7 +166,7 @@ module.exports = (injectedDB) => {
             nombre_asignatura:      enr.nombre_asignatura     || null,
             programa:               enr.programa              || null,
             periodo:                enr.periodo               || null,
-            grupo:                  enr.grupo                 || null,
+            grupo:                  grupo                     || null,
             codigo_journey:         codigoJourney,
             estado:                 enr.estado                || null,
             fecha_creacion_journey: new Date().toISOString().split('T')[0]
