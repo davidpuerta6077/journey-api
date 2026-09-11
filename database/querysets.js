@@ -553,6 +553,45 @@ const findMoodleEnrolmentId = (courseId, userId) => ({
     values: [courseId, userId]
 });
 
+// Conteo de cursos y estudiantes (rol 'student') por categoría de Moodle.
+// - categoryId null  => todas las categorías.
+// - categoryId + incluirSubcategorias => la categoría indicada y todas las que
+//   cuelgan de ella (mdl_course_categories.path, ej. "/1/5/12").
+// Esquema estándar de Moodle (mdl_course/mdl_course_categories/mdl_context/
+// mdl_role_assignments/mdl_role), estable de 2.x a 4.x.
+const countCoursesStudentsByCategory = ({ categoryId = null, incluirSubcategorias = true }) => {
+    const where = [];
+    const values = [];
+    if (categoryId != null) {
+        if (incluirSubcategorias) {
+            where.push(`(cc.id = ? OR cc.path LIKE CONCAT((SELECT path FROM mdl_course_categories WHERE id = ?), '/%'))`);
+            values.push(categoryId, categoryId);
+        } else {
+            where.push(`cc.id = ?`);
+            values.push(categoryId);
+        }
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    return {
+        text: `
+            SELECT cc.id   AS categoria_id,
+                   cc.name AS categoria,
+                   cc.path AS path,
+                   COUNT(DISTINCT c.id) AS cursos,
+                   COUNT(DISTINCT CASE WHEN r.shortname = 'student' THEN ra.userid END) AS estudiantes
+            FROM mdl_course_categories cc
+            LEFT JOIN mdl_course c            ON c.category = cc.id AND c.id <> 1
+            LEFT JOIN mdl_context ctx         ON ctx.instanceid = c.id AND ctx.contextlevel = 50
+            LEFT JOIN mdl_role_assignments ra ON ra.contextid = ctx.id
+            LEFT JOIN mdl_role r              ON r.id = ra.roleid
+            ${whereSql}
+            GROUP BY cc.id, cc.name, cc.path
+            ORDER BY cc.name
+        `,
+        values
+    };
+};
+
 // ─── HEALTH ───────────────────────────────────────────────────────────────────
 
 const healthCheck = () => ({
@@ -932,6 +971,212 @@ const insertLogData = (type, description, username, entityType, entityId) => ({
     values: [type, description, username || null, entityType || null, entityId || null]
 });
 
+// entity_type guarda el código de submódulo (el mismo que checkPermission).
+// Se resuelve contra submodules/modules: modules.name es la categoría principal
+// del menú lateral (Journey Sync, Administrador, ...) y submodules.name el módulo.
+// El front puede afinar el nombre con el árbol del menú (menuItems).
+const selectLogsData = (limit) => ({
+    text: `
+        SELECT l.id,
+               l.date,
+               l.type,
+               l.description,
+               l.username,
+               l.entity_type,
+               m.name  AS aplicacion,
+               sm.name AS modulo
+        FROM ${schema}.logs l
+        LEFT JOIN ${schema}.submodules sm ON sm.code = l.entity_type
+        LEFT JOIN ${schema}.modules m ON m.id = sm.module_id
+        ORDER BY l.date DESC
+        LIMIT $1
+    `,
+    values: [limit]
+});
+
+// ___ NORMALIZACIÓN ______________________________________________________________
+// Updates acotados a los campos que se normalizan antes de sincronizar, para no
+// interferir con updateUsuarioData / updateCourseData.
+
+const updateUserNormalizedData = (id, { firstname, lastname, email, correo_personal }) => ({
+    text: `
+        UPDATE ${schema}.users
+        SET firstname = $1, lastname = $2, email = $3, correo_personal = $4
+        WHERE id = $5
+    `,
+    values: [firstname, lastname, email, correo_personal ?? null, id]
+});
+
+const updateCourseNormalizedData = (id, { fullname, shortname, nombre_asignatura }) => ({
+    text: `
+        UPDATE ${schema}.courses
+        SET fullname = $1, shortname = $2, nombre_asignatura = $3
+        WHERE id = $4
+    `,
+    values: [fullname, shortname, nombre_asignatura ?? null, id]
+});
+
+
+// ─── REPORTS ──────────────────────────────────────────────────────────────────
+
+const selectAllReports = () => ({
+    text: `SELECT * FROM ${schema}.reports ORDER BY created_at DESC`,
+    values: []
+});
+
+const selectReportById = (id) => ({
+    text: `SELECT * FROM ${schema}.reports WHERE id = $1`,
+    values: [id]
+});
+
+const insertReportData = ({ nombre, tipo, params, descripcion, created_by }) => ({
+    text: `
+        INSERT INTO ${schema}.reports (nombre, tipo, params, descripcion, created_by)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING *
+    `,
+    values: [nombre, tipo, params ?? {}, descripcion ?? null, created_by ?? null]
+});
+
+const updateReportData = (id, { nombre, params, descripcion }) => ({
+    text: `
+        UPDATE ${schema}.reports
+        SET nombre = $1, params = $2, descripcion = $3, updated_at = now()
+        WHERE id = $4
+        RETURNING *
+    `,
+    values: [nombre, params ?? {}, descripcion ?? null, id]
+});
+
+const deleteReportData = (id) => ({
+    text: `DELETE FROM ${schema}.reports WHERE id = $1`,
+    values: [id]
+});
+
+// SQL de los generadores del módulo Reportes (services/reports/). Los wrappers
+// Promise viven en postgresql.js; los generadores llaman db.reportX(...).
+
+const reportCoursesBySyncStatus = () => ({
+    text: `SELECT COALESCE(estado_sync,'(sin estado)') AS estado, COUNT(*)::int AS cantidad
+           FROM ${schema}.courses GROUP BY 1 ORDER BY cantidad DESC`,
+    values: []
+});
+
+const reportCoursesSyncErrors = () => ({
+    text: `SELECT id, shortname, fullname, estado_sync, ultimo_error_sync
+           FROM ${schema}.courses
+           WHERE estado_sync = 'error' OR (ultimo_error_sync IS NOT NULL AND ultimo_error_sync <> '')
+           ORDER BY id DESC`,
+    values: []
+});
+
+const reportUsersNotSynced = () => ({
+    text: `SELECT id, username, firstname, lastname, email, moodle_id, sincronizado
+           FROM ${schema}.users
+           WHERE sincronizado IS NOT TRUE OR moodle_id IS NULL
+           ORDER BY id DESC`,
+    values: []
+});
+
+const reportEnrollmentsByStatus = () => ({
+    text: `SELECT COALESCE(estado,'(sin estado)') AS estado, COALESCE(sincronizado,false) AS sincronizado, COUNT(*)::int AS cantidad
+           FROM ${schema}.enrollments GROUP BY 1,2 ORDER BY cantidad DESC`,
+    values: []
+});
+
+// Dinámico por agruparPor (igual que countCoursesStudentsByCategory). dias va
+// por values; agruparPor elige el text por rama, nunca se interpola.
+const reportAuditActivity = ({ dias, agruparPor }) => {
+    let text;
+    if (agruparPor === 'modulo') {
+        text = `SELECT COALESCE(m.name,'(sin módulo)') AS aplicacion,
+                       COALESCE(sm.name, l.entity_type, '(sin submódulo)') AS modulo,
+                       COUNT(*)::int AS acciones
+                FROM ${schema}.logs l
+                LEFT JOIN ${schema}.submodules sm ON sm.code = l.entity_type
+                LEFT JOIN ${schema}.modules m ON m.id = sm.module_id
+                WHERE l.date >= now() - ($1 || ' days')::interval
+                GROUP BY 1,2 ORDER BY acciones DESC`;
+    } else if (agruparPor === 'dia') {
+        text = `SELECT to_char(date_trunc('day', date),'YYYY-MM-DD') AS dia, COUNT(*)::int AS acciones
+                FROM ${schema}.logs
+                WHERE date >= now() - ($1 || ' days')::interval
+                GROUP BY 1 ORDER BY dia DESC`;
+    } else {
+        text = `SELECT COALESCE(username,'(anónimo)') AS usuario, COUNT(*)::int AS acciones
+                FROM ${schema}.logs
+                WHERE date >= now() - ($1 || ' days')::interval
+                GROUP BY 1 ORDER BY acciones DESC`;
+    }
+    return { text, values: [String(dias)] };
+};
+
+const reportPlatformUsersByRole = () => ({
+    text: `SELECT r.name AS rol,
+                  COUNT(pu.id)::int AS usuarios,
+                  (COUNT(pu.id) FILTER (WHERE pu.estado IS TRUE))::int AS activos,
+                  (COUNT(pu.id) FILTER (WHERE pu.last_login IS NOT NULL))::int AS con_ingreso
+           FROM ${schema}.roles r
+           LEFT JOIN ${schema}.platform_users pu ON pu.role_id = r.id
+           GROUP BY r.name ORDER BY usuarios DESC`,
+    values: []
+});
+
+const reportSyncRules = () => ({
+    text: `SELECT sr.id, sr.codigo_asignatura, sr.programa, sr.departamento, sr.seed_shortname,
+                  sr.categoryid, sr.activo, COUNT(c.id)::int AS cursos_asociados
+           FROM ${schema}.sync_rules sr
+           LEFT JOIN ${schema}.courses c ON c.codigo_asignatura = sr.codigo_asignatura
+           GROUP BY sr.id ORDER BY sr.activo DESC, sr.id`,
+    values: []
+});
+
+// Dinámico por agruparPor.
+const reportVirtualLabsGrades = ({ agruparPor }) => {
+    let text;
+    if (agruparPor === 'estudiante') {
+        text = `SELECT id_estudiante, correo, COUNT(*)::int AS calificaciones,
+                       ROUND(AVG(calificacion)::numeric,2) AS promedio
+                FROM ${schema}.labs_grades
+                GROUP BY id_estudiante, correo ORDER BY promedio DESC NULLS LAST`;
+    } else if (agruparPor === 'detalle') {
+        text = `SELECT id, id_estudiante, correo, id_curso, calificacion, created_at
+                FROM ${schema}.labs_grades ORDER BY created_at DESC`;
+    } else {
+        text = `SELECT id_curso, COUNT(*)::int AS calificaciones,
+                       ROUND(AVG(calificacion)::numeric,2) AS promedio,
+                       MIN(calificacion) AS minima, MAX(calificacion) AS maxima
+                FROM ${schema}.labs_grades GROUP BY id_curso ORDER BY id_curso`;
+    }
+    return { text, values: [] };
+};
+
+const reportPermissionsMatrix = () => ({
+    text: `SELECT r.name AS rol, m.name AS aplicacion, sm.name AS submodulo
+           FROM ${schema}.role_permissions rp
+           JOIN ${schema}.roles r ON r.id = rp.role_id
+           JOIN ${schema}.submodules sm ON sm.id = rp.submodule_id
+           JOIN ${schema}.modules m ON m.id = sm.module_id
+           ORDER BY r.name, m.name, sm.name`,
+    values: []
+});
+
+// syncDiscrepancies: solo el SELECT de courses; la comparación se queda en el generador.
+const reportCoursesForDiscrepancy = () => ({
+    text: `SELECT id, shortname, moodle_id, estado_sync FROM ${schema}.courses`,
+    values: []
+});
+
+const reportCourseById = (id) => ({
+    text: `SELECT id, shortname, moodle_id FROM ${schema}.courses WHERE id = $1`,
+    values: [id]
+});
+
+const reportEnrollmentCountByCourse = (courseid) => ({
+    text: `SELECT COUNT(*)::int AS n FROM ${schema}.enrollments WHERE courseid = $1`,
+    values: [courseid]
+});
+
 
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
@@ -985,6 +1230,7 @@ module.exports = {
     // moodle
     findMoodleUserByUsername,
     findMoodleEnrolmentId,
+    countCoursesStudentsByCategory,
     // health
     healthCheck,
 
@@ -1028,6 +1274,28 @@ module.exports = {
     deleteSyncRuleData,
     // logs
     insertLogData,
+    selectLogsData,
+    // normalización
+    updateUserNormalizedData,
+    updateCourseNormalizedData,
+    // reports
+    selectAllReports,
+    selectReportById,
+    insertReportData,
+    updateReportData,
+    deleteReportData,
+    reportCoursesBySyncStatus,
+    reportCoursesSyncErrors,
+    reportUsersNotSynced,
+    reportEnrollmentsByStatus,
+    reportAuditActivity,
+    reportPlatformUsersByRole,
+    reportSyncRules,
+    reportVirtualLabsGrades,
+    reportPermissionsMatrix,
+    reportCoursesForDiscrepancy,
+    reportCourseById,
+    reportEnrollmentCountByCourse,
 
     //Permission
     checkPermissions,

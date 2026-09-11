@@ -29,9 +29,27 @@ const {
     selectSubmodulesAdmin, insertSubmoduleData, updateSubmoduleData,
     selectRolePermissionsGrid, findRolePermission, insertRolePermissionData, deleteRolePermissionData,
     selectLabsGrades, insertLabGradeData,
-    resolveSyncRule, updateCourseSyncFields, insertLogData,
+    resolveSyncRule, updateCourseSyncFields, insertLogData, selectLogsData,
+    updateUserNormalizedData, updateCourseNormalizedData,
     selectSyncRulesAdmin, selectSyncRuleById, findSyncRuleExactMatch, insertSyncRuleData,
-    updateSyncRuleData, deleteSyncRuleData
+    updateSyncRuleData, deleteSyncRuleData,
+    selectAllReports,
+    selectReportById,
+    insertReportData,
+    updateReportData,
+    deleteReportData,
+    reportCoursesBySyncStatus: qReportCoursesBySyncStatus,
+    reportCoursesSyncErrors: qReportCoursesSyncErrors,
+    reportUsersNotSynced: qReportUsersNotSynced,
+    reportEnrollmentsByStatus: qReportEnrollmentsByStatus,
+    reportAuditActivity: qReportAuditActivity,
+    reportPlatformUsersByRole: qReportPlatformUsersByRole,
+    reportSyncRules: qReportSyncRules,
+    reportVirtualLabsGrades: qReportVirtualLabsGrades,
+    reportPermissionsMatrix: qReportPermissionsMatrix,
+    reportCoursesForDiscrepancy: qReportCoursesForDiscrepancy,
+    reportCourseById: qReportCourseById,
+    reportEnrollmentCountByCourse: qReportEnrollmentCountByCourse,
 } = require('./querysets');
  
 const pool = new Pool({
@@ -324,6 +342,35 @@ function findSyncRuleById(id) {
 function insertLog(type, description, username, entityType, entityId) {
     return new Promise((resolve, reject) => {
         pool.query(insertLogData(type, description, username, entityType, entityId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function listLogs(limit) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectLogsData(limit), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+// ─── NORMALIZACIÓN ────────────────────────────────────────────────────────────
+
+function updateUserNormalized(id, fields) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateUserNormalizedData(id, fields), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updateCourseNormalized(id, fields) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateCourseNormalizedData(id, fields), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -739,6 +786,163 @@ function insertLabGrade(data) {
     });
 }
 
+// ─── REPORTS ──────────────────────────────────────────────────────────────────
+
+function listReports() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectAllReports(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function findReportById(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectReportById(id), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows[0] || null);
+        });
+    });
+}
+
+function insertReport(dataIn) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertReportData(dataIn), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updateReport(id, dataIn) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateReportData(id, dataIn), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function deleteReport(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(deleteReportData(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+// ─── REPORTS: GENERADORES ─────────────────────────────────────────────────────
+
+function reportCoursesBySyncStatus() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportCoursesBySyncStatus(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportCoursesSyncErrors() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportCoursesSyncErrors(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportUsersNotSynced() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportUsersNotSynced(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportEnrollmentsByStatus() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportEnrollmentsByStatus(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportAuditActivity({ dias, agruparPor }) {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportAuditActivity({ dias, agruparPor }), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportPlatformUsersByRole() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportPlatformUsersByRole(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportSyncRules() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportSyncRules(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportVirtualLabsGrades({ agruparPor }) {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportVirtualLabsGrades({ agruparPor }), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportPermissionsMatrix() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportPermissionsMatrix(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportCoursesForDiscrepancy() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportCoursesForDiscrepancy(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportCourseById(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportCourseById(id), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportEnrollmentCountByCourse(courseid) {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportEnrollmentCountByCourse(courseid), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -771,6 +975,9 @@ module.exports = {
     findSyncRule,
     findSyncRuleById,
     insertLog,
+    listLogs,
+    updateUserNormalized,
+    updateCourseNormalized,
     listSyncRulesAdmin,
     findSyncRuleExact,
     insertSyncRuleAdmin,
@@ -820,5 +1027,23 @@ module.exports = {
     listLabsGrades,
     insertLabGrade,
     grantRolePermission,
-    revokeRolePermission
+    revokeRolePermission,
+    // reports
+    listReports,
+    findReportById,
+    insertReport,
+    updateReport,
+    deleteReport,
+    reportCoursesBySyncStatus,
+    reportCoursesSyncErrors,
+    reportUsersNotSynced,
+    reportEnrollmentsByStatus,
+    reportAuditActivity,
+    reportPlatformUsersByRole,
+    reportSyncRules,
+    reportVirtualLabsGrades,
+    reportPermissionsMatrix,
+    reportCoursesForDiscrepancy,
+    reportCourseById,
+    reportEnrollmentCountByCourse,
 };

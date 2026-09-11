@@ -2,7 +2,10 @@ const coursesCtrl = require('../../api/courses/index');
 const { moodleRequest } = require('../moodleService');
 const { logSyncError } = require('../syncLog');
 const { assertMoodleOk } = require('../moodleAssert');
+const { normalizeCourse, difiere } = require('../normalize');
 const { duplicateSeedCourse } = require('./duplicateSeedCourse');
+
+const CAMPOS_NORM = ['fullname', 'shortname', 'nombre_asignatura'];
 
 // Moodle espera startdate/enddate como timestamp Unix (segundos); fecha_inicio/
 // fecha_fin llegan de SICAU como fecha/timestamp de Postgres.
@@ -22,6 +25,17 @@ async function syncCourses(items = [], username = 'system') {
             if (!course.id) {
                 throw new Error('Sin ID de curso');
             }
+
+            // Normalizar antes de mandar a Moodle: limpiar espacios en
+            // fullname/shortname y capitalizar nombre_asignatura. Si cambió algo,
+            // se persiste también en la BD de Journey.
+            const norm = normalizeCourse(course);
+            if (difiere(course, norm, CAMPOS_NORM)) {
+                await coursesCtrl.applyNormalization(course.id, norm);
+            }
+            if (norm.fullname != null) course.fullname = norm.fullname;
+            if (norm.shortname != null) course.shortname = norm.shortname;
+            if (norm.nombre_asignatura != null) course.nombre_asignatura = norm.nombre_asignatura;
 
             await coursesCtrl.markCourseSyncing(course.id);
 

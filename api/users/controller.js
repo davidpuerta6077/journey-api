@@ -49,6 +49,11 @@ module.exports = (injectedDB) => {
         return data.updateUserUnsync(id);
     }
 
+    // Persiste los campos normalizados (nombre, apellido, correos) de un usuario.
+    async function applyNormalization(id, fields) {
+        return data.updateUserNormalized(id, fields);
+    }
+
     // ─── EXCEL PROCESSOR ──────────────────────────────────────────────────────
 
     function readExcel(filePath) {
@@ -202,6 +207,7 @@ async function itemByEmailData(TABLE, EMAIL) {
         generateErrorExcel,
         processExcelAndCreateUsers,
         markAsSynchronized,
-        markAsUnsynchronized
+        markAsUnsynchronized,
+        applyNormalization
     };
 };

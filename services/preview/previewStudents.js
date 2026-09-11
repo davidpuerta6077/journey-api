@@ -1,5 +1,6 @@
 const usersCtrl = require('../../api/users/index');
 const { moodleRequest } = require('../moodleService');
+const { normalizeUser } = require('../normalize');
 
 async function previewStudents() {
     const users = await usersCtrl.listUsersForSync();
@@ -30,6 +31,7 @@ async function previewStudents() {
 
         results.push({
             ...user,
+            ...normalizeUser(user),
             _syncStatus: { inDB: true, inMoodle }
         });
     }

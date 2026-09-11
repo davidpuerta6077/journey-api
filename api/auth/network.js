@@ -5,6 +5,7 @@ const fs = require('fs');
 const response = require('../../network/response')
 const { login } = require('./index')
 const checkAuth = require('../../middleware/checkAuth');
+const saveLog = require('../../middleware/saveLog');
 const ctrl = require('./index');
 
 router.post('/login', (req, res) => {
@@ -69,7 +70,7 @@ router.get('/me', checkAuth, async (req, res, next) => {
  *       400: { description: Username vacío }
  *       409: { description: Username ya en uso }
  */
-router.put('/me', checkAuth, async (req, res, next) => {
+router.put('/me', checkAuth, saveLog('perfil'), async (req, res, next) => {
     const username = (req.body.username || '').trim();
     if (!username) return response.error(req, res, 'El username no puede estar vacío', 400);
     try {
@@ -98,7 +99,7 @@ router.put('/me', checkAuth, async (req, res, next) => {
  *       200: { description: Foto actualizada }
  *       400: { description: No se recibió ningún archivo }
  */
-router.post('/me/foto', checkAuth, (req, res, next) => {
+router.post('/me/foto', checkAuth, saveLog('perfil'), (req, res, next) => {
     if (!req.files || !req.files.foto) {
         return response.error(req, res, 'No se recibió ningún archivo.', 400);
     }

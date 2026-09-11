@@ -8,6 +8,7 @@ const { applyCourseRule } = require('../../services/sync/applyCourseRule');
 const { createCourseManually } = require('../../services/sync/createCourseManually');
 const checkAuth = require('../../middleware/checkAuth');
 const checkPermission = require('../../middleware/checkPermissions');
+const saveLog = require('../../middleware/saveLog');
 
 // ─── RUTAS MOODLE ─────────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ const checkPermission = require('../../middleware/checkPermissions');
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/add_course', checkAuth, checkPermission("add_course"), async (req, res) => {
+router.post('/add_course', checkAuth, checkPermission("add_course"), saveLog("add_course"), async (req, res) => {
     try {
         const result = await moodleRequest('core_course_create_courses', {
             'courses[0][fullname]':    req.body.fullname,
@@ -147,7 +148,7 @@ router.post('/duplicate_course', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/update_course', checkAuth, checkPermission("update_course"), async (req, res) => {
+router.post('/update_course', checkAuth, checkPermission("update_course"), saveLog("update_course"), async (req, res) => {
     try {
         const result = await moodleRequest('core_course_update_courses', {
             'courses[0][id]':         req.body.id,
@@ -194,7 +195,7 @@ router.post('/update_course', checkAuth, checkPermission("update_course"), async
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/delete_course', checkAuth, checkPermission("delete_course"), async (req, res) => {
+router.post('/delete_course', checkAuth, checkPermission("delete_course"), saveLog("delete_course"), async (req, res) => {
     try {
         const result = await moodleRequest('core_course_delete_courses', {
             'courseids[0]': req.body.courseids
@@ -349,7 +350,7 @@ router.post('/list_course_content', checkAuth, checkPermission("list_course_cont
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/add_category', checkAuth, checkPermission("add_category"), async (req, res) => {
+router.post('/add_category', checkAuth, checkPermission("add_category"), saveLog("add_category"), async (req, res) => {
     try {
         const result = await moodleRequest('core_course_create_categories', {
             'categories[0][name]':              req.body.name,
@@ -528,7 +529,7 @@ router.post('/sync/preview', checkAuth, checkPermission("sync_preview_courses"),
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/sync', checkAuth, checkPermission("sync_courses"), async (req, res, next) => {
+router.post('/sync', checkAuth, checkPermission("sync_courses"), saveLog("sync_courses"), async (req, res, next) => {
     try {
         const items = req.body.items || [];
 
@@ -585,7 +586,7 @@ router.post('/sync', checkAuth, checkPermission("sync_courses"), async (req, res
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/apply_rule', checkAuth, checkPermission("sync_courses"), async (req, res, next) => {
+router.post('/apply_rule', checkAuth, checkPermission("sync_courses"), saveLog("sync_courses"), async (req, res, next) => {
     try {
         const result = await applyCourseRule(req.body.items || [], req.user?.email);
         response.success(req, res, result, 200);
