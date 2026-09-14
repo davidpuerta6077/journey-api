@@ -1,5 +1,6 @@
 const config = require('../config');
 const { Pool } = require('pg');
+const { normalizeUser, normalizeCourse } = require('../services/normalize');
 const {
     selectAllItems,
     selectAllUsers, selectUsersForSync, insertUsuarioData, updateUsuarioData,
@@ -84,7 +85,7 @@ function query(queryConfig) {
 
 function insertUser(data) {
     return new Promise((resolve, reject) => {
-        pool.query(insertUsuarioData(data), (err, result) => {
+        pool.query(insertUsuarioData({ ...data, ...normalizeUser(data) }), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -93,7 +94,7 @@ function insertUser(data) {
 
 function updateUser(data) {
     return new Promise((resolve, reject) => {
-        pool.query(updateUsuarioData(data), (err, result) => {
+        pool.query(updateUsuarioData({ ...data, ...normalizeUser(data) }), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -211,7 +212,7 @@ function resetPassword(id, password) {
 
 function insertCourse(data) {
     return new Promise((resolve, reject) => {
-        pool.query(insertCourseData(data), (err, result) => {
+        pool.query(insertCourseData({ ...data, ...normalizeCourse(data) }), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -220,7 +221,7 @@ function insertCourse(data) {
 
 function updateCourse(data) {
     return new Promise((resolve, reject) => {
-        pool.query(updateCourseData(data), (err, result) => {
+        pool.query(updateCourseData({ ...data, ...normalizeCourse(data) }), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
