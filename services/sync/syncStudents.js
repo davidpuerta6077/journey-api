@@ -21,7 +21,7 @@ async function syncStudents(items = [], username = 'system') {
             }
 
             // Normalizar antes de sincronizar: si cambió algo, se persiste en la
-            // BD de Journey para que el cron de Moodle lea el dato ya limpio.
+            // BD de Nexo para que el cron de Moodle lea el dato ya limpio.
             let norm = null;
             if (user.firstname !== undefined || user.lastname !== undefined) {
                 const candidato = normalizeUser(user);

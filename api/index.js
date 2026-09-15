@@ -40,7 +40,7 @@ app.use(fileUpload({
 //app.use(express.static(path.join(ROOT, 'public')));
 app.use('/uploads', express.static(path.join(ROOT, 'uploads')));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-    customSiteTitle: 'Journey API Docs',
+    customSiteTitle: 'Nexo API Docs',
     swaggerOptions: {
         persistAuthorization: true  // mantiene el token al recargar
     }

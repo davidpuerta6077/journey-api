@@ -160,7 +160,7 @@ module.exports = (injectedDB) => {
             .map(cat => cat.id);
     }
 
-    // Categoría nueva de Moodle, creada directamente desde Journey al armar una
+    // Categoría nueva de Moodle, creada directamente desde Nexo al armar una
     // regla (evita que el usuario tenga que ir a Moodle a crearla primero).
     async function createMoodleCategoria(body) {
         const { name, parent } = body;

@@ -485,7 +485,7 @@ router.post('/sync', checkAuth, checkPermission("sync_users"), saveLog("sync_use
  * @swagger
  * /users/journey:
  *   post:
- *     summary: Crear usuario directamente en Journey
+ *     summary: Crear usuario directamente en Nexo
  *     tags: [Users]
  *     requestBody:
  *       required: true
@@ -495,7 +495,7 @@ router.post('/sync', checkAuth, checkPermission("sync_users"), saveLog("sync_use
  *             $ref: '#/components/schemas/User'
  *     responses:
  *       201:
- *         description: Usuario creado en Journey
+ *         description: Usuario creado en Nexo
  *         content:
  *           application/json:
  *             schema:
@@ -596,7 +596,7 @@ router.get('/:id/enrollments', checkAuth, checkPermission("get_user_enrollments"
  * @swagger
  * /users/{id}:
  *   put:
- *     summary: Actualizar usuario en Journey
+ *     summary: Actualizar usuario en Nexo
  *     tags: [Users]
  *     parameters:
  *       - in: path
@@ -625,7 +625,7 @@ router.get('/:id/enrollments', checkAuth, checkPermission("get_user_enrollments"
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *   delete:
- *     summary: Eliminar usuario de Journey
+ *     summary: Eliminar usuario de Nexo
  *     tags: [Users]
  *     parameters:
  *       - in: path

@@ -5,14 +5,14 @@ const { meta } = require('../util');
 async function enrollmentMoodleVsJourney(params = {}) {
     const courseid = Number(params.courseid);
     if (params.courseid === '' || params.courseid == null || !Number.isInteger(courseid) || courseid <= 0) {
-        const err = new Error('courseid (id de curso Journey) es obligatorio');
+        const err = new Error('courseid (id de curso Nexo) es obligatorio');
         err.status = 400;
         throw err;
     }
 
     const [curso] = await db.reportCourseById(courseid);
     if (!curso) {
-        const err = new Error('Curso Journey ' + courseid + ' no encontrado');
+        const err = new Error('Curso Nexo ' + courseid + ' no encontrado');
         err.status = 400;
         throw err;
     }
@@ -28,7 +28,7 @@ async function enrollmentMoodleVsJourney(params = {}) {
     return {
         columns: [
             { key: 'curso', label: 'Curso' },
-            { key: 'en_journey', label: 'En Journey' },
+            { key: 'en_journey', label: 'En Nexo' },
             { key: 'en_moodle', label: 'En Moodle' },
             { key: 'diferencia', label: 'Diferencia' },
         ],

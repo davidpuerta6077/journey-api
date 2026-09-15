@@ -1,5 +1,5 @@
 // Reasigna los submódulos Integración, Reportes, Estadísticas y Configuración
-// (antes agrupados bajo "Journey Sync") al módulo "Administrador" (code: admin).
+// (antes agrupados bajo "Nexo Sync") al módulo "Administrador" (code: admin).
 // Idempotente: si un submódulo ya pertenece al módulo admin, no hace nada.
 // Uso: node database/seeds/moveIntegrationReportsToAdmin.js
 
