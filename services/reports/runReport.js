@@ -12,7 +12,7 @@ const generadores = {
     moodle_hidden_courses: require('./moodle/hiddenCourses').hiddenCourses,
     moodle_courses_without_teacher: require('./moodle/coursesWithoutTeacher').coursesWithoutTeacher,
 
-    // Journey interno (Postgres)
+    // Nexo interno (Postgres)
     journey_courses_by_sync_status: require('./internal/coursesBySyncStatus').coursesBySyncStatus,
     journey_courses_sync_errors: require('./internal/coursesSyncErrors').coursesSyncErrors,
     journey_users_not_synced: require('./internal/usersNotSynced').usersNotSynced,
@@ -23,7 +23,7 @@ const generadores = {
     journey_virtual_labs_grades: require('./internal/virtualLabsGrades').virtualLabsGrades,
     journey_permissions_matrix: require('./internal/permissionsMatrix').permissionsMatrix,
 
-    // Cruces Moodle + Journey
+    // Cruces Moodle + Nexo
     sync_discrepancies: require('./cross/syncDiscrepancies').syncDiscrepancies,
     enrollment_moodle_vs_journey: require('./cross/enrollmentMoodleVsJourney').enrollmentMoodleVsJourney,
 };

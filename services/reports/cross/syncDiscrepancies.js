@@ -37,7 +37,7 @@ async function syncDiscrepancies(params = {}) {
         columns: [
             { key: 'tipo', label: 'Discrepancia' },
             { key: 'shortname', label: 'Nombre corto' },
-            { key: 'id_journey', label: 'ID Journey' },
+            { key: 'id_journey', label: 'ID Nexo' },
             { key: 'moodle_id', label: 'ID Moodle' },
         ],
         rows,

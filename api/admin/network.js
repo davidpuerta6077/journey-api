@@ -12,7 +12,7 @@ const saveLog = require('../../middleware/saveLog');
  * @swagger
  * /admin/usuarios:
  *   get:
- *     summary: Listar usuarios de la plataforma (Bravo Suite, no Moodle)
+ *     summary: Listar usuarios de la plataforma (Bravo Hub, no Moodle)
  *     tags: [Admin]
  *     responses:
  *       200: { description: Lista de usuarios de plataforma }

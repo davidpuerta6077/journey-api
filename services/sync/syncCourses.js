@@ -28,7 +28,7 @@ async function syncCourses(items = [], username = 'system') {
 
             // Normalizar antes de mandar a Moodle: limpiar espacios en
             // fullname/shortname y capitalizar nombre_asignatura. Si cambió algo,
-            // se persiste también en la BD de Journey.
+            // se persiste también en la BD de Nexo.
             const norm = normalizeCourse(course);
             if (difiere(course, norm, CAMPOS_NORM)) {
                 await coursesCtrl.applyNormalization(course.id, norm);

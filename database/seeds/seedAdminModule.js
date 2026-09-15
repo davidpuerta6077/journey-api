@@ -1,5 +1,5 @@
 // Siembra idempotente del módulo "Administrador" (usuarios, roles, módulos,
-// submódulos y permisos de Bravo Suite) y otorga acceso inicial solo a superadmin.
+// submódulos y permisos de Bravo Hub) y otorga acceso inicial solo a superadmin.
 // Uso: node database/seeds/seedAdminModule.js
 
 const { Pool } = require('pg');

@@ -1,4 +1,4 @@
-# Diseño — Módulo Reportes (Bravo Suite / Journey)
+# Diseño — Módulo Reportes (Bravo Hub / Nexo)
 
 Fecha: 2026-09-10
 Rama: `brand_branch`
@@ -10,7 +10,7 @@ Vista de Reportes que permite **crear** definiciones de reporte y **visualizar**
 su resultado. Las fuentes de datos son:
 
 - **Moodle** (principal): vía acceso MySQL directo (`database/mysqlMoodle.js`).
-- **Apps internas de Bravo Suite** (Journey y sus módulos): estructura preparada,
+- **Apps internas de Bravo Hub** (Nexo y sus módulos): estructura preparada,
   sin reportes implementados en esta iteración.
 
 Reportes objetivo del negocio (solo el primero se implementa ahora, el resto se
@@ -120,7 +120,7 @@ Agregar los 5 nombres al `module.exports` de `querysets.js`.
   - `module.exports = { coursesByCategory }`.
 - Carpetas preparadas para extender (se crean cuando se agregue el primer archivo):
   - `services/reports/moodle/` — más reportes Moodle (ej. `studentsAtRisk.js`).
-  - `services/reports/internal/` — reportes de apps internas de Bravo Suite.
+  - `services/reports/internal/` — reportes de apps internas de Bravo Hub.
 
 **Formato unificado** que devuelve todo generador y `runReport`:
 
@@ -242,7 +242,7 @@ No hay suite en el repo (`npm test` es `echo "Error: no test specified" && exit 
 ## Fuera de alcance (iteraciones siguientes)
 
 - Reporte `moodle_students_at_risk` (inactividad por `mdl_user.lastaccess` / `mdl_user_lastaccess`).
-- Reportes desde apps internas de Bravo Suite (`services/reports/internal/`).
+- Reportes desde apps internas de Bravo Hub (`services/reports/internal/`).
 - Exportación a CSV/Excel.
 - Snapshots de resultados / comparación histórica.
 - Programación de reportes / envío por correo.

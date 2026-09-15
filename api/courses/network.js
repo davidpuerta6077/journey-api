@@ -398,11 +398,11 @@ router.post('/list_category', checkAuth, checkPermission("list_category"), async
  * @swagger
  * /courses/list:
  *   get:
- *     summary: Listar cursos de Journey
+ *     summary: Listar cursos de Nexo
  *     tags: [Courses]
  *     responses:
  *       200:
- *         description: Lista de cursos en Journey
+ *         description: Lista de cursos en Nexo
  *         content:
  *           application/json:
  *             schema:

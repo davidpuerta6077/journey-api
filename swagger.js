@@ -4,9 +4,9 @@ const options = {
     definition: {
         openapi: '3.0.0',
         info: {
-            title: 'Journey API',
+            title: 'Nexo API',
             version: '1.0.0',
-            description: 'Documentación de la API del sistema Journey',
+            description: 'Documentación de la API del sistema Nexo',
         },
 
         components: {

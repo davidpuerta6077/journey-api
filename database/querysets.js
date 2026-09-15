@@ -973,7 +973,7 @@ const insertLogData = (type, description, username, entityType, entityId) => ({
 
 // entity_type guarda el código de submódulo (el mismo que checkPermission).
 // Se resuelve contra submodules/modules: modules.name es la categoría principal
-// del menú lateral (Journey Sync, Administrador, ...) y submodules.name el módulo.
+// del menú lateral (Nexo Sync, Administrador, ...) y submodules.name el módulo.
 // El front puede afinar el nombre con el árbol del menú (menuItems).
 const selectLogsData = (limit) => ({
     text: `
