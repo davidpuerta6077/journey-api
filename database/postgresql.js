@@ -1,6 +1,6 @@
 const config = require('../config');
 const { Pool } = require('pg');
-const { normalizeUser, normalizeCourse } = require('../services/normalize');
+const { normalizeUser, normalizeCourse, normalizeEnrollment } = require('../services/normalize');
 const {
     selectAllItems,
     selectAllUsers, selectUsersForSync, insertUsuarioData, updateUsuarioData,
@@ -429,7 +429,7 @@ function deleteSyncRuleAdmin(id) {
 
 function insertEnrollment(data) {
     return new Promise((resolve, reject) => {
-        pool.query(insertEnrollmentData(data), (err, result) => {
+        pool.query(insertEnrollmentData({ ...data, ...normalizeEnrollment(data) }), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -447,7 +447,7 @@ function updateEnrollment(data) {
 
 function updateJourneyEnrollment(data) {
     return new Promise((resolve, reject) => {
-        pool.query(updateJourneyEnrollmentData(data), (err, result) => {
+        pool.query(updateJourneyEnrollmentData({ ...data, ...normalizeEnrollment(data) }), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });

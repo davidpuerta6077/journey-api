@@ -1007,13 +1007,14 @@ const updateUserNormalizedData = (id, { firstname, lastname, email, correo_perso
     values: [firstname, lastname, email, correo_personal ?? null, id]
 });
 
-const updateCourseNormalizedData = (id, { fullname, shortname, nombre_asignatura }) => ({
+const updateCourseNormalizedData = (id, { fullname, shortname, nombre_asignatura, docente, departamento, programa }) => ({
     text: `
         UPDATE ${schema}.courses
-        SET fullname = $1, shortname = $2, nombre_asignatura = $3
-        WHERE id = $4
+        SET fullname = $1, shortname = $2, nombre_asignatura = $3,
+            docente = $4, departamento = $5, programa = $6
+        WHERE id = $7
     `,
-    values: [fullname, shortname, nombre_asignatura ?? null, id]
+    values: [fullname, shortname, nombre_asignatura ?? null, docente ?? null, departamento ?? null, programa ?? null, id]
 });
 
 

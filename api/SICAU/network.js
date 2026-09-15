@@ -3,6 +3,21 @@ const router = Router();
 const response = require('../../network/response');
 const ctrl = require('./index');
 const { moodleRequest } = require('../../services/moodleService');
+const postgresql = require('../../database/postgresql');
+
+// Estos endpoints no pasan por checkAuth (los llama el sistema SICAU o se
+// prueban a mano desde Postman, sin sesión de usuario), así que no hay
+// req.user.email para el middleware saveLog. Se deja igual un registro de
+// auditoría best-effort, con username fijo 'SICAU', para que en Ver Logs
+// quede rastro de lo que llegó desde afuera y no solo de lo que se hace
+// dentro del panel. La descripción imita el formato "MÉTODO /ruta" de
+// saveLog para que AdminLogs.jsx la clasifique igual (por prefijo de ruta).
+function logIngestaSicau(req, cantidad, etiqueta) {
+    const descripcion = `${req.method} ${req.baseUrl}${req.path} — ${cantidad} ${etiqueta}`;
+    postgresql
+        .insertLog(req.method.toLowerCase(), descripcion, 'SICAU', 'sicau', null)
+        .catch((err) => console.error('No se pudo registrar el log de auditoría (SICAU):', err.message));
+}
 /**
  * @swagger
  * /sicau/get_users_sicau:
@@ -137,6 +152,7 @@ router.post('/send_users_sicau', async (req, res, next) => {
             const result = await ctrl.saveSicauUsuario(user);
             results.push(result);
         }
+        logIngestaSicau(req, lista.length, 'usuario(s)');
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);
@@ -192,6 +208,7 @@ router.post('/send_courses_sicau', async (req, res, next) => {
             const result = await ctrl.saveSicauCurso(course);
             results.push(result);
         }
+        logIngestaSicau(req, lista.length, 'curso(s)');
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);
@@ -247,6 +264,7 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
             const result = await ctrl.saveSicauMatricula(enr);
             results.push(result);
         }
+        logIngestaSicau(req, lista.length, 'matrícula(s)');
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);
@@ -341,6 +359,7 @@ router.post('/send_courses_enrollments_sicau', async (req, res, next) => {
             const result = await ctrl.saveSicauCursoYMatriculas(item);
             results.push(result);
         }
+        logIngestaSicau(req, lista.length, 'curso(s)+matrícula(s)');
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);
