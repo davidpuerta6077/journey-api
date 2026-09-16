@@ -4,6 +4,9 @@ module.exports = (injectedDB) => {
         data = require('../../database/postgresql');
 
     async function permissions(email) {
+        data.updatePlatformUserLastLogin(email).catch(err => {
+            console.error('Error actualizando last_login:', err.message);
+        });
         return data.checkPermissionsData(email)
     };
 

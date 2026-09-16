@@ -209,7 +209,8 @@ const selectCoursesForSync = () => ({
     text: `SELECT id, fullname, shortname, categoryid, idnumber, summary, visible, format,
            numsections, moodle_id, sincronizado, estado_sync, ultimo_error_sync,
            departamento, programa, docente,
-           fecha_inicio, fecha_fin, periodo, grupo, codigo_asignatura, nombre_asignatura, templatecourse
+           fecha_inicio, fecha_fin, periodo, grupo, codigo_asignatura, nombre_asignatura, templatecourse,
+           created_at, synced_at
            FROM ${schema}.courses ORDER BY id DESC`,
     values: []
 });
@@ -233,7 +234,8 @@ function updateCourseSyncStatusQuery(id, statusValue) {
         text: `UPDATE ${schema}.courses
                SET sincronizado = $2,
                    estado_sync = $3,
-                   ultimo_error_sync = CASE WHEN $2 THEN NULL ELSE ultimo_error_sync END
+                   ultimo_error_sync = CASE WHEN $2 THEN NULL ELSE ultimo_error_sync END,
+                   synced_at = CASE WHEN $2 THEN now() ELSE synced_at END
                WHERE id = $1::integer`,
         values: [id, statusValue, statusValue ? 'sincronizado' : 'error']
     };
@@ -604,7 +606,7 @@ const healthCheck = () => ({
 
 const selectPlatformUsers = () => ({
     text: `SELECT u.id, u.username, u.email, u.estado, u.created_at, u.updated_at,
-           u.last_login, u.created_by, u.role_id, u.photo_url, r.name AS role_name
+           u.last_login, u.created_by, u.role_id, u.photo_url, u.departamento, r.name AS role_name
            FROM ${schema}.platform_users u
            LEFT JOIN ${schema}.roles r ON r.id = u.role_id
            ORDER BY u.id`,
@@ -618,7 +620,7 @@ const findPlatformUserByEmailOrUsername = (email, username) => ({
 
 const findPlatformUserByEmail = (email) => ({
     text: `SELECT u.id, u.username, u.email, u.estado, u.created_at, u.updated_at,
-           u.last_login, u.role_id, u.photo_url, r.name AS role_name
+           u.last_login, u.role_id, u.photo_url, u.departamento, r.name AS role_name
            FROM ${schema}.platform_users u
            LEFT JOIN ${schema}.roles r ON r.id = u.role_id
            WHERE u.email = $1
@@ -631,31 +633,36 @@ const updatePlatformUserPhotoData = (email, photoUrl) => ({
     values: [photoUrl, email]
 });
 
+const updatePlatformUserLastLoginData = (email) => ({
+    text: `UPDATE ${schema}.platform_users SET last_login = now() WHERE email = $1 RETURNING *`,
+    values: [email]
+});
+
 const updatePlatformUserUsernameData = (email, username) => ({
     text: `UPDATE ${schema}.platform_users SET username = $1, updated_at = now() WHERE email = $2 RETURNING *`,
     values: [username, email]
 });
 
 const insertPlatformUserData = (data) => {
-    const { username, email, role_id, created_by } = data;
+    const { username, email, role_id, created_by, departamento } = data;
     const text = `
-        INSERT INTO ${schema}.platform_users (username, email, role_id, created_by)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO ${schema}.platform_users (username, email, role_id, created_by, departamento)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
     `;
-    const values = [username, email, role_id || null, created_by || null];
+    const values = [username, email, role_id || null, created_by || null, departamento || null];
     return { text, values };
 };
 
 const updatePlatformUserData = (id, data) => {
-    const { username, role_id } = data;
+    const { username, role_id, departamento } = data;
     const text = `
         UPDATE ${schema}.platform_users
-        SET username = $1, role_id = $2, updated_at = now()
-        WHERE id = $3
+        SET username = $1, role_id = $2, departamento = $3, updated_at = now()
+        WHERE id = $4
         RETURNING *
     `;
-    const values = [username, role_id || null, id];
+    const values = [username, role_id || null, departamento || null, id];
     return { text, values };
 };
 
@@ -1244,6 +1251,7 @@ module.exports = {
     updatePlatformUserEstadoData,
     updatePlatformUserPhotoData,
     updatePlatformUserUsernameData,
+    updatePlatformUserLastLoginData,
     // admin: roles
     selectRoles,
     insertRoleData,

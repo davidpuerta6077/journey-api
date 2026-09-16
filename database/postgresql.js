@@ -25,6 +25,7 @@ const {
     deleteEnrollmentData,
     selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData,
     updatePlatformUserData, updatePlatformUserEstadoData, updatePlatformUserPhotoData, updatePlatformUserUsernameData,
+    updatePlatformUserLastLoginData,
     selectRoles, insertRoleData, updateRoleData,
     selectModulesAdmin, insertModuleData, updateModuleData,
     selectSubmodulesAdmin, insertSubmoduleData, updateSubmoduleData,
@@ -622,6 +623,15 @@ function updatePlatformUserUsername(email, username) {
     });
 }
 
+function updatePlatformUserLastLogin(email) {
+    return new Promise((resolve, reject) => {
+        pool.query(updatePlatformUserLastLoginData(email), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 // ─── ADMIN: ROLES ────────────────────────────────────────────────────────────────
 
 function listRoles() {
@@ -1009,6 +1019,7 @@ module.exports = {
     findPlatformUserByEmail: findPlatformUserByEmailFn,
     updatePlatformUserPhoto,
     updatePlatformUserUsername,
+    updatePlatformUserLastLogin,
     // admin: roles
     listRoles,
     insertRole,
