@@ -7,7 +7,7 @@
 //  - normalizeEmail: cleanSpaces + sin espacios + minúsculas; si queda vacío o
 //                    sin "@" se devuelve el valor original (no se inventa)
 
-const CONECTORES = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e']);
+const CONECTORES = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e', 'en']);
 
 function cleanSpaces(s) {
   if (s == null) return s;
@@ -54,13 +54,43 @@ function normalizeUser(u) {
 }
 
 // Devuelve solo los campos normalizados de un curso. fullname/shortname solo se
-// limpian de espacios (contienen códigos como FB0010 que no deben capitalizarse);
-// nombre_asignatura sí lleva Capitalización tipo título.
+// limpian de espacios (contienen códigos como FB0010 que no deben capitalizarse) y,
+// de paso, corrigen el rótulo "Docente:" que quedó grabado en fullnames viejos
+// generados por SICAU antes de renombrarlo a "Profesor:". nombre_asignatura,
+// docente, departamento y programa sí llevan Capitalización tipo título.
 function normalizeCourse(c) {
   return {
-    fullname: cleanSpaces(c.fullname),
+    fullname: cleanSpaces(c.fullname)?.replace(/Docente:/gi, 'Profesor:'),
     shortname: cleanSpaces(c.shortname),
     nombre_asignatura: titleCaseName(c.nombre_asignatura),
+    docente: titleCaseName(c.docente),
+    departamento: titleCaseName(c.departamento),
+    programa: titleCaseName(c.programa),
+  };
+}
+
+// Devuelve solo los campos normalizados de una matrícula (los mismos datos de
+// asignatura/programa que se duplican en enrollments para no depender de un
+// JOIN contra courses).
+function normalizeEnrollment(e) {
+  return {
+    nombre_asignatura: titleCaseName(e.nombre_asignatura),
+    programa: titleCaseName(e.programa),
+  };
+}
+
+// Arma fullname/shortname con el mismo formato que usa la ingesta de SICAU, a
+// partir de piezas ya normalizadas (grupo ya con el prefijo "G", nombre de
+// asignatura y docente ya en Title Case). Se usa tanto al recibir un curso
+// nuevo/con novedad de SICAU como al reconstruir en el backfill los cursos que
+// quedaron con el fullname en mayúsculas de antes de que existiera esta
+// normalización: cleanSpaces por sí solo no recapitaliza texto ya incrustado
+// dentro del string, así que ahí no basta con limpiar espacios, hay que rearmarlo.
+function buildCourseNames({ grupo, nombreAsignatura, codigoAsignatura, docente, periodo }) {
+  const periodoFormateado = periodo ? `${String(periodo).slice(0, 4)}-${String(periodo).slice(4)}` : '';
+  return {
+    fullname: cleanSpaces(`${grupo || ''} ${nombreAsignatura || ''} (${codigoAsignatura || ''}) - Profesor: ${docente || ''} (${periodoFormateado})`),
+    shortname: cleanSpaces(`${grupo || ''} ${nombreAsignatura || ''} (${codigoAsignatura || ''})(${periodoFormateado})`),
   };
 }
 
@@ -75,5 +105,7 @@ module.exports = {
   normalizeEmail,
   normalizeUser,
   normalizeCourse,
+  normalizeEnrollment,
+  buildCourseNames,
   difiere,
 };

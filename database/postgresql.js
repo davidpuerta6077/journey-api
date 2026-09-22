@@ -1,6 +1,6 @@
 const config = require('../config');
 const { Pool } = require('pg');
-const { normalizeUser, normalizeCourse } = require('../services/normalize');
+const { normalizeUser, normalizeCourse, normalizeEnrollment } = require('../services/normalize');
 const {
     selectAllItems,
     selectAllUsers, selectUsersForSync, insertUsuarioData, updateUsuarioData,
@@ -25,6 +25,7 @@ const {
     deleteEnrollmentData,
     selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData,
     updatePlatformUserData, updatePlatformUserEstadoData, updatePlatformUserPhotoData, updatePlatformUserUsernameData,
+    updatePlatformUserLastLoginData,
     selectRoles, insertRoleData, updateRoleData,
     selectModulesAdmin, insertModuleData, updateModuleData,
     selectSubmodulesAdmin, insertSubmoduleData, updateSubmoduleData,
@@ -429,7 +430,7 @@ function deleteSyncRuleAdmin(id) {
 
 function insertEnrollment(data) {
     return new Promise((resolve, reject) => {
-        pool.query(insertEnrollmentData(data), (err, result) => {
+        pool.query(insertEnrollmentData({ ...data, ...normalizeEnrollment(data) }), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -447,7 +448,7 @@ function updateEnrollment(data) {
 
 function updateJourneyEnrollment(data) {
     return new Promise((resolve, reject) => {
-        pool.query(updateJourneyEnrollmentData(data), (err, result) => {
+        pool.query(updateJourneyEnrollmentData({ ...data, ...normalizeEnrollment(data) }), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -616,6 +617,15 @@ function updatePlatformUserPhoto(email, photoUrl) {
 function updatePlatformUserUsername(email, username) {
     return new Promise((resolve, reject) => {
         pool.query(updatePlatformUserUsernameData(email, username), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updatePlatformUserLastLogin(email) {
+    return new Promise((resolve, reject) => {
+        pool.query(updatePlatformUserLastLoginData(email), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -1009,6 +1019,7 @@ module.exports = {
     findPlatformUserByEmail: findPlatformUserByEmailFn,
     updatePlatformUserPhoto,
     updatePlatformUserUsername,
+    updatePlatformUserLastLogin,
     // admin: roles
     listRoles,
     insertRole,

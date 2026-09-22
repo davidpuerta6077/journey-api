@@ -5,7 +5,7 @@ const { assertMoodleOk } = require('../moodleAssert');
 const { normalizeCourse, difiere } = require('../normalize');
 const { duplicateSeedCourse } = require('./duplicateSeedCourse');
 
-const CAMPOS_NORM = ['fullname', 'shortname', 'nombre_asignatura'];
+const CAMPOS_NORM = ['fullname', 'shortname', 'nombre_asignatura', 'docente', 'departamento', 'programa'];
 
 // Moodle espera startdate/enddate como timestamp Unix (segundos); fecha_inicio/
 // fecha_fin llegan de SICAU como fecha/timestamp de Postgres.
@@ -27,15 +27,17 @@ async function syncCourses(items = [], username = 'system') {
             }
 
             // Normalizar antes de mandar a Moodle: limpiar espacios en
-            // fullname/shortname y capitalizar nombre_asignatura. Si cambió algo,
-            // se persiste también en la BD de Nexo.
+            // fullname/shortname y capitalizar nombre_asignatura/docente/
+            // departamento/programa. Si cambió algo, se persiste también en la BD
+            // de Nexo (docente/departamento/programa no se le mandan a Moodle,
+            // pero deben quedar limpios en Nexo igual que el resto de los datos).
             const norm = normalizeCourse(course);
             if (difiere(course, norm, CAMPOS_NORM)) {
                 await coursesCtrl.applyNormalization(course.id, norm);
             }
-            if (norm.fullname != null) course.fullname = norm.fullname;
-            if (norm.shortname != null) course.shortname = norm.shortname;
-            if (norm.nombre_asignatura != null) course.nombre_asignatura = norm.nombre_asignatura;
+            for (const campo of CAMPOS_NORM) {
+                if (norm[campo] != null) course[campo] = norm[campo];
+            }
 
             await coursesCtrl.markCourseSyncing(course.id);
 

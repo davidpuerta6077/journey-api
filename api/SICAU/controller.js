@@ -1,3 +1,5 @@
+const { normalizeCourse, buildCourseNames } = require('../../services/normalize');
+
 // ─── MAPEO DE ROLES ───────────────────────────────────────────────────────────
 const ROLE_MAP = {
     'ESTUDIANTE': 'student',
@@ -55,25 +57,23 @@ module.exports = (injectedDB) => {
     async function saveSicauCurso(course) {
         const {
             codigo_asignatura,
-            nombre_asignatura,
-            programa,
-            departamento,
             periodo,
             grupo: grupoRaw,
-            docente,
             fecha_inicio,
             fecha_fin
         } = course;
         const grupo = normalizeGrupo(grupoRaw);
 
-        // Construir campos derivados
-        const periodoFormateado = periodo
-            ? `${periodo.slice(0, 4)}-${periodo.slice(4)}`
-            : '';
+        // Se normaliza (Title Case) antes de armar fullname/shortname y de comparar
+        // contra lo ya guardado: así el nombre que se ve y el que se manda a Moodle
+        // salen limpios, y una diferencia de mayúsculas en lo que manda SICAU no se
+        // confunde con un cambio real de docente/asignatura.
+        const { nombre_asignatura, docente, departamento, programa } = normalizeCourse(course);
 
-        const fullname  = `${grupo} ${nombre_asignatura} (${codigo_asignatura}) - Docente: ${docente} (${periodoFormateado})`;
-        const shortname = `${grupo} ${nombre_asignatura} (${codigo_asignatura})(${periodoFormateado})`;
-        const idnumber  = `${codigo_asignatura}${periodo}${grupo}`;
+        const { fullname, shortname } = buildCourseNames({
+            grupo, nombreAsignatura: nombre_asignatura, codigoAsignatura: codigo_asignatura, docente, periodo,
+        });
+        const idnumber = `${codigo_asignatura}${periodo}${grupo}`;
         const templatecourse = `SEMILLA-${codigo_asignatura}`;
 
         // Verificar si ya existe: por idnumber (codigo_asignatura+periodo+grupo),
@@ -88,9 +88,9 @@ module.exports = (injectedDB) => {
         const existing = await data.findCourseSicau(idnumber);
         if (existing.length > 0) {
             const curso = existing[0];
-            const cambioDocente   = (curso.docente || null) !== (docente || null);
+            const cambioProfesor  = (curso.docente || null) !== (docente || null);
             const cambioAsignatura = (curso.nombre_asignatura || null) !== (nombre_asignatura || null);
-            if (cambioDocente || cambioAsignatura) {
+            if (cambioProfesor || cambioAsignatura) {
                 // Si el curso ya existe en Moodle (moodle_id), no es un curso nuevo,
                 // solo cambió su metadata: se marca "novedad" para que Módulo
                 // Cursos lo muestre en amarillo con opción de actualizar en Moodle
@@ -99,7 +99,7 @@ module.exports = (injectedDB) => {
                 // Sync Cursos, no un simple update de metadata.
                 const estadoDestino = curso.moodle_id ? 'novedad' : 'pendiente';
                 await data.updateCourseFromSicau(curso.id, { docente, fullname, shortname, nombre_asignatura, estado_sync: estadoDestino });
-                return { idnumber, status: 'updated_docente' };
+                return { idnumber, status: 'updated_profesor' };
             }
             return { idnumber, status: 'exists' };
         }

@@ -57,7 +57,8 @@ module.exports = (injectedDB) => {
         return rows[0] || null;
     }
 
-    // Persiste los campos normalizados (fullname, shortname, nombre_asignatura).
+    // Persiste los campos normalizados (fullname, shortname, nombre_asignatura,
+    // docente, departamento, programa).
     async function applyNormalization(id, fields) {
         return data.updateCourseNormalized(id, fields);
     }

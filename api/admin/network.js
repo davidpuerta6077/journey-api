@@ -43,6 +43,7 @@ router.get('/usuarios', checkAuth, checkPermission('admin_users'), async (req, r
  *               username: { type: string }
  *               email:    { type: string }
  *               role_id:  { type: integer }
+ *               departamento: { type: string }
  *     responses:
  *       200: { description: Usuario de plataforma creado }
  *       409: { description: Ya existe un usuario con ese email o username }
@@ -76,6 +77,7 @@ router.post('/usuarios', checkAuth, checkPermission('admin_users'), saveLog('adm
  *             properties:
  *               username: { type: string }
  *               role_id:  { type: integer }
+ *               departamento: { type: string }
  *     responses:
  *       200: { description: Usuario de plataforma actualizado }
  */
