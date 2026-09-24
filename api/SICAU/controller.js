@@ -1,4 +1,5 @@
 const { normalizeCourse, buildCourseNames } = require('../../services/normalize');
+const enrollmentsCtrl = require('../enrollments/index');
 
 // ─── MAPEO DE ROLES ───────────────────────────────────────────────────────────
 const ROLE_MAP = {
@@ -132,51 +133,46 @@ module.exports = (injectedDB) => {
 
     // ─── MATRÍCULAS ───────────────────────────────────────────────────────────
 
+    // La detección de novedades (traslado por cambio de grupo, cambio de
+    // estado sin cambio de grupo) vive en un solo lugar: enrollmentsCtrl.
+    // saveEnrollmentConNovedades (api/enrollments/controller.js) — la usa
+    // tanto esta ingesta automática de SICAU como la creación manual desde
+    // Módulos > Matrículas, para que el comportamiento sea idéntico sin
+    // importar de dónde venga la matrícula.
     async function saveSicauMatricula(enr) {
-        // 1. Buscar userid por cédula
+        // 1. Buscar userid por cédula (SICAU manda cédula, no el id interno)
         const userResult = await data.findUserByDoc(String(enr.cedula));
         if (userResult.length === 0) {
             return { cedula: enr.cedula, status: 'error', error: 'Usuario no encontrado' };
         }
         const userid = userResult[0].id;
-
-        // 2. Generar código Journey del curso (sin cédula)
         const grupo = normalizeGrupo(enr.grupo);
-        const codigoJourney = `${enr.codigo_asignatura}${enr.periodo}${grupo}`;
-
-        // 3. Buscar courseid por codigo_journey
-        const courseResult = await data.findCourseSicau(codigoJourney);
-        const courseid = courseResult.length > 0 ? courseResult[0].id : null;
-
-        // 4. Verificar si ya existe la matrícula para ese usuario y curso
-        const existing = await data.findEnrollmentByUserAndCourse(userid, codigoJourney);
-        if (existing.length > 0) {
-            return { cedula: enr.cedula, codigo_journey: codigoJourney, status: 'exists' };
-        }
-
-        // 5. Mapear rol y insertar
         const moodleRole = ROLE_MAP[enr.role?.toUpperCase()] || 'student';
 
-        await data.insertEnrollment({
+        const result = await enrollmentsCtrl.saveEnrollmentConNovedades({
             userid,
-            courseid,
-            role:                   moodleRole,
-            moodle_enrollment_id:   null,
-            codigo_asignatura:      enr.codigo_asignatura     || null,
-            nombre_asignatura:      enr.nombre_asignatura     || null,
-            programa:               enr.programa              || null,
-            periodo:                enr.periodo               || null,
-            grupo:                  grupo                     || null,
-            codigo_journey:         codigoJourney,
-            estado:                 enr.estado                || null,
-            fecha_creacion_journey: new Date().toISOString().split('T')[0]
+            codigo_asignatura: enr.codigo_asignatura,
+            nombre_asignatura: enr.nombre_asignatura,
+            programa:          enr.programa,
+            periodo:           enr.periodo,
+            grupo,
+            role:              moodleRole,
+            estado:            enr.estado || null
         });
 
-        return { cedula: enr.cedula, codigo_journey: codigoJourney, status: 'saved' };
+        return { cedula: enr.cedula, ...result };
     }
 
     // ─── ENDPOINT UNIFICADO: CURSO + MATRÍCULAS ──────────────────────────────
 
+    // SICAU manda cada matrícula dentro de items[].enrollments con su propia
+    // codigo_asignatura/nombre_asignatura/programa/periodo/grupo (el mismo
+    // formato que documenta /sicau/send_enrollments_sicau) — no solo
+    // {cedula, role, estado} dependiendo del curso padre. Antes esos campos de
+    // la matrícula se descartaban siempre y se pisaban con los del curso
+    // padre; ahora ganan los de la matrícula si vienen, y solo se completa
+    // con los del curso los que falten (para seguir aceptando el envío
+    // mínimo {cedula, role, estado} si algún día se usa así).
     async function saveSicauCursoYMatriculas(item) {
         const { course, enrollments } = item;
         const courseResult = await saveSicauCurso(course);
@@ -185,11 +181,11 @@ module.exports = (injectedDB) => {
         for (const enr of (enrollments || [])) {
             const merged = {
                 ...enr,
-                codigo_asignatura: course.codigo_asignatura,
-                nombre_asignatura: course.nombre_asignatura,
-                programa:          course.programa,
-                periodo:           course.periodo,
-                grupo:             course.grupo
+                codigo_asignatura: enr.codigo_asignatura || course.codigo_asignatura,
+                nombre_asignatura: enr.nombre_asignatura || course.nombre_asignatura,
+                programa:          enr.programa          || course.programa,
+                periodo:           enr.periodo           || course.periodo,
+                grupo:             enr.grupo             || course.grupo
             };
             const result = await saveSicauMatricula(merged);
             enrollmentResults.push(result);

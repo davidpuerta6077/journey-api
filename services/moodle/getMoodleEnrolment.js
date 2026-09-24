@@ -14,4 +14,19 @@ async function getMoodleEnrolmentId(courseMoodleId, userMoodleId) {
     }
 }
 
-module.exports = { getMoodleEnrolmentId };
+// A diferencia de core_enrol_get_users_courses (webservice con caché que puede
+// responder desactualizado justo después de una baja), esta consulta lee la
+// tabla directamente: null significa "no se pudo verificar" (BD de Moodle no
+// alcanzable desde este proceso), true/false sí refleja el estado real.
+async function isUserActivelyEnrolled(courseMoodleId, userMoodleId) {
+    try {
+        const query = queries.findActiveMoodleEnrolments(courseMoodleId, userMoodleId);
+        const [rows] = await moodleDB.query(query.text, query.values);
+        return rows.length > 0;
+    } catch (error) {
+        console.warn('No se pudo verificar la matrícula en Moodle DB:', error.message);
+        return null;
+    }
+}
+
+module.exports = { getMoodleEnrolmentId, isUserActivelyEnrolled };
