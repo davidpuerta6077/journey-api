@@ -17,6 +17,7 @@ const {
     updateEnrollmentData, updateEnrollmentMoodleId, findEnrollmentByCodigoJourney,
     findEnrollmentByUserAndCourse,
     updateEnrollmentEstadoQuery, updateEnrollmentSyncFields,
+    updateEnrollmentSyncErrorQuery, updateEnrollmentEstadoSyncQuery, findEnrollmentByUserSubjectPeriod,
     findAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatusQuery,
     healthCheck, checkPermissions,
@@ -537,6 +538,33 @@ function setEnrollmentSyncFields(id, fields) {
     });
 }
 
+function markEnrollmentSyncError(id, errorMessage) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateEnrollmentSyncErrorQuery(id, errorMessage), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updateEnrollmentEstadoSync(id, estadoSync) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateEnrollmentEstadoSyncQuery(id, estadoSync), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function findEnrollmentByUserSubjectPeriodFn(userid, codigoAsignatura, periodo, excludeCodigoJourney) {
+    return new Promise((resolve, reject) => {
+        pool.query(findEnrollmentByUserSubjectPeriod(userid, codigoAsignatura, periodo, excludeCodigoJourney), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
 // ─── HEALTH ───────────────────────────────────────────────────────────────────
 
 function checkDbConnection() {
@@ -1006,6 +1034,9 @@ module.exports = {
     updateEnrollmentSyncStatus,
     updateEnrollmentEstado,
     setEnrollmentSyncFields,
+    markEnrollmentSyncError,
+    updateEnrollmentEstadoSync,
+    findEnrollmentByUserSubjectPeriod: findEnrollmentByUserSubjectPeriodFn,
     checkDbConnection,getEnrollmentsByUserId,
     resetPassword,
     checkPermissionsData,
