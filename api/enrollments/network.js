@@ -4,6 +4,7 @@ const response = require('../../network/response');
 const ctrl = require('./index');
 const { moodleRequest } = require('../../services/moodleService');
 const syncService = require('../../services/syncService');
+const postgresql = require('../../database/postgresql');
 const path = require('path');
 const fs = require('fs');
 const xlsx = require('xlsx');
@@ -66,7 +67,10 @@ async function generateErrorExcel(errors) {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/enroll_users', checkAuth, checkPermission("enroll_users"), saveLog("enroll_users"), async (req, res) => {
+router.post('/enroll_users', checkAuth, checkPermission("enroll_users"), saveLog("enroll_users", {
+    descripcion: (req) => `Matriculó al usuario id ${req.body?.userid} en el curso id ${req.body?.courseid} (rol ${req.body?.roleid})`,
+    detalle: (req) => [{ userid: req.body?.userid, courseid: req.body?.courseid, roleid: req.body?.roleid }],
+}), async (req, res) => {
     try {
         const { userid, courseid, roleid } = req.body;
         const result = await enrolUserInMoodle(userid, courseid, roleid);
@@ -108,7 +112,10 @@ router.post('/enroll_users', checkAuth, checkPermission("enroll_users"), saveLog
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/unenroll_users', checkAuth, checkPermission("unenroll_users"), saveLog("unenroll_users"), async (req, res) => {
+router.post('/unenroll_users', checkAuth, checkPermission("unenroll_users"), saveLog("unenroll_users", {
+    descripcion: (req) => `Desmatriculó al usuario id ${req.body?.userid} del curso id ${req.body?.courseid}`,
+    detalle: (req) => [{ userid: req.body?.userid, courseid: req.body?.courseid, roleid: req.body?.roleid }],
+}), async (req, res) => {
     try {
         const result = await moodleRequest('enrol_manual_unenrol_users', {
             'enrolments[0][roleid]':   req.body.roleid,
@@ -156,7 +163,10 @@ router.post('/unenroll_users', checkAuth, checkPermission("unenroll_users"), sav
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/add_user_and_enroll', checkAuth, checkPermission("add_user_and_enroll"), saveLog("add_user_and_enroll"), async (req, res) => {
+router.post('/add_user_and_enroll', checkAuth, checkPermission("add_user_and_enroll"), saveLog("add_user_and_enroll", {
+    descripcion: (req) => `Creó y matriculó a "${req.body?.firstname || ''} ${req.body?.lastname || ''}" (${req.body?.email || '—'}) en el curso id ${req.body?.courseid}`.replace(/\s+/g, ' ').trim(),
+    detalle: (req) => [{ email: req.body?.email, nombre: `${req.body?.firstname || ''} ${req.body?.lastname || ''}`.trim(), courseid: req.body?.courseid }],
+}), async (req, res) => {
     try {
         const { username, firstname, lastname, email, password, roleid, courseid } = req.body;
         if (!email || !firstname || !lastname || !courseid) {
@@ -218,7 +228,10 @@ router.post('/add_user_and_enroll', checkAuth, checkPermission("add_user_and_enr
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/suspend_enrollment', checkAuth, checkPermission("suspend_enrollment"), saveLog("suspend_enrollment"), async (req, res) => {
+router.post('/suspend_enrollment', checkAuth, checkPermission("suspend_enrollment"), saveLog("suspend_enrollment", {
+    descripcion: (req) => `${req.body?.suspend === 0 ? 'Reactivó' : 'Suspendió'} la matrícula del usuario id ${req.body?.userid} en el curso id ${req.body?.courseid}`,
+    detalle: (req) => [{ userid: req.body?.userid, courseid: req.body?.courseid, suspend: req.body?.suspend }],
+}), async (req, res) => {
     try {
         const { userid, courseid, roleid, suspend } = req.body;
         if (!userid || !courseid) return response.error(req, res, 'Faltan campos requeridos', 400);
@@ -268,7 +281,10 @@ router.post('/suspend_enrollment', checkAuth, checkPermission("suspend_enrollmen
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/suspend_multiple_enrollments', checkAuth, checkPermission("suspend_multiple_enrollments"), saveLog("suspend_multiple_enrollments"), async (req, res) => {
+router.post('/suspend_multiple_enrollments', checkAuth, checkPermission("suspend_multiple_enrollments"), saveLog("suspend_multiple_enrollments", {
+    descripcion: (req) => `${req.body?.suspend === 0 ? 'Reactivó' : 'Suspendió'} ${req.body?.courseids?.length || 0} matrícula(s) del usuario id ${req.body?.userid}`,
+    detalle: (req) => (req.body?.courseids || []).map(courseid => ({ userid: req.body?.userid, courseid })),
+}), async (req, res) => {
     try {
         const { userid, roleid, courseids, suspend } = req.body;
         if (!userid || !courseids || !Array.isArray(courseids) || courseids.length === 0) {
@@ -334,7 +350,10 @@ router.post('/suspend_multiple_enrollments', checkAuth, checkPermission("suspend
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/reactivate_enrollment', checkAuth, checkPermission("reactivate_enrollment"), saveLog("reactivate_enrollment"), async (req, res) => {
+router.post('/reactivate_enrollment', checkAuth, checkPermission("reactivate_enrollment"), saveLog("reactivate_enrollment", {
+    descripcion: (req) => `Reactivó la matrícula del usuario id ${req.body?.userid} en el curso id ${req.body?.courseid}`,
+    detalle: (req) => [{ userid: req.body?.userid, courseid: req.body?.courseid }],
+}), async (req, res) => {
     try {
         const { userid, courseid, roleid } = req.body;
         if (!userid || !courseid) return response.error(req, res, 'Faltan campos requeridos', 400);
@@ -426,7 +445,10 @@ router.post('/upload-excel', checkAuth, checkPermission("upload_excel_enrollment
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/process-excel', checkAuth, checkPermission("process_excel_enrollments"), saveLog("process_excel_enrollments"), async (req, res) => {
+router.post('/process-excel', checkAuth, checkPermission("process_excel_enrollments"), saveLog("process_excel_enrollments", {
+    descripcion: (req) => `Procesó carga masiva de matrículas desde "${path.basename(req.body?.filePath || '—')}"`,
+    detalle: (req) => [{ archivo: path.basename(req.body?.filePath || '—') }],
+}), async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta.', 400);
     try {
@@ -478,7 +500,10 @@ router.post('/process-excel', checkAuth, checkPermission("process_excel_enrollme
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/process-novedades', checkAuth, checkPermission("process_novedades"), saveLog("process_novedades"), async (req, res) => {
+router.post('/process-novedades', checkAuth, checkPermission("process_novedades"), saveLog("process_novedades", {
+    descripcion: (req) => `Procesó novedades (suspensiones) desde "${path.basename(req.body?.filePath || '—')}"`,
+    detalle: (req) => [{ archivo: path.basename(req.body?.filePath || '—') }],
+}), async (req, res) => {
     const { filePath } = req.body;
     if (!filePath) return response.error(req, res, 'No se ha especificado la ruta.', 400);
     try {
@@ -559,7 +584,10 @@ router.get('/list', checkAuth, checkPermission("list_enrollments"), async (req, 
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/update_log', checkAuth, checkPermission("update_log_enrollment"), saveLog("update_log_enrollment"), async (req, res) => {
+router.post('/update_log', checkAuth, checkPermission("update_log_enrollment"), saveLog("update_log_enrollment", {
+    descripcion: (req) => `Actualizó el log de matrícula id ${req.body?.id} (moodle_enrollment_id ${req.body?.moodle_enrollment_id})`,
+    entityId: (req) => req.body?.id,
+}), async (req, res) => {
     try {
         await ctrl.updateElement(req.body);
         response.success(req, res, 'Log actualizado', 200);
@@ -659,7 +687,10 @@ router.post('/sync/preview', checkAuth, checkPermission("sync_preview_enrollment
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/sync', checkAuth, checkPermission("sync_enrollments"), saveLog("sync_enrollments"), async (req, res, next) => {
+router.post('/sync', checkAuth, checkPermission("sync_enrollments"), saveLog("sync_enrollments", {
+    descripcion: (req) => `Sincronizó ${(req.body?.items || []).length} matrícula(s) con Moodle`,
+    detalle: (req) => (req.body?.items || []).map(i => ({ id: i.id, email: i.email, cedula: i.cedula, curso: i.nombre_asignatura || i.codigo_asignatura })),
+}), async (req, res, next) => {
     try {
         const result = await syncService.syncEnrollments(req.body.items || [], req.user?.email);
         response.success(req, res, result || 'Datos cargados correctamente', 200);
@@ -682,8 +713,16 @@ router.post('/sync', checkAuth, checkPermission("sync_enrollments"), saveLog("sy
  *       500:
  *         description: Error interno
  */
-router.post('/journey', checkAuth, checkPermission("add_enrollment_journey"), saveLog("add_enrollment_journey"), async (req, res, next) => {
+router.post('/journey', checkAuth, checkPermission("add_enrollment_journey"), saveLog("add_enrollment_journey", {
+    descripcion: (req) => {
+        const u = req._logUser;
+        const nombre = u ? `${u.firstname || ''} ${u.lastname || ''}`.trim() || u.email : `id ${req.body?.userid}`;
+        return `Matriculó a "${nombre}" en "${req.body?.nombre_asignatura || req.body?.codigo_asignatura || '—'}" (${req.body?.role || '—'})`;
+    },
+    detalle: (req) => [{ userid: req.body?.userid, estudiante: req._logUser ? `${req._logUser.firstname || ''} ${req._logUser.lastname || ''}`.trim() : null, email: req._logUser?.email, curso: req.body?.nombre_asignatura || req.body?.codigo_asignatura, role: req.body?.role }],
+}), async (req, res, next) => {
     try {
+        req._logUser = req.body?.userid ? await postgresql.getUserById(req.body.userid) : null;
         const result = await ctrl.saveJourneyEnrollment(req.body);
         response.success(req, res, result, 200);
     } catch (error) {
@@ -708,8 +747,18 @@ router.post('/journey', checkAuth, checkPermission("add_enrollment_journey"), sa
  *       500:
  *         description: Error interno
  */
-router.put('/:id', checkAuth, checkPermission("update_enrollment_journey"), saveLog("update_enrollment_journey"), async (req, res, next) => {
+router.put('/:id', checkAuth, checkPermission("update_enrollment_journey"), saveLog("update_enrollment_journey", {
+    descripcion: (req) => {
+        const e = req._logEnrollment;
+        const nombre = e ? `${e.firstname || ''} ${e.lastname || ''}`.trim() || e.email : `id ${req.params.id}`;
+        const curso = e?.nombre_asignatura || req.body?.nombre_asignatura || '—';
+        return `Actualizó la matrícula de "${nombre}" en "${curso}"${req.body?.estado ? ` (estado: ${req.body.estado})` : ''}`;
+    },
+    entityId: (req) => req.params.id,
+    detalle: (req) => [{ id: req.params.id, estudiante: req._logEnrollment ? `${req._logEnrollment.firstname || ''} ${req._logEnrollment.lastname || ''}`.trim() : null, email: req._logEnrollment?.email, curso: req._logEnrollment?.nombre_asignatura || req.body?.nombre_asignatura, estado_anterior: req._logEnrollment?.estado, estado_nuevo: req.body?.estado }],
+}), async (req, res, next) => {
     try {
+        req._logEnrollment = await postgresql.getEnrollmentWithUserById(req.params.id);
         const result = await ctrl.updateJourneyEnrollment({ ...req.body, id: req.params.id });
         response.success(req, res, result, 200);
     } catch (error) {
@@ -734,8 +783,17 @@ router.put('/:id', checkAuth, checkPermission("update_enrollment_journey"), save
  *       500:
  *         description: Error interno
  */
-router.delete('/:id', checkAuth, checkPermission("delete_enrollment_journey"), saveLog("delete_enrollment_journey"), async (req, res, next) => {
+router.delete('/:id', checkAuth, checkPermission("delete_enrollment_journey"), saveLog("delete_enrollment_journey", {
+    descripcion: (req) => {
+        const e = req._logEnrollment;
+        const nombre = e ? `${e.firstname || ''} ${e.lastname || ''}`.trim() || e.email : `id ${req.params.id}`;
+        return `Eliminó la matrícula de "${nombre}" en "${e?.nombre_asignatura || '—'}"`;
+    },
+    entityId: (req) => req.params.id,
+    detalle: (req) => [{ id: req.params.id, estudiante: req._logEnrollment ? `${req._logEnrollment.firstname || ''} ${req._logEnrollment.lastname || ''}`.trim() : null, email: req._logEnrollment?.email, curso: req._logEnrollment?.nombre_asignatura, codigo_journey: req._logEnrollment?.codigo_journey }],
+}), async (req, res, next) => {
     try {
+        req._logEnrollment = await postgresql.getEnrollmentWithUserById(req.params.id);
         await ctrl.deleteElement(req.params.id);
         response.success(req, res, { deleted: true }, 200);
     } catch (error) {

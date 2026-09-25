@@ -6,7 +6,7 @@ const {
     selectAllUsers, selectUsersForSync, insertUsuarioData, updateUsuarioData,
     updateUsuarioJourney, deleteUsuarioData,
     updateUserMoodleId, clearUserMoodleId, findUserByEmailOrUsername,
-    findUserByDocumento, updateUserSicau,
+    findUserByDocumento, findUserById, updateUserSicau,
     updateUserSyncStatusQuery, updateUserUnsyncQuery,selectEnrollmentsByUserId,
     updateUserPassword,
     selectAllCourses, selectCoursesForSync, selectDistinctAsignaturas, insertCourseData, updateCourseData,
@@ -15,7 +15,7 @@ const {
     updateCourseFromSicauQuery,
     selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
     updateEnrollmentData, updateEnrollmentMoodleId, findEnrollmentByCodigoJourney,
-    findEnrollmentByUserAndCourse,
+    findEnrollmentByUserAndCourse, findEnrollmentWithUserById,
     updateEnrollmentEstadoQuery, updateEnrollmentSyncFields,
     updateEnrollmentSyncErrorQuery, updateEnrollmentEstadoSyncQuery, findEnrollmentByUserSubjectPeriod,
     findAllEnrollmentsWithUsers,
@@ -27,10 +27,10 @@ const {
     selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData,
     updatePlatformUserData, updatePlatformUserEstadoData, updatePlatformUserPhotoData, updatePlatformUserUsernameData,
     updatePlatformUserLastLoginData,
-    selectRoles, insertRoleData, updateRoleData,
-    selectModulesAdmin, insertModuleData, updateModuleData,
+    selectRoles, findRoleById, insertRoleData, updateRoleData,
+    selectModulesAdmin, findModuleById, insertModuleData, updateModuleData,
     selectSubmodulesAdmin, insertSubmoduleData, updateSubmoduleData,
-    selectRolePermissionsGrid, findRolePermission, insertRolePermissionData, deleteRolePermissionData,
+    selectRolePermissionsGrid, findRolePermission, insertRolePermissionData, deleteRolePermissionData, findSubmoduleById,
     selectLabsGrades, insertLabGradeData,
     resolveSyncRule, updateCourseSyncFields, insertLogData, selectLogsData,
     updateUserNormalizedData, updateCourseNormalizedData,
@@ -162,6 +162,15 @@ function findUserByDoc(documento) {
         pool.query(findUserByDocumento(documento), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
+        });
+    });
+}
+
+function getUserById(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(findUserById(id), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows[0] || null);
         });
     });
 }
@@ -342,9 +351,9 @@ function findSyncRuleById(id) {
 
 // ─── LOGS ───────────────────────────────────────────────────────────────────────
 
-function insertLog(type, description, username, entityType, entityId) {
+function insertLog(type, description, username, entityType, entityId, detail) {
     return new Promise((resolve, reject) => {
-        pool.query(insertLogData(type, description, username, entityType, entityId), (err, result) => {
+        pool.query(insertLogData(type, description, username, entityType, entityId, detail), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -498,6 +507,15 @@ function findEnrollmentByUserAndCourseFn(userid, codigoJourney) {
         pool.query(findEnrollmentByUserAndCourse(userid, codigoJourney), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
+        });
+    });
+}
+
+function getEnrollmentWithUserById(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(findEnrollmentWithUserById(id), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows[0] || null);
         });
     });
 }
@@ -680,6 +698,15 @@ function insertRole(data) {
     });
 }
 
+function getRoleById(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(findRoleById(id), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows[0] || null);
+        });
+    });
+}
+
 function updateRole(id, data) {
     return new Promise((resolve, reject) => {
         pool.query(updateRoleData(id, data), (err, result) => {
@@ -696,6 +723,15 @@ function listModulesAdmin() {
         pool.query(selectModulesAdmin(), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
+        });
+    });
+}
+
+function getModuleById(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(findModuleById(id), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows[0] || null);
         });
     });
 }
@@ -763,6 +799,15 @@ function findRolePermissionFn(role_id, submodule_id) {
         pool.query(findRolePermission(role_id, submodule_id), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
+        });
+    });
+}
+
+function getSubmoduleById(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(findSubmoduleById(id), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows[0] || null);
         });
     });
 }
@@ -996,6 +1041,7 @@ module.exports = {
     removeUserMoodleId,
     findUserSicau,
     findUserByDoc,
+    getUserById,
     updateUserFromSicau,
     updateUserSyncStatus,
     updateUserUnsync,
@@ -1030,6 +1076,7 @@ module.exports = {
     setEnrollmentMoodleId,
     findEnrollmentSicau,
     findEnrollmentByUserAndCourse: findEnrollmentByUserAndCourseFn,
+    getEnrollmentWithUserById,
     listAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatus,
     updateEnrollmentEstado,
@@ -1054,10 +1101,12 @@ module.exports = {
     // admin: roles
     listRoles,
     insertRole,
+    getRoleById,
     updateRole,
     // admin: modules
     listModulesAdmin,
     insertModuleAdmin,
+    getModuleById,
     updateModuleAdmin,
     // admin: submodules
     listSubmodulesAdmin,
@@ -1070,6 +1119,7 @@ module.exports = {
     listLabsGrades,
     insertLabGrade,
     grantRolePermission,
+    getSubmoduleById,
     revokeRolePermission,
     // reports
     listReports,

@@ -8,14 +8,37 @@ const postgresql = require('../../database/postgresql');
 // Estos endpoints no pasan por checkAuth (los llama el sistema SICAU o se
 // prueban a mano desde Postman, sin sesión de usuario), así que no hay
 // req.user.email para el middleware saveLog. Se deja igual un registro de
-// auditoría best-effort, con username fijo 'SICAU', para que en Ver Logs
-// quede rastro de lo que llegó desde afuera y no solo de lo que se hace
-// dentro del panel. La descripción imita el formato "MÉTODO /ruta" de
-// saveLog para que AdminLogs.jsx la clasifique igual (por prefijo de ruta).
-function logIngestaSicau(req, cantidad, etiqueta) {
-    const descripcion = `${req.method} ${req.baseUrl}${req.path} — ${cantidad} ${etiqueta}`;
+// auditoría best-effort, para que en Ver Logs quede rastro de lo que llegó
+// desde afuera y no solo de lo que se hace dentro del panel.
+//
+// SICAU ahora manda el usuario que originó el envío en un header propio
+// (en vez de quemarlo como 'SICAU' fijo). Todavía no se confirmó el nombre
+// exacto del header con el equipo de SICAU, así que se prueban los nombres
+// más probables y, si ninguno trae valor, se cae a 'SICAU' y se deja un
+// console.error con los headers completos de esa petición para poder
+// identificar el correcto revisando los logs del servidor.
+const SICAU_USER_HEADER_CANDIDATES = ['x-sicau-user', 'x-sicau-usuario', 'x-usuario', 'x-user', 'usuario'];
+
+function getSicauUsername(req) {
+    for (const header of SICAU_USER_HEADER_CANDIDATES) {
+        const value = req.headers[header];
+        if (value) return String(value);
+    }
+    console.error('[SICAU] No se encontró el header de usuario en la petición, headers recibidos:', JSON.stringify(req.headers));
+    return 'SICAU';
+}
+
+// La descripción imita el formato "MÉTODO /ruta" de saveLog para que
+// AdminLogs.jsx la clasifique igual (por prefijo de ruta) y se queda en un
+// resumen general (cuántos ítems de qué tipo); el detail completo (código/
+// nombre/correo de cada uno) va aparte en la columna `detail`, para el
+// desplegable "ver detalle" del front — así la tabla no queda ilegible con
+// una lista larga pegada en la descripción.
+function logIngestaSicau(req, resumen, detail) {
+    const descripcion = `${req.method} ${req.baseUrl}${req.path} — ${resumen}`;
+    const username = getSicauUsername(req);
     postgresql
-        .insertLog(req.method.toLowerCase(), descripcion, 'SICAU', 'sicau', null)
+        .insertLog(req.method.toLowerCase(), descripcion, username, 'sicau', null, detail)
         .catch((err) => console.error('No se pudo registrar el log de auditoría (SICAU):', err.message));
 }
 /**
@@ -152,7 +175,9 @@ router.post('/send_users_sicau', async (req, res, next) => {
             const result = await ctrl.saveSicauUsuario(user);
             results.push(result);
         }
-        logIngestaSicau(req, lista.length, 'usuario(s)');
+        logIngestaSicau(req, `${lista.length} usuario(s)`, lista.map((u, i) => ({
+            username: u.username, email: u.email, nombre: `${u.firstname || ''} ${u.lastname || ''}`.trim(), status: results[i]?.status,
+        })));
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);
@@ -208,7 +233,9 @@ router.post('/send_courses_sicau', async (req, res, next) => {
             const result = await ctrl.saveSicauCurso(course);
             results.push(result);
         }
-        logIngestaSicau(req, lista.length, 'curso(s)');
+        logIngestaSicau(req, `${lista.length} curso(s)`, lista.map((c, i) => ({
+            codigo_asignatura: c.codigo_asignatura, nombre_asignatura: c.nombre_asignatura, grupo: c.grupo, periodo: c.periodo, docente: c.docente, status: results[i]?.status,
+        })));
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);
@@ -264,7 +291,9 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
             const result = await ctrl.saveSicauMatricula(enr);
             results.push(result);
         }
-        logIngestaSicau(req, lista.length, 'matrícula(s)');
+        logIngestaSicau(req, `${lista.length} matrícula(s)`, lista.map((e, i) => ({
+            cedula: e.cedula, role: e.role, codigo_asignatura: e.codigo_asignatura, grupo: e.grupo, periodo: e.periodo, estado: e.estado, status: results[i]?.status,
+        })));
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);
@@ -369,7 +398,10 @@ router.post('/send_courses_enrollments_sicau', async (req, res, next) => {
             const result = await ctrl.saveSicauCursoYMatriculas(item);
             results.push(result);
         }
-        logIngestaSicau(req, lista.length, 'curso(s)+matrícula(s)');
+        logIngestaSicau(req, `${lista.length} curso(s)+matrícula(s)`, lista.map((it, i) => ({
+            codigo_asignatura: it.course?.codigo_asignatura, grupo: it.course?.grupo, nombre_asignatura: it.course?.nombre_asignatura,
+            estado_curso: results[i]?.course?.status, cedulas_matriculadas: (it.enrollments || []).map(e => e.cedula).join(', '),
+        })));
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);

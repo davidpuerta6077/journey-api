@@ -70,7 +70,9 @@ router.get('/me', checkAuth, async (req, res, next) => {
  *       400: { description: Username vacío }
  *       409: { description: Username ya en uso }
  */
-router.put('/me', checkAuth, saveLog('perfil'), async (req, res, next) => {
+router.put('/me', checkAuth, saveLog('perfil', {
+    descripcion: (req) => `Actualizó su nombre de usuario a "${req.body?.username || '—'}"`,
+}), async (req, res, next) => {
     const username = (req.body.username || '').trim();
     if (!username) return response.error(req, res, 'El username no puede estar vacío', 400);
     try {
@@ -99,7 +101,9 @@ router.put('/me', checkAuth, saveLog('perfil'), async (req, res, next) => {
  *       200: { description: Foto actualizada }
  *       400: { description: No se recibió ningún archivo }
  */
-router.post('/me/foto', checkAuth, saveLog('perfil'), (req, res, next) => {
+router.post('/me/foto', checkAuth, saveLog('perfil', {
+    descripcion: () => `Actualizó su foto de perfil`,
+}), (req, res, next) => {
     if (!req.files || !req.files.foto) {
         return response.error(req, res, 'No se recibió ningún archivo.', 400);
     }
