@@ -208,7 +208,7 @@ const selectAllCourses = () => ({
 const selectCoursesForSync = () => ({
     text: `SELECT id, fullname, shortname, categoryid, idnumber, summary, visible, format,
            numsections, moodle_id, sincronizado, estado_sync, ultimo_error_sync,
-           departamento, programa, docente,
+           departamento, programa, nombre_profesor, documento, celular, correo_institucional,
            fecha_inicio, fecha_fin, periodo, grupo, codigo_asignatura, nombre_asignatura, templatecourse,
            created_at, synced_at
            FROM ${schema}.courses ORDER BY id DESC`,
@@ -259,20 +259,22 @@ function updateCourseSyncErrorQuery(id, errorMessage) {
     };
 }
 
-// El nombre de la asignatura o el docente cambiaron en SICAU para un curso que
+// El nombre de la asignatura o el profesor cambiaron en SICAU para un curso que
 // ya existía localmente (mismo idnumber = codigo_asignatura+periodo+grupo, el
 // código journey -único- de ese grupo en ese periodo). estado_sync lo decide
 // el caller: "novedad" si el curso ya existe en Moodle (moodle_id, solo hace
 // falta empujarle la metadata nueva desde Módulo Cursos) o "pendiente" si
 // nunca se creó (todavía necesita el ciclo completo de duplicado en Sync
 // Cursos, no un simple update).
-function updateCourseFromSicauQuery(id, { docente, fullname, shortname, nombre_asignatura, estado_sync }) {
+function updateCourseFromSicauQuery(id, { nombre_profesor, documento, celular, correo_institucional, fullname, shortname, nombre_asignatura, estado_sync }) {
     return {
         text: `UPDATE ${schema}.courses
-               SET docente = $2, fullname = $3, shortname = $4, nombre_asignatura = $5,
-                   sincronizado = false, estado_sync = $6
+               SET nombre_profesor = $2, documento = $3, celular = $4, correo_institucional = $5,
+                   fullname = $6, shortname = $7, nombre_asignatura = $8,
+                   sincronizado = false, estado_sync = $9
                WHERE id = $1::integer`,
-        values: [id, docente || null, fullname, shortname, nombre_asignatura || null, estado_sync]
+        values: [id, nombre_profesor || null, documento || null, celular || null, correo_institucional || null,
+                 fullname, shortname, nombre_asignatura || null, estado_sync]
     };
 }
 
@@ -280,7 +282,8 @@ const insertCourseData = (data) => {
     const {
         fullname, shortname, categoryid, idnumber, summary,
         visible, format, numsections, moodle_id, seed_course_id,
-        departamento, programa, docente, fecha_inicio, fecha_fin,
+        departamento, programa, nombre_profesor, documento, celular, correo_institucional,
+        fecha_inicio, fecha_fin,
         periodo, grupo, codigo_asignatura, nombre_asignatura, templatecourse
     } = data;
 
@@ -288,11 +291,12 @@ const insertCourseData = (data) => {
         INSERT INTO ${schema}.courses (
             fullname, shortname, categoryid, idnumber, summary,
             visible, format, numsections, moodle_id, seed_course_id,
-            departamento, programa, docente, fecha_inicio, fecha_fin,
+            departamento, programa, nombre_profesor, documento, celular, correo_institucional,
+            fecha_inicio, fecha_fin,
             periodo, grupo, codigo_asignatura, nombre_asignatura, templatecourse
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-            $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+            $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
         ) RETURNING *
     `;
 
@@ -309,7 +313,10 @@ const insertCourseData = (data) => {
         seed_course_id || null,
         departamento || null,
         programa || null,
-        docente || null,
+        nombre_profesor || null,
+        documento || null,
+        celular || null,
+        correo_institucional || null,
         fecha_inicio || null,
         fecha_fin || null,
         periodo || null,
@@ -362,7 +369,7 @@ const findCourseByIdnumber = (idnumber) => ({
 });
 
 const findCourseByShortname = (shortname) => ({
-    text: `SELECT id, docente FROM ${schema}.courses WHERE shortname = $1 LIMIT 1`,
+    text: `SELECT id, nombre_profesor FROM ${schema}.courses WHERE shortname = $1 LIMIT 1`,
     values: [shortname]
 });
 
@@ -1078,14 +1085,14 @@ const updateUserNormalizedData = (id, { firstname, lastname, email, correo_perso
     values: [firstname, lastname, email, correo_personal ?? null, id]
 });
 
-const updateCourseNormalizedData = (id, { fullname, shortname, nombre_asignatura, docente, departamento, programa }) => ({
+const updateCourseNormalizedData = (id, { fullname, shortname, nombre_asignatura, nombre_profesor, departamento, programa }) => ({
     text: `
         UPDATE ${schema}.courses
         SET fullname = $1, shortname = $2, nombre_asignatura = $3,
-            docente = $4, departamento = $5, programa = $6
+            nombre_profesor = $4, departamento = $5, programa = $6
         WHERE id = $7
     `,
-    values: [fullname, shortname, nombre_asignatura ?? null, docente ?? null, departamento ?? null, programa ?? null, id]
+    values: [fullname, shortname, nombre_asignatura ?? null, nombre_profesor ?? null, departamento ?? null, programa ?? null, id]
 });
 
 

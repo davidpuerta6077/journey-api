@@ -1,7 +1,6 @@
 const path = require('path');
 const xlsx = require('xlsx');
 const fs = require('fs');
-const { moodleRequest } = require('../../services/moodleService');
 
 // ─── MAPEO DE ROLES ───────────────────────────────────────────────────────────
 const ROLE_MAP = {
@@ -9,13 +8,6 @@ const ROLE_MAP = {
     'DOCENTE':       'editingteacher',
     'TUTOR':         'teacher'
 }
-
-// Rol (string) guardado localmente en enrollments → roleid numérico que espera Moodle.
-const ROLE_ID_MAP = {
-    student:        5,
-    editingteacher: 3,
-    teacher:        4
-};
 
 // ─── CARGA MASIVA (EXCEL) ──────────────────────────────────────────────────────
 const ALLOWED_ROLES = ['gestor', 'editingteacher', 'teacher', 'student', 'revisor'];
@@ -71,16 +63,16 @@ module.exports = (injectedDB) => {
         return data.updateEnrollment(enrollmentData);
     }
 
-    // "Eliminar" desde Módulos > Matrículas ya NO borra la fila de la BD: un
-    // DELETE real la sacaba también de Sync/Novedades, perdiendo el historial
-    // y sin dejar rastro para confirmar que Moodle de verdad desmatriculó al
-    // estudiante (vía BD externa: al dejar de tener un estado activo, la fila
-    // sale sola de la vista moodle_enrol en el próximo cron). En su lugar se
-    // marca estado='Eliminado' (updateEnrollmentEstado ya guarda estado_anterior
-    // y fecha_cambio_estado) y se limpia el flag local de sincronizado para que
-    // quede visible y re-sincronizable desde Novedades.
+    // "Desmatricular" desde Módulos > Matrículas ya NO borra la fila de la BD:
+    // un DELETE real la sacaba también de Sync/Novedades, perdiendo el
+    // historial y sin dejar rastro para confirmar que Moodle de verdad
+    // desmatriculó al estudiante (vía BD externa: al dejar de tener un estado
+    // activo, la fila sale sola de la vista moodle_enrol en el próximo cron).
+    // En su lugar se marca estado='Desmatriculado' (updateEnrollmentEstado ya
+    // guarda estado_anterior y fecha_cambio_estado) y se limpia el flag local
+    // de sincronizado para que quede visible y re-sincronizable desde Novedades.
     async function deleteElement(id) {
-        await data.updateEnrollmentEstado(id, 'Eliminado');
+        await data.updateEnrollmentEstado(id, 'Desmatriculado');
         return data.updateEnrollmentSyncStatus(id, false);
     }
 
@@ -374,28 +366,13 @@ module.exports = (injectedDB) => {
                     errorCount++;
                     continue;
                 }
-                const course = courses[0];
 
-                const roleid = ROLE_ID_MAP[enrollment.role];
-                if (!roleid) {
-                    errors.push({ ...row, errors: `Rol "${enrollment.role}" de la matrícula no tiene roleid de Moodle asignado.` });
-                    errorCount++;
-                    continue;
-                }
-
-                const result = await moodleRequest('enrol_manual_enrol_users', {
-                    'enrolments[0][userid]':   user.moodle_id,
-                    'enrolments[0][courseid]': course.moodle_id,
-                    'enrolments[0][roleid]':   roleid,
-                    'enrolments[0][suspend]':  1
-                });
-                if (result && result.exception) {
-                    errors.push({ ...row, errors: `Moodle: ${result.message}` });
-                    errorCount++;
-                    continue;
-                }
-
-                await data.updateEnrollmentEstado(enrollment.id, 'Suspendido');
+                // Mismo criterio que "Desmatricular" en Módulos > Matrículas (ver
+                // deleteElement más arriba): no se llama a Moodle directo, se
+                // marca 'Desmatriculado' y se desincroniza para que el cron de la
+                // BD externa desmatricule al estudiante en su próxima corrida.
+                await data.updateEnrollmentEstado(enrollment.id, 'Desmatriculado');
+                await data.updateEnrollmentSyncStatus(enrollment.id, false);
                 successCount++;
             } catch (err) {
                 errors.push({ ...row, errors: `Error: ${err.message}` });

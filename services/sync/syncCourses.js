@@ -5,7 +5,7 @@ const { assertMoodleOk } = require('../moodleAssert');
 const { normalizeCourse, difiere } = require('../normalize');
 const { duplicateSeedCourse } = require('./duplicateSeedCourse');
 
-const CAMPOS_NORM = ['fullname', 'shortname', 'nombre_asignatura', 'docente', 'departamento', 'programa'];
+const CAMPOS_NORM = ['fullname', 'shortname', 'nombre_asignatura', 'nombre_profesor', 'departamento', 'programa'];
 
 // Moodle espera startdate/enddate como timestamp Unix (segundos); fecha_inicio/
 // fecha_fin llegan de SICAU como fecha/timestamp de Postgres.
@@ -27,10 +27,10 @@ async function syncCourses(items = [], username = 'system') {
             }
 
             // Normalizar antes de mandar a Moodle: limpiar espacios en
-            // fullname/shortname y capitalizar nombre_asignatura/docente/
+            // fullname/shortname y capitalizar nombre_asignatura/nombre_profesor/
             // departamento/programa. Si cambió algo, se persiste también en la BD
-            // de Nexo (docente/departamento/programa no se le mandan a Moodle,
-            // pero deben quedar limpios en Nexo igual que el resto de los datos).
+            // de Nexo (nombre_profesor/departamento/programa no se le mandan a
+            // Moodle, pero deben quedar limpios en Nexo igual que el resto de los datos).
             const norm = normalizeCourse(course);
             if (difiere(course, norm, CAMPOS_NORM)) {
                 await coursesCtrl.applyNormalization(course.id, norm);
@@ -43,7 +43,7 @@ async function syncCourses(items = [], username = 'system') {
 
             // ─── Idempotencia: el curso ya existe en Moodle ────────────────────
             // No se recrea; solo se actualiza la metadata que pudo cambiar
-            // (fechas, docente, nombre, etc. ya viven en fullname/shortname).
+            // (fechas, nombre_profesor, nombre, etc. ya viven en fullname/shortname).
             if (course.moodle_id) {
                 const startdate = toUnixTimestamp(course.fecha_inicio);
                 const enddate   = toUnixTimestamp(course.fecha_fin);
