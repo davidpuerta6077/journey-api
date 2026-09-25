@@ -209,7 +209,8 @@ const selectCoursesForSync = () => ({
     text: `SELECT id, fullname, shortname, categoryid, idnumber, summary, visible, format,
            numsections, moodle_id, sincronizado, estado_sync, ultimo_error_sync,
            departamento, programa, docente,
-           fecha_inicio, fecha_fin, periodo, grupo, codigo_asignatura, nombre_asignatura, templatecourse
+           fecha_inicio, fecha_fin, periodo, grupo, codigo_asignatura, nombre_asignatura, templatecourse,
+           created_at, synced_at
            FROM ${schema}.courses ORDER BY id DESC`,
     values: []
 });
@@ -233,7 +234,8 @@ function updateCourseSyncStatusQuery(id, statusValue) {
         text: `UPDATE ${schema}.courses
                SET sincronizado = $2,
                    estado_sync = $3,
-                   ultimo_error_sync = CASE WHEN $2 THEN NULL ELSE ultimo_error_sync END
+                   ultimo_error_sync = CASE WHEN $2 THEN NULL ELSE ultimo_error_sync END,
+                   synced_at = CASE WHEN $2 THEN now() ELSE synced_at END
                WHERE id = $1::integer`,
         values: [id, statusValue, statusValue ? 'sincronizado' : 'error']
     };
@@ -372,11 +374,12 @@ const selectAllEnrollments = () => ({
 });
 
 const selectEnrollmentsForSync = () => ({
-    text: `SELECT 
+    text: `SELECT
             e.id, e.userid, e.courseid, e.role, e.moodle_enrollment_id,
             e.codigo_asignatura, e.nombre_asignatura, e.programa,
             e.periodo, e.grupo, e.codigo_journey, e.estado,
-            e.fecha_creacion_journey, e.sincronizado,
+            e.estado_anterior, e.fecha_cambio_estado,
+            e.fecha_creacion_journey, e.sincronizado, e.estado_sync, e.ultimo_error_sync,
             u.firstname, u.lastname, u.email, u.documento, u.username,
             u.moodle_id AS user_moodle_id
            FROM ${schema}.enrollments e
@@ -452,7 +455,7 @@ const findAllEnrollmentsWithUsers = () => ({
         e.id, e.userid, e.courseid, e.role, e.moodle_enrollment_id,
         e.codigo_asignatura, e.nombre_asignatura, e.programa,
         e.periodo, e.grupo, e.codigo_journey, e.estado,
-        e.fecha_creacion_journey, e.created_at, e.sincronizado,
+        e.fecha_creacion_journey, e.created_at, e.sincronizado, e.estado_sync, e.ultimo_error_sync,
         u.firstname, u.lastname, u.email, u.documento
     FROM ${schema}.enrollments e
     LEFT JOIN ${schema}.users u ON u.id = e.userid
@@ -472,20 +475,66 @@ const findEnrollmentByUserAndCourse = (userid, codigoJourney) => ({
     values: [userid, codigoJourney]
 });
 
+// Cada vez que cambia el estado académico se guarda el valor anterior y la
+// fecha del cambio (columnas estado_anterior/fecha_cambio_estado), para que
+// el módulo Novedades pueda mostrar un historial ("de Matriculada a
+// Cancelada, el 2026-09-24") en vez de solo el estado actual.
 const updateEnrollmentEstadoQuery = (id, estado) => ({
-    text: `UPDATE ${schema}.enrollments SET estado = $2 WHERE id = $1`,
+    text: `UPDATE ${schema}.enrollments
+           SET estado_anterior = estado, estado = $2, fecha_cambio_estado = NOW()
+           WHERE id = $1`,
     values: [id, estado]
 });
 
 // Usada por el sync de matrículas: re-vincula courseid (por si aún era null),
 // guarda el id real de la matrícula en Moodle y marca sincronizado = true.
-const updateEnrollmentSyncFields = (id, { courseid, moodle_enrollment_id, sincronizado }) => ({
+// El caller decide el estado_sync final: un sync exitoso limpia "error", pero
+// "traslado" NO se limpia solo por re-sincronizar con el mismo estado activo
+// (el estudiante seguiría duplicado en el curso viejo y el nuevo); solo se
+// resuelve cuando esa matrícula se sincroniza como baja (se desmatricula de
+// verdad), que es cuando syncEnrollments.js pasa estado_sync='sincronizado'
+// explícitamente para esa rama.
+const updateEnrollmentSyncFields = (id, { courseid, moodle_enrollment_id, sincronizado, estado_sync }) => ({
     text: `
         UPDATE ${schema}.enrollments
-        SET courseid = $1, moodle_enrollment_id = $2, sincronizado = $3
+        SET courseid = $1, moodle_enrollment_id = $2, sincronizado = $3,
+            estado_sync = $5,
+            ultimo_error_sync = CASE WHEN $3 THEN NULL ELSE ultimo_error_sync END
         WHERE id = $4
     `,
-    values: [courseid || null, moodle_enrollment_id || null, sincronizado, id]
+    values: [courseid || null, moodle_enrollment_id || null, sincronizado, id, estado_sync || 'sincronizado']
+});
+
+// Usada cuando el sync contra Moodle falla: deja rastro del error en vez de
+// solo apagar el booleano `sincronizado` (igual que el equivalente de cursos).
+const updateEnrollmentSyncErrorQuery = (id, errorMessage) => ({
+    text: `
+        UPDATE ${schema}.enrollments
+        SET sincronizado = false, estado_sync = 'error', ultimo_error_sync = $2
+        WHERE id = $1::integer
+    `,
+    values: [id, errorMessage || null]
+});
+
+// Marca una matrícula existente como "traslado": se usa cuando SICAU manda un
+// código journey distinto para el mismo estudiante en la misma asignatura y
+// periodo (se cambió de grupo/curso), para que quien revise Sync Matrículas
+// note que esta matrícula quedó desactualizada frente al curso real.
+const updateEnrollmentEstadoSyncQuery = (id, estadoSync) => ({
+    text: `UPDATE ${schema}.enrollments SET estado_sync = $2 WHERE id = $1::integer`,
+    values: [id, estadoSync]
+});
+
+// Busca otras matrículas del mismo estudiante, misma asignatura y periodo,
+// pero con un código journey distinto (es decir, un grupo/curso distinto al
+// que se está guardando ahora) — indicio de que SICAU movió al estudiante de
+// curso y la matrícula anterior quedó como novedad.
+const findEnrollmentByUserSubjectPeriod = (userid, codigoAsignatura, periodo, excludeCodigoJourney) => ({
+    text: `SELECT id, codigo_journey, grupo, estado_sync
+           FROM ${schema}.enrollments
+           WHERE userid = $1 AND codigo_asignatura = $2 AND periodo = $3
+             AND codigo_journey IS DISTINCT FROM $4`,
+    values: [userid, codigoAsignatura, periodo, excludeCodigoJourney]
 });
 
 const updateJourneyEnrollmentData = (data) => {
@@ -553,6 +602,23 @@ const findMoodleEnrolmentId = (courseId, userId) => ({
     values: [courseId, userId]
 });
 
+// Verifica si sigue habiendo matrícula activa de este usuario en este curso,
+// por CUALQUIER método de inscripción (no solo "manual"): sirve para
+// confirmar que enrol_manual_unenrol_users sí surtió efecto. Se usa esta
+// tabla directamente y no el webservice core_enrol_get_users_courses porque
+// esa lista tiene caché y puede responder "ya no está" o "sigue estando" sin
+// reflejar el estado real (visto en producción: lecturas inconsistentes
+// segundos después de la baja). e.status/ue.status = 0 es "activo" en Moodle.
+const findActiveMoodleEnrolments = (courseId, userId) => ({
+    text: `
+        SELECT ue.id, e.enrol
+        FROM mdl_user_enrolments ue
+        INNER JOIN mdl_enrol e ON e.id = ue.enrolid
+        WHERE e.courseid = ? AND ue.userid = ? AND ue.status = 0 AND e.status = 0
+    `,
+    values: [courseId, userId]
+});
+
 // Conteo de cursos y estudiantes (rol 'student') por categoría de Moodle.
 // - categoryId null  => todas las categorías.
 // - categoryId + incluirSubcategorias => la categoría indicada y todas las que
@@ -604,7 +670,7 @@ const healthCheck = () => ({
 
 const selectPlatformUsers = () => ({
     text: `SELECT u.id, u.username, u.email, u.estado, u.created_at, u.updated_at,
-           u.last_login, u.created_by, u.role_id, u.photo_url, r.name AS role_name
+           u.last_login, u.created_by, u.role_id, u.photo_url, u.departamento, r.name AS role_name
            FROM ${schema}.platform_users u
            LEFT JOIN ${schema}.roles r ON r.id = u.role_id
            ORDER BY u.id`,
@@ -618,7 +684,7 @@ const findPlatformUserByEmailOrUsername = (email, username) => ({
 
 const findPlatformUserByEmail = (email) => ({
     text: `SELECT u.id, u.username, u.email, u.estado, u.created_at, u.updated_at,
-           u.last_login, u.role_id, u.photo_url, r.name AS role_name
+           u.last_login, u.role_id, u.photo_url, u.departamento, r.name AS role_name
            FROM ${schema}.platform_users u
            LEFT JOIN ${schema}.roles r ON r.id = u.role_id
            WHERE u.email = $1
@@ -631,31 +697,36 @@ const updatePlatformUserPhotoData = (email, photoUrl) => ({
     values: [photoUrl, email]
 });
 
+const updatePlatformUserLastLoginData = (email) => ({
+    text: `UPDATE ${schema}.platform_users SET last_login = now() WHERE email = $1 RETURNING *`,
+    values: [email]
+});
+
 const updatePlatformUserUsernameData = (email, username) => ({
     text: `UPDATE ${schema}.platform_users SET username = $1, updated_at = now() WHERE email = $2 RETURNING *`,
     values: [username, email]
 });
 
 const insertPlatformUserData = (data) => {
-    const { username, email, role_id, created_by } = data;
+    const { username, email, role_id, created_by, departamento } = data;
     const text = `
-        INSERT INTO ${schema}.platform_users (username, email, role_id, created_by)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO ${schema}.platform_users (username, email, role_id, created_by, departamento)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
     `;
-    const values = [username, email, role_id || null, created_by || null];
+    const values = [username, email, role_id || null, created_by || null, departamento || null];
     return { text, values };
 };
 
 const updatePlatformUserData = (id, data) => {
-    const { username, role_id } = data;
+    const { username, role_id, departamento } = data;
     const text = `
         UPDATE ${schema}.platform_users
-        SET username = $1, role_id = $2, updated_at = now()
-        WHERE id = $3
+        SET username = $1, role_id = $2, departamento = $3, updated_at = now()
+        WHERE id = $4
         RETURNING *
     `;
-    const values = [username, role_id || null, id];
+    const values = [username, role_id || null, departamento || null, id];
     return { text, values };
 };
 
@@ -1225,12 +1296,16 @@ module.exports = {
     findEnrollmentByUserAndCourse,
     updateEnrollmentEstadoQuery,
     updateEnrollmentSyncFields,
+    updateEnrollmentSyncErrorQuery,
+    updateEnrollmentEstadoSyncQuery,
+    findEnrollmentByUserSubjectPeriod,
     updateEnrollmentSyncStatusQuery,
     updateJourneyEnrollmentData,
     deleteEnrollmentData,
     // moodle
     findMoodleUserByUsername,
     findMoodleEnrolmentId,
+    findActiveMoodleEnrolments,
     countCoursesStudentsByCategory,
     // health
     healthCheck,
@@ -1244,6 +1319,7 @@ module.exports = {
     updatePlatformUserEstadoData,
     updatePlatformUserPhotoData,
     updatePlatformUserUsernameData,
+    updatePlatformUserLastLoginData,
     // admin: roles
     selectRoles,
     insertRoleData,

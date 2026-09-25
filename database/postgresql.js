@@ -17,6 +17,7 @@ const {
     updateEnrollmentData, updateEnrollmentMoodleId, findEnrollmentByCodigoJourney,
     findEnrollmentByUserAndCourse,
     updateEnrollmentEstadoQuery, updateEnrollmentSyncFields,
+    updateEnrollmentSyncErrorQuery, updateEnrollmentEstadoSyncQuery, findEnrollmentByUserSubjectPeriod,
     findAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatusQuery,
     healthCheck, checkPermissions,
@@ -25,6 +26,7 @@ const {
     deleteEnrollmentData,
     selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData,
     updatePlatformUserData, updatePlatformUserEstadoData, updatePlatformUserPhotoData, updatePlatformUserUsernameData,
+    updatePlatformUserLastLoginData,
     selectRoles, insertRoleData, updateRoleData,
     selectModulesAdmin, insertModuleData, updateModuleData,
     selectSubmodulesAdmin, insertSubmoduleData, updateSubmoduleData,
@@ -536,6 +538,33 @@ function setEnrollmentSyncFields(id, fields) {
     });
 }
 
+function markEnrollmentSyncError(id, errorMessage) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateEnrollmentSyncErrorQuery(id, errorMessage), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updateEnrollmentEstadoSync(id, estadoSync) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateEnrollmentEstadoSyncQuery(id, estadoSync), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function findEnrollmentByUserSubjectPeriodFn(userid, codigoAsignatura, periodo, excludeCodigoJourney) {
+    return new Promise((resolve, reject) => {
+        pool.query(findEnrollmentByUserSubjectPeriod(userid, codigoAsignatura, periodo, excludeCodigoJourney), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
 // ─── HEALTH ───────────────────────────────────────────────────────────────────
 
 function checkDbConnection() {
@@ -616,6 +645,15 @@ function updatePlatformUserPhoto(email, photoUrl) {
 function updatePlatformUserUsername(email, username) {
     return new Promise((resolve, reject) => {
         pool.query(updatePlatformUserUsernameData(email, username), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function updatePlatformUserLastLogin(email) {
+    return new Promise((resolve, reject) => {
+        pool.query(updatePlatformUserLastLoginData(email), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -996,6 +1034,9 @@ module.exports = {
     updateEnrollmentSyncStatus,
     updateEnrollmentEstado,
     setEnrollmentSyncFields,
+    markEnrollmentSyncError,
+    updateEnrollmentEstadoSync,
+    findEnrollmentByUserSubjectPeriod: findEnrollmentByUserSubjectPeriodFn,
     checkDbConnection,getEnrollmentsByUserId,
     resetPassword,
     checkPermissionsData,
@@ -1009,6 +1050,7 @@ module.exports = {
     findPlatformUserByEmail: findPlatformUserByEmailFn,
     updatePlatformUserPhoto,
     updatePlatformUserUsername,
+    updatePlatformUserLastLogin,
     // admin: roles
     listRoles,
     insertRole,

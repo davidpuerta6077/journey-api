@@ -71,8 +71,17 @@ module.exports = (injectedDB) => {
         return data.updateEnrollment(enrollmentData);
     }
 
+    // "Eliminar" desde Módulos > Matrículas ya NO borra la fila de la BD: un
+    // DELETE real la sacaba también de Sync/Novedades, perdiendo el historial
+    // y sin dejar rastro para confirmar que Moodle de verdad desmatriculó al
+    // estudiante (vía BD externa: al dejar de tener un estado activo, la fila
+    // sale sola de la vista moodle_enrol en el próximo cron). En su lugar se
+    // marca estado='Eliminado' (updateEnrollmentEstado ya guarda estado_anterior
+    // y fecha_cambio_estado) y se limpia el flag local de sincronizado para que
+    // quede visible y re-sincronizable desde Novedades.
     async function deleteElement(id) {
-        return data.deleteEnrollment(id);
+        await data.updateEnrollmentEstado(id, 'Eliminado');
+        return data.updateEnrollmentSyncStatus(id, false);
     }
 
     // ─── SYNC ─────────────────────────────────────────────────────────────────
@@ -89,40 +98,95 @@ module.exports = (injectedDB) => {
         return data.updateEnrollmentSyncStatus(id, true);
     }
 
-    async function markEnrollmentSyncFailed(id) {
-        return data.updateEnrollmentSyncStatus(id, false);
+    async function markEnrollmentSyncFailed(id, errorMessage) {
+        return data.markEnrollmentSyncError(id, errorMessage);
+    }
+
+    async function setEnrollmentEstadoSync(id, estadoSync) {
+        return data.updateEnrollmentEstadoSync(id, estadoSync);
     }
 
     async function setEnrollmentSyncFields(id, fields) {
         return data.setEnrollmentSyncFields(id, fields);
     }
 
-    // ─── JOURNEY ──────────────────────────────────────────────────────────────
+    // ─── JOURNEY / NOVEDADES ────────────────────────────────────────────────────
 
-    async function saveJourneyEnrollment(enr) {
-        const moodleRole = ROLE_MAP[enr.role?.toUpperCase()] || enr.role || 'student';
+    // Punto único para guardar una matrícula con detección de novedades: lo usa
+    // tanto SICAU (SICAU/controller.js → saveSicauMatricula, para que la ingesta
+    // automática detecte traslados y cambios de estado) como la creación manual
+    // de aquí abajo (saveJourneyEnrollment), para que el comportamiento sea el
+    // mismo sin importar el origen de la matrícula.
+    //   - Si ya existe una matrícula para el mismo estudiante+curso y el estado
+    //     que llega es distinto, se actualiza (queda como novedad "estado
+    //     actualizado" para revisar en Sync Novedades) en vez de ignorarse.
+    //   - Si el estudiante aparece en un grupo/curso distinto de la misma
+    //     asignatura y periodo, la matrícula anterior se marca "traslado" (ver
+    //     comentario detallado en SICAU/controller.js sobre por qué).
+    // `enr.role` debe venir ya normalizado a rol de Moodle (student/editingteacher/
+    // teacher), no al texto crudo de SICAU ("ESTUDIANTE"/"DOCENTE"/"TUTOR").
+    async function saveEnrollmentConNovedades(enr) {
         const codigoJourney = enr.codigo_journey || `${enr.codigo_asignatura}${enr.periodo}${enr.grupo}`;
+
+        const courseResult = await data.findCourseSicau(codigoJourney);
+        const courseid = courseResult.length > 0 ? courseResult[0].id : (enr.courseid || null);
 
         const existing = await data.findEnrollmentByUserAndCourse(enr.userid, codigoJourney);
         if (existing.length > 0) {
-            throw new Error('Ya existe una matrícula para este estudiante en esa asignatura, periodo y grupo');
+            const matricula = existing[0];
+            if (enr.estado && enr.estado !== matricula.estado) {
+                await data.updateEnrollmentEstado(matricula.id, enr.estado);
+                await data.updateEnrollmentEstadoSync(matricula.id, 'pendiente');
+                await data.updateEnrollmentSyncStatus(matricula.id, false);
+                return {
+                    codigo_journey: codigoJourney, id: matricula.id, status: 'estado_actualizado',
+                    estado_anterior: matricula.estado, estado_nuevo: enr.estado
+                };
+            }
+            return { codigo_journey: codigoJourney, id: matricula.id, status: 'exists' };
         }
 
-        const result = await data.insertEnrollment({
+        const traslados = await data.findEnrollmentByUserSubjectPeriod(
+            enr.userid, enr.codigo_asignatura, enr.periodo, codigoJourney
+        );
+        for (const previa of traslados) {
+            await data.updateEnrollmentEstadoSync(previa.id, 'traslado');
+            await data.updateEnrollmentEstado(previa.id, 'Trasladado');
+        }
+
+        const inserted = await data.insertEnrollment({
             userid:                 enr.userid,
-            courseid:               enr.courseid             || null,
-            role:                   moodleRole,
+            courseid,
+            role:                   enr.role || 'student',
             moodle_enrollment_id:   null,
-            codigo_asignatura:      enr.codigo_asignatura,
-            nombre_asignatura:      enr.nombre_asignatura,
-            programa:               enr.programa,
-            periodo:                enr.periodo,
-            grupo:                  enr.grupo,
+            codigo_asignatura:      enr.codigo_asignatura      || null,
+            nombre_asignatura:      enr.nombre_asignatura      || null,
+            programa:               enr.programa               || null,
+            periodo:                enr.periodo                || null,
+            grupo:                  enr.grupo                  || null,
             codigo_journey:         codigoJourney,
-            estado:                 enr.estado               || 'Matriculado',
-            fecha_creacion_journey: new Date().toISOString().split('T')[0]
+            estado:                 enr.estado                 || 'Matriculado',
+            fecha_creacion_journey: enr.fecha_creacion_journey || new Date().toISOString().split('T')[0]
         });
-        return result[0];
+
+        return {
+            codigo_journey: codigoJourney, id: inserted[0].id, status: 'saved',
+            ...(traslados.length > 0 ? { traslado: true, codigo_journey_anterior: traslados.map(t => t.codigo_journey) } : {})
+        };
+    }
+
+    // Creación manual desde Módulos > Matrículas: a diferencia de la ingesta
+    // SICAU (que procesa un lote y nunca debe frenarse por una fila), aquí sí
+    // tiene sentido bloquear con un error claro si la matrícula exacta ya existe
+    // — es una acción puntual de una sola fila con una persona esperando el
+    // resultado en el formulario.
+    async function saveJourneyEnrollment(enr) {
+        const moodleRole = ROLE_MAP[enr.role?.toUpperCase()] || enr.role || 'student';
+        const result = await saveEnrollmentConNovedades({ ...enr, role: moodleRole });
+        if (result.status === 'exists') {
+            throw new Error('Ya existe una matrícula para este estudiante en esa asignatura, periodo y grupo');
+        }
+        return result;
     }
 
     async function updateJourneyEnrollment(enr) {
@@ -351,7 +415,9 @@ module.exports = (injectedDB) => {
         markEnrollmentAsSynchronized,
         markEnrollmentSyncFailed,
         setEnrollmentSyncFields,
+        setEnrollmentEstadoSync,
         saveJourneyEnrollment,
+        saveEnrollmentConNovedades,
         updateJourneyEnrollment,
         listEnrollmentsWithUsers,
         generateErrorExcel,

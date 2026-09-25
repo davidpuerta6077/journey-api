@@ -307,10 +307,20 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
  *                       type: array
  *                       items:
  *                         type: object
+ *                         description: >
+ *                           codigo_asignatura/nombre_asignatura/programa/periodo/grupo son opcionales aquí:
+ *                           si SICAU los manda en la matrícula, tienen prioridad sobre los del curso padre
+ *                           (necesario cuando una matrícula no corresponde exactamente al curso del bloque,
+ *                           p.ej. mismo envío agrupando varias asignaturas). Si no vienen, se usan los del curso.
  *                         properties:
- *                           cedula: { type: string, example: "1111111124" }
- *                           role:   { type: string, example: "ESTUDIANTE" }
- *                           estado: { type: string, example: "Activa" }
+ *                           cedula:            { type: string, example: "1111111124" }
+ *                           role:              { type: string, example: "ESTUDIANTE" }
+ *                           codigo_asignatura: { type: string, example: "FB0010" }
+ *                           nombre_asignatura: { type: string, example: "Base de Datos II" }
+ *                           programa:          { type: string, example: "Tecnologia en desarrollo de software" }
+ *                           periodo:           { type: string, example: "20261" }
+ *                           grupo:             { type: string, example: "G101" }
+ *                           estado:            { type: string, example: "Activa" }
  *     responses:
  *       200:
  *         description: Curso y matrículas guardados
