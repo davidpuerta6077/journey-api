@@ -475,7 +475,7 @@ router.post('/process-excel', checkAuth, checkPermission("process_excel_enrollme
  * @swagger
  * /enrollments/process-novedades:
  *   post:
- *     summary: Procesar Excel y suspender usuarios en Moodle
+ *     summary: Procesar Excel y eliminar (desmatricular) usuarios de Moodle
  *     tags: [Enrollments]
  *     requestBody:
  *       required: true
@@ -517,7 +517,7 @@ router.post('/process-novedades', checkAuth, checkPermission("process_novedades"
                 errorFileUrl: `/uploads/${path.basename(errorExcelPath)}`
             }, 200);
         } else {
-            response.success(req, res, { message: 'Usuarios suspendidos con éxito.', successCount: result.successCount }, 200);
+            response.success(req, res, { message: 'Matrículas desmatriculadas con éxito.', successCount: result.successCount }, 200);
         }
     } catch (error) {
         response.error(req, res, `Error procesando novedades: ${error.message}`, 500);
@@ -770,7 +770,7 @@ router.put('/:id', checkAuth, checkPermission("update_enrollment_journey"), save
  * @swagger
  * /enrollments/{id}:
  *   delete:
- *     summary: Eliminar matrícula
+ *     summary: Desmatricular (no borra de la BD, marca estado='Desmatriculado')
  *     tags: [Enrollments]
  *     parameters:
  *       - in: path
@@ -779,7 +779,7 @@ router.put('/:id', checkAuth, checkPermission("update_enrollment_journey"), save
  *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: Matrícula eliminada
+ *         description: Matrícula desmatriculada
  *       500:
  *         description: Error interno
  */

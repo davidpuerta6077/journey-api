@@ -207,7 +207,10 @@ router.post('/send_users_sicau', async (req, res, next) => {
  *                     programa:          { type: string, example: "Fundamentación" }
  *                     periodo:           { type: string, example: "20261" }
  *                     grupo:             { type: string, example: "G101" }
- *                     docente:           { type: string, example: "Johana Ramirez" }
+ *                     nombre_profesor:   { type: string, example: "Johana Ramirez" }
+ *                     documento:         { type: string, example: "1035421789" }
+ *                     celular:           { type: string, example: "3001234567" }
+ *                     correo_institucional: { type: string, example: "johana.ramirez@pascualbravo.edu.co" }
  *                     fecha_inicio:      { type: string, example: "2026-01-15" }
  *                     fecha_fin:         { type: string, example: "2026-06-15" }
  *     responses:
@@ -329,7 +332,10 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
  *                         departamento:      { type: string, example: "Sistemas Digitales" }
  *                         periodo:           { type: string, example: "20261" }
  *                         grupo:             { type: string, example: "G101" }
- *                         docente:           { type: string, example: "Johana Ramirez" }
+ *                         nombre_profesor:   { type: string, example: "Johana Ramirez" }
+ *                         documento:         { type: string, example: "1035421789" }
+ *                         celular:           { type: string, example: "3001234567" }
+ *                         correo_institucional: { type: string, example: "johana.ramirez@pascualbravo.edu.co" }
  *                         fecha_inicio:      { type: string, example: "2026-01-15" }
  *                         fecha_fin:         { type: string, example: "2026-06-15" }
  *                     enrollments:
@@ -370,10 +376,19 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
  *                         properties:
  *                           course:
  *                             type: object
+ *                             description: >
+ *                               Si el curso trae nombre_profesor/documento/correo_institucional, el profesor
+ *                               se crea como usuario si no existía (localizado por documento) y queda
+ *                               matriculado en el curso con rol editingteacher (ver course.profesor).
  *                             properties:
  *                               idnumber:  { type: string }
  *                               shortname: { type: string }
  *                               status:    { type: string, example: "saved" }
+ *                               profesor:
+ *                                 type: object
+ *                                 description: Resultado de crear/matricular al profesor. status "omitido" si faltó nombre_profesor, documento o correo_institucional.
+ *                                 properties:
+ *                                   status: { type: string, example: "saved" }
  *                           enrollments:
  *                             type: array
  *                             items:

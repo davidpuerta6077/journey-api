@@ -20,7 +20,7 @@ const pool = new Pool({
 });
 
 const CAMPOS_USER = ['firstname', 'lastname', 'email', 'correo_personal'];
-const CAMPOS_COURSE = ['fullname', 'shortname', 'nombre_asignatura', 'docente', 'departamento', 'programa'];
+const CAMPOS_COURSE = ['fullname', 'shortname', 'nombre_asignatura', 'nombre_profesor', 'departamento', 'programa'];
 const CAMPOS_ENROLLMENT = ['nombre_asignatura', 'programa'];
 
 async function normalizarUsuarios() {
@@ -45,7 +45,7 @@ async function normalizarUsuarios() {
 
 async function normalizarCursos() {
     const { rows } = await pool.query(
-        `SELECT id, fullname, shortname, nombre_asignatura, docente, departamento, programa,
+        `SELECT id, fullname, shortname, nombre_asignatura, nombre_profesor, departamento, programa,
                 grupo, codigo_asignatura, periodo
          FROM ${schema}.courses ORDER BY id`
     );
@@ -53,7 +53,7 @@ async function normalizarCursos() {
     for (const c of rows) {
         const norm = normalizeCourse(c);
         // cleanSpaces por sí solo no recapitaliza lo que ya quedó escrito en
-        // fullname/shortname (curso viejo con nombre/docente en mayúsculas
+        // fullname/shortname (curso viejo con nombre/profesor en mayúsculas
         // incrustado en el string). Si el curso trae los datos de SICAU
         // (grupo/codigo_asignatura/periodo), se rearma con el mismo formato de
         // la ingesta pero a partir de las piezas ya normalizadas.
@@ -62,7 +62,7 @@ async function normalizarCursos() {
                 grupo: c.grupo,
                 nombreAsignatura: norm.nombre_asignatura,
                 codigoAsignatura: c.codigo_asignatura,
-                docente: norm.docente,
+                nombreProfesor: norm.nombre_profesor,
                 periodo: c.periodo,
             }));
         }
@@ -73,10 +73,10 @@ async function normalizarCursos() {
             await pool.query(
                 `UPDATE ${schema}.courses
                  SET fullname = $1, shortname = $2, nombre_asignatura = $3,
-                     docente = $4, departamento = $5, programa = $6
+                     nombre_profesor = $4, departamento = $5, programa = $6
                  WHERE id = $7`,
                 [norm.fullname, norm.shortname, norm.nombre_asignatura ?? null,
-                 norm.docente ?? null, norm.departamento ?? null, norm.programa ?? null, c.id]
+                 norm.nombre_profesor ?? null, norm.departamento ?? null, norm.programa ?? null, c.id]
             );
         }
     }

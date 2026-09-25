@@ -5,14 +5,14 @@ const { duplicateSeedCourse } = require('./duplicateSeedCourse');
 
 // Creación manual desde el Módulo Cursos: a diferencia de Sync Cursos (que
 // resuelve semilla/categoría por sync_rules a partir de datos de SICAU), aquí
-// el usuario elige la semilla y llena fullname/shortname/idnumber/docente a
-// mano. El curso queda duplicado en Moodle y con una fila local ya marcada
+// el usuario elige la semilla y llena fullname/shortname/idnumber/nombre_profesor
+// a mano. El curso queda duplicado en Moodle y con una fila local ya marcada
 // como sincronizada (moodle_id set), igual que si hubiera pasado por Sync
 // Cursos.
 async function createCourseManually(input) {
     const {
         seed_shortname, categoryid, fullname, shortname, idnumber,
-        docente, periodo, grupo, departamento, programa,
+        nombre_profesor, periodo, grupo, departamento, programa,
         codigo_asignatura, nombre_asignatura, fecha_inicio, fecha_fin
     } = input;
 
@@ -44,7 +44,7 @@ async function createCourseManually(input) {
         fullname, shortname, idnumber, categoryid,
         moodle_id, seed_course_id: semillaId,
         summary: null, visible: true, format: 'topics', numsections: 10,
-        departamento, programa, docente, fecha_inicio, fecha_fin,
+        departamento, programa, nombre_profesor, fecha_inicio, fecha_fin,
         periodo, grupo, codigo_asignatura, nombre_asignatura,
         templatecourse: seed_shortname
     });

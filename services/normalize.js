@@ -57,13 +57,13 @@ function normalizeUser(u) {
 // limpian de espacios (contienen códigos como FB0010 que no deben capitalizarse) y,
 // de paso, corrigen el rótulo "Docente:" que quedó grabado en fullnames viejos
 // generados por SICAU antes de renombrarlo a "Profesor:". nombre_asignatura,
-// docente, departamento y programa sí llevan Capitalización tipo título.
+// nombre_profesor, departamento y programa sí llevan Capitalización tipo título.
 function normalizeCourse(c) {
   return {
     fullname: cleanSpaces(c.fullname)?.replace(/Docente:/gi, 'Profesor:'),
     shortname: cleanSpaces(c.shortname),
     nombre_asignatura: titleCaseName(c.nombre_asignatura),
-    docente: titleCaseName(c.docente),
+    nombre_profesor: titleCaseName(c.nombre_profesor),
     departamento: titleCaseName(c.departamento),
     programa: titleCaseName(c.programa),
   };
@@ -81,16 +81,34 @@ function normalizeEnrollment(e) {
 
 // Arma fullname/shortname con el mismo formato que usa la ingesta de SICAU, a
 // partir de piezas ya normalizadas (grupo ya con el prefijo "G", nombre de
-// asignatura y docente ya en Title Case). Se usa tanto al recibir un curso
-// nuevo/con novedad de SICAU como al reconstruir en el backfill los cursos que
-// quedaron con el fullname en mayúsculas de antes de que existiera esta
-// normalización: cleanSpaces por sí solo no recapitaliza texto ya incrustado
-// dentro del string, así que ahí no basta con limpiar espacios, hay que rearmarlo.
-function buildCourseNames({ grupo, nombreAsignatura, codigoAsignatura, docente, periodo }) {
+// asignatura y nombre_profesor ya en Title Case). Se usa tanto al recibir un
+// curso nuevo/con novedad de SICAU como al reconstruir en el backfill los
+// cursos que quedaron con el fullname en mayúsculas de antes de que existiera
+// esta normalización: cleanSpaces por sí solo no recapitaliza texto ya
+// incrustado dentro del string, así que ahí no basta con limpiar espacios,
+// hay que rearmarlo.
+function buildCourseNames({ grupo, nombreAsignatura, codigoAsignatura, nombreProfesor, periodo }) {
   const periodoFormateado = periodo ? `${String(periodo).slice(0, 4)}-${String(periodo).slice(4)}` : '';
   return {
-    fullname: cleanSpaces(`${grupo || ''} ${nombreAsignatura || ''} (${codigoAsignatura || ''}) - Profesor: ${docente || ''} (${periodoFormateado})`),
+    fullname: cleanSpaces(`${grupo || ''} ${nombreAsignatura || ''} (${codigoAsignatura || ''}) - Profesor: ${nombreProfesor || ''} (${periodoFormateado})`),
     shortname: cleanSpaces(`${grupo || ''} ${nombreAsignatura || ''} (${codigoAsignatura || ''})(${periodoFormateado})`),
+  };
+}
+
+// SICAU manda el nombre del profesor como un solo string ("Johana Ramirez
+// Gómez"), pero la tabla users guarda firstname/lastname separados. Sin un
+// catálogo de nombres/apellidos no hay forma exacta de saber dónde corta el
+// nombre del apellido, así que se parte por la mitad de las palabras (regla
+// usual en nombres hispanos de 2+2): con 1 palabra todo es firstname, con 2
+// la primera es firstname y la segunda lastname.
+function splitNombreCompleto(nombreCompleto) {
+  const partes = cleanSpaces(nombreCompleto)?.split(' ').filter(Boolean) || [];
+  if (partes.length === 0) return { firstname: '', lastname: '' };
+  if (partes.length === 1) return { firstname: partes[0], lastname: '' };
+  const mitad = Math.ceil(partes.length / 2);
+  return {
+    firstname: partes.slice(0, mitad).join(' '),
+    lastname: partes.slice(mitad).join(' '),
   };
 }
 
@@ -107,5 +125,6 @@ module.exports = {
   normalizeCourse,
   normalizeEnrollment,
   buildCourseNames,
+  splitNombreCompleto,
   difiere,
 };
