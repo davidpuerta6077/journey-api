@@ -428,7 +428,7 @@ router.get('/list', checkAuth, checkPermission("list_courses"), async (req, res)
  * /courses/create_manual:
  *   post:
  *     summary: Crear un curso manualmente duplicando una semilla, con los datos elegidos a mano
- *     description: A diferencia de /courses/sync, no resuelve la semilla/categoría por sync_rules a partir de datos de SICAU -- el usuario indica la semilla (por shortname) y llena fullname/shortname/idnumber/docente/etc. El curso queda duplicado y ya sincronizado en la base local.
+ *     description: A diferencia de /courses/sync, no resuelve la semilla/categoría por sync_rules a partir de datos de SICAU -- el usuario indica la semilla (por shortname) y llena fullname/shortname/idnumber/nombre_profesor/etc. El curso queda duplicado y ya sincronizado en la base local.
  *     tags: [Courses]
  *     requestBody:
  *       required: true
@@ -443,7 +443,7 @@ router.get('/list', checkAuth, checkPermission("list_courses"), async (req, res)
  *               fullname:       { type: string }
  *               shortname:      { type: string }
  *               idnumber:       { type: string }
- *               docente:        { type: string }
+ *               nombre_profesor: { type: string }
  *     responses:
  *       200:
  *         description: Curso creado
