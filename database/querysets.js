@@ -152,6 +152,13 @@ const findUserByDocumento = (documento) => ({
     values: [documento]
 });
 
+// Para armar descripciones de log legibles (nombre/email) justo antes de
+// borrar/actualizar, cuando el body de la petición solo trae el id.
+const findUserById = (id) => ({
+    text: `SELECT id, firstname, lastname, email, documento FROM ${schema}.users WHERE id = $1 LIMIT 1`,
+    values: [id]
+});
+
 const updateUserSicau = (data) => ({
     text: `UPDATE ${schema}.users SET
         firstname = $1, lastname = $2, city = $3, country = $4,
@@ -482,6 +489,19 @@ const findEnrollmentByUserAndCourse = (userid, codigoJourney) => ({
     values: [userid, codigoJourney]
 });
 
+// Misma info que findAllEnrollmentsWithUsers (nombre del estudiante vía
+// JOIN), pero para una sola fila: se usa para armar descripciones de log
+// legibles justo antes de actualizar/borrar, cuando el body solo trae el id.
+const findEnrollmentWithUserById = (id) => ({
+    text: `SELECT
+        e.id, e.userid, e.codigo_asignatura, e.nombre_asignatura, e.codigo_journey, e.estado,
+        u.firstname, u.lastname, u.email, u.documento
+    FROM ${schema}.enrollments e
+    LEFT JOIN ${schema}.users u ON u.id = e.userid
+    WHERE e.id = $1 LIMIT 1`,
+    values: [id]
+});
+
 // Cada vez que cambia el estado académico se guarda el valor anterior y la
 // fecha del cambio (columnas estado_anterior/fecha_cambio_estado), para que
 // el módulo Novedades pueda mostrar un historial ("de Matriculada a
@@ -750,6 +770,11 @@ const selectRoles = () => ({
     values: []
 });
 
+const findRoleById = (id) => ({
+    text: `SELECT id, name FROM ${schema}.roles WHERE id = $1 LIMIT 1`,
+    values: [id]
+});
+
 const insertRoleData = (data) => {
     const { name, description } = data;
     const text = `
@@ -775,6 +800,11 @@ const updateRoleData = (id, data) => {
 const selectModulesAdmin = () => ({
     text: `SELECT id, code, name, created_at FROM ${schema}.modules ORDER BY id`,
     values: []
+});
+
+const findModuleById = (id) => ({
+    text: `SELECT id, code, name FROM ${schema}.modules WHERE id = $1 LIMIT 1`,
+    values: [id]
 });
 
 const insertModuleData = (data) => {
@@ -838,6 +868,11 @@ const selectRolePermissionsGrid = () => ({
 const findRolePermission = (role_id, submodule_id) => ({
     text: `SELECT id FROM ${schema}.role_permissions WHERE role_id = $1 AND submodule_id = $2 LIMIT 1`,
     values: [role_id, submodule_id]
+});
+
+const findSubmoduleById = (id) => ({
+    text: `SELECT id, code, name FROM ${schema}.submodules WHERE id = $1 LIMIT 1`,
+    values: [id]
 });
 
 const insertRolePermissionData = (data) => {
@@ -1040,13 +1075,13 @@ const updateCourseSyncFields = (id, { moodle_id, seed_course_id, categoryid }) =
 
 // ___ LOGS ________________________________________________________________________
 
-const insertLogData = (type, description, username, entityType, entityId) => ({
+const insertLogData = (type, description, username, entityType, entityId, detail) => ({
     text: `
-        INSERT INTO ${schema}.logs (type, description, username, entity_type, entity_id)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO ${schema}.logs (type, description, username, entity_type, entity_id, detail)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
     `,
-    values: [type, description, username || null, entityType || null, entityId || null]
+    values: [type, description, username || null, entityType || null, entityId || null, detail ? JSON.stringify(detail) : null]
 });
 
 // entity_type guarda el código de submódulo (el mismo que checkPermission).
@@ -1061,6 +1096,8 @@ const selectLogsData = (limit) => ({
                l.description,
                l.username,
                l.entity_type,
+               l.entity_id,
+               l.detail,
                m.name  AS aplicacion,
                sm.name AS modulo
         FROM ${schema}.logs l
@@ -1274,6 +1311,7 @@ module.exports = {
     clearUserMoodleId,
     findUserByEmailOrUsername,
     findUserByDocumento,
+    findUserById,
     updateUserSicau,
     updateUserSyncStatusQuery,
     updateUserUnsyncQuery,
@@ -1301,6 +1339,7 @@ module.exports = {
     findEnrollmentByCodigoJourney,
     findAllEnrollmentsWithUsers,
     findEnrollmentByUserAndCourse,
+    findEnrollmentWithUserById,
     updateEnrollmentEstadoQuery,
     updateEnrollmentSyncFields,
     updateEnrollmentSyncErrorQuery,
@@ -1329,10 +1368,12 @@ module.exports = {
     updatePlatformUserLastLoginData,
     // admin: roles
     selectRoles,
+    findRoleById,
     insertRoleData,
     updateRoleData,
     // admin: modules
     selectModulesAdmin,
+    findModuleById,
     insertModuleData,
     updateModuleData,
     // admin: submodules
@@ -1342,6 +1383,7 @@ module.exports = {
     // admin: role permissions
     selectRolePermissionsGrid,
     findRolePermission,
+    findSubmoduleById,
     insertRolePermissionData,
     deleteRolePermissionData,
     // virtual labs

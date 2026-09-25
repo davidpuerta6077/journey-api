@@ -2,6 +2,7 @@ const { Router } = require('express');
 const router = Router();
 const response = require('../../network/response');
 const ctrl = require('./index');
+const postgresql = require('../../database/postgresql');
 const checkAuth = require('../../middleware/checkAuth');
 const checkPermission = require('../../middleware/checkPermissions');
 const saveLog = require('../../middleware/saveLog');
@@ -48,8 +49,12 @@ router.get('/usuarios', checkAuth, checkPermission('admin_users'), async (req, r
  *       200: { description: Usuario de plataforma creado }
  *       409: { description: Ya existe un usuario con ese email o username }
  */
-router.post('/usuarios', checkAuth, checkPermission('admin_users'), saveLog('admin_users'), async (req, res, next) => {
+router.post('/usuarios', checkAuth, checkPermission('admin_users'), saveLog('admin_users', {
+    descripcion: (req) => `Creó el usuario de plataforma "${req.body?.username || '—'}" (${req.body?.email || '—'}) con rol ${req._logRole?.name || req.body?.role_id}`,
+    detalle: (req) => [{ username: req.body?.username, email: req.body?.email, rol: req._logRole?.name, departamento: req.body?.departamento }],
+}), async (req, res, next) => {
     try {
+        req._logRole = req.body?.role_id ? await postgresql.getRoleById(req.body.role_id) : null;
         const result = await ctrl.createUsuario(req.body, null);
         response.success(req, res, result, 200);
     } catch (error) {
@@ -81,8 +86,13 @@ router.post('/usuarios', checkAuth, checkPermission('admin_users'), saveLog('adm
  *     responses:
  *       200: { description: Usuario de plataforma actualizado }
  */
-router.put('/usuarios/:id', checkAuth, checkPermission('admin_users'), saveLog('admin_users'), async (req, res, next) => {
+router.put('/usuarios/:id', checkAuth, checkPermission('admin_users'), saveLog('admin_users', {
+    descripcion: (req) => `Actualizó el usuario de plataforma "${req.body?.username || req.params.id}"${req._logRole ? ` (rol: ${req._logRole.name})` : ''}`,
+    entityId: (req) => req.params.id,
+    detalle: (req) => [{ username: req.body?.username, rol: req._logRole?.name, departamento: req.body?.departamento }],
+}), async (req, res, next) => {
     try {
+        req._logRole = req.body?.role_id ? await postgresql.getRoleById(req.body.role_id) : null;
         const result = await ctrl.updateUsuario(req.params.id, req.body);
         response.success(req, res, result, 200);
     } catch (error) {
@@ -113,9 +123,14 @@ router.put('/usuarios/:id', checkAuth, checkPermission('admin_users'), saveLog('
  *     responses:
  *       200: { description: Estado actualizado }
  */
-router.post('/usuarios/:id/estado', checkAuth, checkPermission('admin_users'), saveLog('admin_users'), async (req, res, next) => {
+router.post('/usuarios/:id/estado', checkAuth, checkPermission('admin_users'), saveLog('admin_users', {
+    descripcion: (req) => `${req.body?.estado ? 'Activó' : 'Desactivó'} a "${req._logUser?.username || req._logUser?.email || `id ${req.params.id}`}"`,
+    entityId: (req) => req.params.id,
+    detalle: (req) => [{ id: req.params.id, username: req._logUser?.username, email: req._logUser?.email, estado: req.body?.estado }],
+}), async (req, res, next) => {
     try {
         const result = await ctrl.setUsuarioEstado(req.params.id, !!req.body.estado);
+        req._logUser = result;
         response.success(req, res, result, 200);
     } catch (error) {
         next(error);
@@ -161,7 +176,10 @@ router.get('/roles', checkAuth, checkPermission('admin_roles'), async (req, res,
  *     responses:
  *       200: { description: Rol creado }
  */
-router.post('/roles', checkAuth, checkPermission('admin_roles'), saveLog('admin_roles'), async (req, res, next) => {
+router.post('/roles', checkAuth, checkPermission('admin_roles'), saveLog('admin_roles', {
+    descripcion: (req) => `Creó el rol "${req.body?.name || '—'}"`,
+    detalle: (req) => [{ name: req.body?.name, description: req.body?.description }],
+}), async (req, res, next) => {
     try {
         const result = await ctrl.createRole(req.body);
         response.success(req, res, result, 200);
@@ -193,7 +211,10 @@ router.post('/roles', checkAuth, checkPermission('admin_roles'), saveLog('admin_
  *     responses:
  *       200: { description: Rol actualizado }
  */
-router.put('/roles/:id', checkAuth, checkPermission('admin_roles'), saveLog('admin_roles'), async (req, res, next) => {
+router.put('/roles/:id', checkAuth, checkPermission('admin_roles'), saveLog('admin_roles', {
+    descripcion: (req) => `Actualizó el rol "${req.body?.name || req.params.id}"`,
+    entityId: (req) => req.params.id,
+}), async (req, res, next) => {
     try {
         const result = await ctrl.updateRole(req.params.id, req.body);
         response.success(req, res, result, 200);
@@ -241,7 +262,10 @@ router.get('/modulos', checkAuth, checkPermission('admin_modules'), async (req, 
  *     responses:
  *       200: { description: Módulo creado }
  */
-router.post('/modulos', checkAuth, checkPermission('admin_modules'), saveLog('admin_modules'), async (req, res, next) => {
+router.post('/modulos', checkAuth, checkPermission('admin_modules'), saveLog('admin_modules', {
+    descripcion: (req) => `Creó el módulo "${req.body?.name || req.body?.code || '—'}"`,
+    detalle: (req) => [{ code: req.body?.code, name: req.body?.name }],
+}), async (req, res, next) => {
     try {
         const result = await ctrl.createModulo(req.body);
         response.success(req, res, result, 200);
@@ -273,7 +297,10 @@ router.post('/modulos', checkAuth, checkPermission('admin_modules'), saveLog('ad
  *     responses:
  *       200: { description: Módulo actualizado }
  */
-router.put('/modulos/:id', checkAuth, checkPermission('admin_modules'), saveLog('admin_modules'), async (req, res, next) => {
+router.put('/modulos/:id', checkAuth, checkPermission('admin_modules'), saveLog('admin_modules', {
+    descripcion: (req) => `Actualizó el módulo "${req.body?.name || req.params.id}"`,
+    entityId: (req) => req.params.id,
+}), async (req, res, next) => {
     try {
         const result = await ctrl.updateModulo(req.params.id, req.body);
         response.success(req, res, result, 200);
@@ -322,8 +349,12 @@ router.get('/submodulos', checkAuth, checkPermission('admin_modules'), async (re
  *     responses:
  *       200: { description: Submódulo creado }
  */
-router.post('/submodulos', checkAuth, checkPermission('admin_modules'), saveLog('admin_modules'), async (req, res, next) => {
+router.post('/submodulos', checkAuth, checkPermission('admin_modules'), saveLog('admin_modules', {
+    descripcion: (req) => `Creó el submódulo "${req.body?.name || req.body?.code || '—'}" en el módulo "${req._logModule?.name || req.body?.module_id}"`,
+    detalle: (req) => [{ code: req.body?.code, name: req.body?.name, modulo: req._logModule?.name }],
+}), async (req, res, next) => {
     try {
+        req._logModule = req.body?.module_id ? await postgresql.getModuleById(req.body.module_id) : null;
         const result = await ctrl.createSubmodulo(req.body);
         response.success(req, res, result, 200);
     } catch (error) {
@@ -355,7 +386,10 @@ router.post('/submodulos', checkAuth, checkPermission('admin_modules'), saveLog(
  *     responses:
  *       200: { description: Submódulo actualizado }
  */
-router.put('/submodulos/:id', checkAuth, checkPermission('admin_modules'), saveLog('admin_modules'), async (req, res, next) => {
+router.put('/submodulos/:id', checkAuth, checkPermission('admin_modules'), saveLog('admin_modules', {
+    descripcion: (req) => `Actualizó el submódulo "${req.body?.name || req.params.id}"`,
+    entityId: (req) => req.params.id,
+}), async (req, res, next) => {
     try {
         const result = await ctrl.updateSubmodulo(req.params.id, req.body);
         response.success(req, res, result, 200);
@@ -408,7 +442,10 @@ router.get('/reglas', checkAuth, checkPermission('rules_active'), async (req, re
  *       200: { description: Regla creada }
  *       409: { description: Ya existe una regla activa con esa combinación }
  */
-router.post('/reglas', checkAuth, checkPermission('rules_active'), saveLog('rules_active'), async (req, res, next) => {
+router.post('/reglas', checkAuth, checkPermission('rules_active'), saveLog('rules_active', {
+    descripcion: (req) => `Creó regla de sincronización para "${req.body?.codigo_asignatura || req.body?.programa || req.body?.departamento || '—'}" -> semilla "${req.body?.seed_shortname || '—'}"`,
+    detalle: (req) => [{ codigo_asignatura: req.body?.codigo_asignatura, programa: req.body?.programa, departamento: req.body?.departamento, seed_shortname: req.body?.seed_shortname, categoryid: req.body?.categoryid }],
+}), async (req, res, next) => {
     try {
         const result = await ctrl.createRegla(req.body);
         response.success(req, res, result, 200);
@@ -445,7 +482,11 @@ router.post('/reglas', checkAuth, checkPermission('rules_active'), saveLog('rule
  *       200: { description: Regla actualizada }
  *       409: { description: Ya existe otra regla activa con esa combinación }
  */
-router.put('/reglas/:id', checkAuth, checkPermission('rules_active'), saveLog('rules_active'), async (req, res, next) => {
+router.put('/reglas/:id', checkAuth, checkPermission('rules_active'), saveLog('rules_active', {
+    descripcion: (req) => `Actualizó la regla para "${req.body?.codigo_asignatura || req.body?.programa || req.body?.departamento || '—'}" -> semilla "${req.body?.seed_shortname || '—'}"`,
+    entityId: (req) => req.params.id,
+    detalle: (req) => [{ codigo_asignatura: req.body?.codigo_asignatura, programa: req.body?.programa, departamento: req.body?.departamento, seed_shortname: req.body?.seed_shortname, activo: req.body?.activo }],
+}), async (req, res, next) => {
     try {
         const result = await ctrl.updateRegla(req.params.id, req.body);
         response.success(req, res, result, 200);
@@ -468,8 +509,17 @@ router.put('/reglas/:id', checkAuth, checkPermission('rules_active'), saveLog('r
  *     responses:
  *       200: { description: Regla eliminada }
  */
-router.delete('/reglas/:id', checkAuth, checkPermission('rules_active'), saveLog('rules_active'), async (req, res, next) => {
+router.delete('/reglas/:id', checkAuth, checkPermission('rules_active'), saveLog('rules_active', {
+    descripcion: (req) => {
+        const r = req._logRegla;
+        return `Eliminó la regla para "${r?.codigo_asignatura || r?.programa || r?.departamento || `id ${req.params.id}`}" (semilla "${r?.seed_shortname || '—'}")`;
+    },
+    entityId: (req) => req.params.id,
+    detalle: (req) => [{ codigo_asignatura: req._logRegla?.codigo_asignatura, programa: req._logRegla?.programa, departamento: req._logRegla?.departamento, seed_shortname: req._logRegla?.seed_shortname }],
+}), async (req, res, next) => {
     try {
+        const rows = await postgresql.findSyncRuleById(req.params.id);
+        req._logRegla = rows[0] || null;
         const result = await ctrl.deleteRegla(req.params.id);
         response.success(req, res, result, 200);
     } catch (error) {
@@ -607,8 +657,15 @@ router.get('/permisos', checkAuth, checkPermission('admin_permissions'), async (
  *     responses:
  *       200: { description: Permiso otorgado }
  */
-router.post('/permisos/grant', checkAuth, checkPermission('admin_permissions'), saveLog('admin_permissions'), async (req, res, next) => {
+router.post('/permisos/grant', checkAuth, checkPermission('admin_permissions'), saveLog('admin_permissions', {
+    descripcion: (req) => `Otorgó "${req._logSubmodule?.name || req.body?.submodule_id}" al rol "${req._logRole?.name || req.body?.role_id}"`,
+    detalle: (req) => [{ rol: req._logRole?.name, submodulo: req._logSubmodule?.name }],
+}), async (req, res, next) => {
     try {
+        [req._logRole, req._logSubmodule] = await Promise.all([
+            postgresql.getRoleById(req.body?.role_id),
+            postgresql.getSubmoduleById(req.body?.submodule_id),
+        ]);
         const result = await ctrl.grantPermiso(req.body, null);
         response.success(req, res, result, 200);
     } catch (error) {
@@ -635,8 +692,15 @@ router.post('/permisos/grant', checkAuth, checkPermission('admin_permissions'), 
  *     responses:
  *       200: { description: Permiso revocado }
  */
-router.post('/permisos/revoke', checkAuth, checkPermission('admin_permissions'), saveLog('admin_permissions'), async (req, res, next) => {
+router.post('/permisos/revoke', checkAuth, checkPermission('admin_permissions'), saveLog('admin_permissions', {
+    descripcion: (req) => `Revocó "${req._logSubmodule?.name || req.body?.submodule_id}" al rol "${req._logRole?.name || req.body?.role_id}"`,
+    detalle: (req) => [{ rol: req._logRole?.name, submodulo: req._logSubmodule?.name }],
+}), async (req, res, next) => {
     try {
+        [req._logRole, req._logSubmodule] = await Promise.all([
+            postgresql.getRoleById(req.body?.role_id),
+            postgresql.getSubmoduleById(req.body?.submodule_id),
+        ]);
         const result = await ctrl.revokePermiso(req.body);
         response.success(req, res, result, 200);
     } catch (error) {

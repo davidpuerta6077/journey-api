@@ -15,6 +15,7 @@ const postgresql = require('../database/postgresql');
 //   saveLog('reports', {
 //     descripcion: (req) => `Creó reporte "${req.body?.nombre}"`,  // string o (req,res)=>string
 //     entityId:    (req) => req.params.id,                          // valor o (req)=>valor
+//     detalle:     (req, res) => [{ nombre, codigo }],               // array u objeto, o (req,res)=>eso, para el desplegable "ver detalle" de AdminLogs
 //     incluirGet:  true,                                            // también audita GET 2xx
 //   })
 // Sin el segundo argumento, se comporta igual que antes: audita POST/PUT/DELETE/
@@ -22,7 +23,7 @@ const postgresql = require('../database/postgresql');
 const METODOS_AUDITADOS = ['POST', 'PUT', 'DELETE', 'PATCH'];
 
 function saveLog(submoduleCode, options = {}) {
-  const { descripcion, entityId, incluirGet = false } = options;
+  const { descripcion, entityId, detalle, incluirGet = false } = options;
 
   return (req, res, next) => {
     res.on('finish', () => {
@@ -48,8 +49,15 @@ function saveLog(submoduleCode, options = {}) {
         eid = null;
       }
 
+      let det = null;
+      try {
+        det = typeof detalle === 'function' ? detalle(req, res) : (detalle ?? null);
+      } catch {
+        det = null;
+      }
+
       postgresql
-        .insertLog(req.method.toLowerCase(), accion, email, submoduleCode, eid)
+        .insertLog(req.method.toLowerCase(), accion, email, submoduleCode, eid, det)
         .catch((err) => console.error("No se pudo registrar el log de auditoría:", err.message));
     });
     next();

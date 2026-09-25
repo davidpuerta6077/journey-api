@@ -48,7 +48,10 @@ const saveLog = require('../../middleware/saveLog');
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/add_course', checkAuth, checkPermission("add_course"), saveLog("add_course"), async (req, res) => {
+router.post('/add_course', checkAuth, checkPermission("add_course"), saveLog("add_course", {
+    descripcion: (req) => `Creó el curso "${req.body?.fullname || req.body?.shortname || '—'}" en Moodle`,
+    detalle: (req) => [{ fullname: req.body?.fullname, shortname: req.body?.shortname, idnumber: req.body?.idnumber, categoryid: req.body?.categoryid }],
+}), async (req, res) => {
     try {
         const result = await moodleRequest('core_course_create_courses', {
             'courses[0][fullname]':    req.body.fullname,
@@ -148,7 +151,10 @@ router.post('/duplicate_course', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/update_course', checkAuth, checkPermission("update_course"), saveLog("update_course"), async (req, res) => {
+router.post('/update_course', checkAuth, checkPermission("update_course"), saveLog("update_course", {
+    descripcion: (req) => `Actualizó el curso "${req.body?.fullname || req.body?.shortname || req.body?.id || '—'}" en Moodle`,
+    detalle: (req) => [{ id: req.body?.id, fullname: req.body?.fullname, shortname: req.body?.shortname, idnumber: req.body?.idnumber }],
+}), async (req, res) => {
     try {
         const result = await moodleRequest('core_course_update_courses', {
             'courses[0][id]':         req.body.id,
@@ -195,7 +201,10 @@ router.post('/update_course', checkAuth, checkPermission("update_course"), saveL
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/delete_course', checkAuth, checkPermission("delete_course"), saveLog("delete_course"), async (req, res) => {
+router.post('/delete_course', checkAuth, checkPermission("delete_course"), saveLog("delete_course", {
+    descripcion: (req) => `Eliminó el curso id ${req.body?.courseids} de Moodle`,
+    detalle: (req) => [{ courseids: req.body?.courseids }],
+}), async (req, res) => {
     try {
         const result = await moodleRequest('core_course_delete_courses', {
             'courseids[0]': req.body.courseids
@@ -350,7 +359,10 @@ router.post('/list_course_content', checkAuth, checkPermission("list_course_cont
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/add_category', checkAuth, checkPermission("add_category"), saveLog("add_category"), async (req, res) => {
+router.post('/add_category', checkAuth, checkPermission("add_category"), saveLog("add_category", {
+    descripcion: (req) => `Creó la categoría "${req.body?.name || '—'}" en Moodle`,
+    detalle: (req) => [{ name: req.body?.name, parent: req.body?.parent, idnumber: req.body?.idnumber }],
+}), async (req, res) => {
     try {
         const result = await moodleRequest('core_course_create_categories', {
             'categories[0][name]':              req.body.name,
@@ -529,7 +541,10 @@ router.post('/sync/preview', checkAuth, checkPermission("sync_preview_courses"),
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/sync', checkAuth, checkPermission("sync_courses"), saveLog("sync_courses"), async (req, res, next) => {
+router.post('/sync', checkAuth, checkPermission("sync_courses"), saveLog("sync_courses", {
+    descripcion: (req) => `Sincronizó ${(req.body?.items || []).length} curso(s) con Moodle`,
+    detalle: (req) => (req.body?.items || []).map(i => ({ id: i.id, shortname: i.shortname, fullname: i.fullname, idnumber: i.idnumber })),
+}), async (req, res, next) => {
     try {
         const items = req.body.items || [];
 
@@ -586,7 +601,10 @@ router.post('/sync', checkAuth, checkPermission("sync_courses"), saveLog("sync_c
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/apply_rule', checkAuth, checkPermission("sync_courses"), saveLog("sync_courses"), async (req, res, next) => {
+router.post('/apply_rule', checkAuth, checkPermission("sync_courses"), saveLog("sync_courses", {
+    descripcion: (req) => `Aplicó regla de sincronización a ${(req.body?.items || []).length} curso(s)`,
+    detalle: (req) => (req.body?.items || []).map(i => ({ id: i.id, shortname: i.shortname, fullname: i.fullname, idnumber: i.idnumber })),
+}), async (req, res, next) => {
     try {
         const result = await applyCourseRule(req.body.items || [], req.user?.email);
         response.success(req, res, result, 200);
