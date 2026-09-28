@@ -7,6 +7,8 @@
 - `descripcion` siempre corta y general (nunca listar todos los ítems de una operación en bloque ahí). El detalle item-por-item (correo, nombre, curso, estado) va en `detalle` (columna `logs.detail`, JSONB) para el modal "Ver detalle" del front.
 - Nunca dejar un id crudo (`role_id`, `courseid`, `module_id`, etc.) como único dato en un log — resolver el nombre real contra BD primero (`postgresql.getXById`).
 
+- `/auth/permissions` toma el email del token verificado (`req.user.email`), nunca de query/body, y todo `await` va dentro del `try`: si falla debe responder un error (el front reintenta), no dejar la petición colgada ni devolver "sin permisos".
+
 ## Acceso a datos
 
 - SQL vive en `database/querysets.js` (funciones que devuelven `{ text, values }`). `database/postgresql.js` las envuelve en funciones que devuelven Promesas y las exporta. No meter SQL inline en `api/**/controller.js` ni `api/**/network.js`.

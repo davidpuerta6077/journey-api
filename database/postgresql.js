@@ -1,6 +1,6 @@
 const config = require('../config');
 const { Pool } = require('pg');
-const { normalizeUser, normalizeCourse, normalizeEnrollment } = require('../services/normalize');
+const { normalizeUser, normalizeCourse, normalizeEnrollment, normalizeEstado } = require('../services/normalize');
 const {
     selectAllItems,
     selectAllUsers, selectUsersForSync, insertUsuarioData, updateUsuarioData,
@@ -10,11 +10,11 @@ const {
     updateUserSyncStatusQuery, updateUserUnsyncQuery,selectEnrollmentsByUserId,
     updateUserPassword,
     selectAllCourses, selectCoursesForSync, selectDistinctAsignaturas, insertCourseData, updateCourseData,
-    updateCourseMoodleId, findCourseByIdnumber, findCourseByShortname,
+    updateCourseMoodleId, findCourseByIdnumber,
     updateCourseSyncStatusQuery, updateCourseSyncingQuery, updateCourseSyncErrorQuery,
     updateCourseFromSicauQuery,
     selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
-    updateEnrollmentData, updateEnrollmentMoodleId, findEnrollmentByCodigoJourney,
+    updateEnrollmentData, updateEnrollmentMoodleId,
     findEnrollmentByUserAndCourse, findEnrollmentWithUserById,
     updateEnrollmentEstadoQuery, updateEnrollmentSyncFields,
     updateEnrollmentSyncErrorQuery, updateEnrollmentEstadoSyncQuery, findEnrollmentByUserSubjectPeriod,
@@ -23,7 +23,6 @@ const {
     healthCheck, checkPermissions,
     checkSubmodulePermissions,
     updateJourneyEnrollmentData,
-    deleteEnrollmentData,
     selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData,
     updatePlatformUserData, updatePlatformUserEstadoData, updatePlatformUserPhotoData, updatePlatformUserUsernameData,
     updatePlatformUserLastLoginData,
@@ -85,10 +84,22 @@ function query(queryConfig) {
 
 // ─── USERS ────────────────────────────────────────────────────────────────────
 
+// users tiene índices únicos por documento, email y username (ver
+// database/seeds/addUsersUniqueConstraints.js): traduce la violación a un 409
+// con un mensaje entendible en vez del error crudo de Postgres.
+function userDupError(err) {
+    if (err.code !== '23505') return err;
+    const campo = /documento/.test(err.constraint) ? 'documento'
+        : /email/.test(err.constraint) ? 'email' : 'username';
+    const dupErr = new Error(`Ya existe un usuario con ese ${campo}`);
+    dupErr.statusCode = 409;
+    return dupErr;
+}
+
 function insertUser(data) {
     return new Promise((resolve, reject) => {
         pool.query(insertUsuarioData({ ...data, ...normalizeUser(data) }), (err, result) => {
-            if (err) return reject(err);
+            if (err) return reject(userDupError(err));
             resolve(result.rows);
         });
     });
@@ -97,7 +108,7 @@ function insertUser(data) {
 function updateUser(data) {
     return new Promise((resolve, reject) => {
         pool.query(updateUsuarioData({ ...data, ...normalizeUser(data) }), (err, result) => {
-            if (err) return reject(err);
+            if (err) return reject(userDupError(err));
             resolve(result.rows);
         });
     });
@@ -106,7 +117,7 @@ function updateUser(data) {
 function updateJourneyUser(data) {
     return new Promise((resolve, reject) => {
         pool.query(updateUsuarioJourney(data), (err, result) => {
-            if (err) return reject(err);
+            if (err) return reject(userDupError(err));
             resolve(result.rows);
         });
     });
@@ -177,8 +188,8 @@ function getUserById(id) {
 
 function updateUserFromSicau(user) {
     return new Promise((resolve, reject) => {
-        pool.query(updateUserSicau(user), (err, data) => {
-            if (err) return reject(err);
+        pool.query(updateUserSicau({ ...user, ...normalizeUser(user) }), (err, data) => {
+            if (err) return reject(userDupError(err));
             resolve(data.rows);
         });
     });
@@ -269,15 +280,6 @@ function setCourseMoodleId(id, moodleId) {
 function findCourseSicau(idnumber) {
     return new Promise((resolve, reject) => {
         pool.query(findCourseByIdnumber(idnumber), (err, data) => {
-            if (err) return reject(err);
-            resolve(data.rows);
-        });
-    });
-}
-
-function findCourseByShortnameFn(shortname) {
-    return new Promise((resolve, reject) => {
-        pool.query(findCourseByShortname(shortname), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -465,15 +467,6 @@ function updateJourneyEnrollment(data) {
     });
 }
 
-function deleteEnrollment(id) {
-    return new Promise((resolve, reject) => {
-        pool.query(deleteEnrollmentData(id), (err, result) => {
-            if (err) return reject(err);
-            resolve(result.rows);
-        });
-    });
-}
-
 function getEnrollmentsForSync() {
     return new Promise((resolve, reject) => {
         pool.query(selectEnrollmentsForSync(), (err, data) => {
@@ -486,15 +479,6 @@ function getEnrollmentsForSync() {
 function setEnrollmentMoodleId(id, moodleEnrollmentId) {
     return new Promise((resolve, reject) => {
         pool.query(updateEnrollmentMoodleId(id, moodleEnrollmentId), (err, data) => {
-            if (err) return reject(err);
-            resolve(data.rows);
-        });
-    });
-}
-
-function findEnrollmentSicau(codigoJourney) {
-    return new Promise((resolve, reject) => {
-        pool.query(findEnrollmentByCodigoJourney(codigoJourney), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -540,7 +524,7 @@ function updateEnrollmentSyncStatus(id, statusValue) {
 
 function updateEnrollmentEstado(id, estado) {
     return new Promise((resolve, reject) => {
-        pool.query(updateEnrollmentEstadoQuery(id, estado), (err, result) => {
+        pool.query(updateEnrollmentEstadoQuery(id, normalizeEstado(estado)), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -1051,7 +1035,6 @@ module.exports = {
     getDistinctAsignaturas,
     setCourseMoodleId,
     findCourseSicau,
-    findCourseByShortnameFn,
     updateCourseSyncStatus,
     markCourseSyncing,
     markCourseSyncError,
@@ -1071,10 +1054,8 @@ module.exports = {
     insertEnrollment,
     updateEnrollment,
     updateJourneyEnrollment,
-    deleteEnrollment,
     getEnrollmentsForSync,
     setEnrollmentMoodleId,
-    findEnrollmentSicau,
     findEnrollmentByUserAndCourse: findEnrollmentByUserAndCourseFn,
     getEnrollmentWithUserById,
     listAllEnrollmentsWithUsers,

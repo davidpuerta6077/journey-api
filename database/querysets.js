@@ -143,7 +143,7 @@ const clearUserMoodleId = (id) => ({
 });
 
 const findUserByEmailOrUsername = (email, username) => ({
-    text: `SELECT id, moodle_id, email FROM ${schema}.users WHERE email = $1 OR username = $2 LIMIT 1`,
+    text: `SELECT id, moodle_id, email FROM ${schema}.users WHERE lower(email) = lower($1) OR lower(username) = lower($2) LIMIT 1`,
     values: [email, username]
 });
 
@@ -164,14 +164,14 @@ const updateUserSicau = (data) => ({
         firstname = $1, lastname = $2, city = $3, country = $4,
         documento = $5, correo_personal = $6, telefono = $7, celular = $8,
         fecha_nacimiento = $9, jornada = $10, departamento_academico = $11,
-        plan_estudios = $12 WHERE email = $13 OR username = $14`,
+        plan_estudios = $12 WHERE id = $13`,
     values: [
         data.firstname, data.lastname, data.city || 'Medellín', data.country || 'CO',
         data.documento || null, data.correo_personal || null,
         data.telefono || null, data.celular || null,
         data.fecha_nacimiento || null, data.jornada || null,
         data.departamento_academico || null, data.plan_estudios || null,
-        data.email, data.username
+        data.id
     ]
 });
 
@@ -375,11 +375,6 @@ const findCourseByIdnumber = (idnumber) => ({
     values: [idnumber]
 });
 
-const findCourseByShortname = (shortname) => ({
-    text: `SELECT id, nombre_profesor FROM ${schema}.courses WHERE shortname = $1 LIMIT 1`,
-    values: [shortname]
-});
-
 // ─── ENROLLMENTS ──────────────────────────────────────────────────────────────
 
 const selectAllEnrollments = () => ({
@@ -457,11 +452,6 @@ const updateEnrollmentData = (data) => {
 const updateEnrollmentMoodleId = (id, moodleEnrollmentId) => ({
     text: `UPDATE ${schema}.enrollments SET moodle_enrollment_id = $1 WHERE id = $2`,
     values: [moodleEnrollmentId, id]
-});
-
-const findEnrollmentByCodigoJourney = (codigoJourney) => ({
-    text: `SELECT id FROM ${schema}.enrollments WHERE codigo_journey = $1 LIMIT 1`,
-    values: [codigoJourney]
 });
 
 const findAllEnrollmentsWithUsers = () => ({
@@ -601,11 +591,6 @@ const updateJourneyEnrollmentData = (data) => {
 
     return { text, values };
 };
-
-const deleteEnrollmentData = (id) => ({
-    text: `DELETE FROM ${schema}.enrollments WHERE id = $1`,
-    values: [id]
-});
 
 // ─── MOODLE ───────────────────────────────────────────────────────────────────
 
@@ -1325,7 +1310,6 @@ module.exports = {
     updateCourseData,
     updateCourseMoodleId,
     findCourseByIdnumber,
-    findCourseByShortname,
     updateCourseSyncStatusQuery,
     updateCourseSyncingQuery,
     updateCourseSyncErrorQuery,
@@ -1336,7 +1320,6 @@ module.exports = {
     insertEnrollmentData,
     updateEnrollmentData,
     updateEnrollmentMoodleId,
-    findEnrollmentByCodigoJourney,
     findAllEnrollmentsWithUsers,
     findEnrollmentByUserAndCourse,
     findEnrollmentWithUserById,
@@ -1347,7 +1330,6 @@ module.exports = {
     findEnrollmentByUserSubjectPeriod,
     updateEnrollmentSyncStatusQuery,
     updateJourneyEnrollmentData,
-    deleteEnrollmentData,
     // moodle
     findMoodleUserByUsername,
     findMoodleEnrolmentId,

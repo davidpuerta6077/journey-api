@@ -1,4 +1,4 @@
-// Backfill: normaliza los datos YA existentes en `users` y `courses` aplicando
+// Backfill: normaliza los datos YA existentes en `users`, `courses` y `enrollments` aplicando
 // las mismas reglas que services/normalize.js. Idempotente: solo escribe las
 // filas que cambian. Uso:
 //   node database/seeds/normalizeExistingData.js          (aplica los cambios)
@@ -6,7 +6,7 @@
 
 const { Pool } = require('pg');
 const config = require('../../config');
-const { normalizeUser, normalizeCourse, normalizeEnrollment, buildCourseNames, difiere } = require('../../services/normalize');
+const { normalizeUser, normalizeCourse, normalizeEnrollment, normalizeEstado, buildCourseNames, difiere } = require('../../services/normalize');
 
 const schema = config.postgresql.schema;
 const DRY = process.argv.includes('--dry');
@@ -21,7 +21,7 @@ const pool = new Pool({
 
 const CAMPOS_USER = ['firstname', 'lastname', 'email', 'correo_personal'];
 const CAMPOS_COURSE = ['fullname', 'shortname', 'nombre_asignatura', 'nombre_profesor', 'departamento', 'programa'];
-const CAMPOS_ENROLLMENT = ['nombre_asignatura', 'programa'];
+const CAMPOS_ENROLLMENT = ['nombre_asignatura', 'programa', 'estado', 'estado_anterior'];
 
 async function normalizarUsuarios() {
     const { rows } = await pool.query(
@@ -85,18 +85,18 @@ async function normalizarCursos() {
 
 async function normalizarMatriculas() {
     const { rows } = await pool.query(
-        `SELECT id, nombre_asignatura, programa FROM ${schema}.enrollments ORDER BY id`
+        `SELECT id, nombre_asignatura, programa, estado, estado_anterior FROM ${schema}.enrollments ORDER BY id`
     );
     let cambiados = 0;
     for (const e of rows) {
-        const norm = normalizeEnrollment(e);
+        const norm = { ...normalizeEnrollment(e), estado_anterior: normalizeEstado(e.estado_anterior) };
         if (!difiere(e, norm, CAMPOS_ENROLLMENT)) continue;
         cambiados++;
-        console.log(`  enrollment #${e.id}: "${e.nombre_asignatura}" / "${e.programa}" -> "${norm.nombre_asignatura}" / "${norm.programa}"`);
+        console.log(`  enrollment #${e.id}: "${e.nombre_asignatura}" / "${e.programa}" / "${e.estado}" -> "${norm.nombre_asignatura}" / "${norm.programa}" / "${norm.estado}"`);
         if (!DRY) {
             await pool.query(
-                `UPDATE ${schema}.enrollments SET nombre_asignatura = $1, programa = $2 WHERE id = $3`,
-                [norm.nombre_asignatura ?? null, norm.programa ?? null, e.id]
+                `UPDATE ${schema}.enrollments SET nombre_asignatura = $1, programa = $2, estado = $3, estado_anterior = $4 WHERE id = $5`,
+                [norm.nombre_asignatura ?? null, norm.programa ?? null, norm.estado ?? null, norm.estado_anterior ?? null, e.id]
             );
         }
     }

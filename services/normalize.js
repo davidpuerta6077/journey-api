@@ -69,13 +69,35 @@ function normalizeCourse(c) {
   };
 }
 
+// SICAU y el formulario manual mandan el mismo estado académico con distintas
+// palabras ("Activa"/"Matriculado", "Cancelada"/"Cancelado"...). Se guarda
+// siempre una sola forma para que comparar estados (detección de novedades,
+// filtros, vista moodle_enrol) no dependa de sinónimos.
+const ESTADOS_MATRICULA = {
+  matriculado: 'Matriculado', matriculada: 'Matriculado', activa: 'Matriculado', activo: 'Matriculado',
+  cancelado: 'Cancelado', cancelada: 'Cancelado',
+  suspendido: 'Suspendido', suspendida: 'Suspendido',
+  finalizado: 'Finalizado', finalizada: 'Finalizado',
+  retirado: 'Retirado', retirada: 'Retirado',
+  desmatriculado: 'Desmatriculado', desmatriculada: 'Desmatriculado',
+  trasladado: 'Trasladado', trasladada: 'Trasladado',
+  pendiente: 'Pendiente',
+};
+
+function normalizeEstado(estado) {
+  if (estado == null) return estado;
+  const limpio = cleanSpaces(estado);
+  return ESTADOS_MATRICULA[limpio.toLocaleLowerCase('es')] || titleCaseName(limpio);
+}
+
 // Devuelve solo los campos normalizados de una matrícula (los mismos datos de
 // asignatura/programa que se duplican en enrollments para no depender de un
-// JOIN contra courses).
+// JOIN contra courses, más el estado académico).
 function normalizeEnrollment(e) {
   return {
     nombre_asignatura: titleCaseName(e.nombre_asignatura),
     programa: titleCaseName(e.programa),
+    estado: normalizeEstado(e.estado),
   };
 }
 
@@ -124,6 +146,7 @@ module.exports = {
   normalizeUser,
   normalizeCourse,
   normalizeEnrollment,
+  normalizeEstado,
   buildCourseNames,
   splitNombreCompleto,
   difiere,
