@@ -120,7 +120,7 @@ function updateUser(data) {
 
 function updateJourneyUser(data) {
     return new Promise((resolve, reject) => {
-        pool.query(updateUsuarioJourney(data), (err, result) => {
+        pool.query(updateUsuarioJourney({ ...data, ...normalizeUser(data) }), (err, result) => {
             if (err) return reject(userDupError(err));
             resolve(result.rows);
         });

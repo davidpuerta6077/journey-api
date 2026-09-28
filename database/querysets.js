@@ -102,15 +102,19 @@ const updateUsuarioJourney = (data) => {
 
     const text = `
         UPDATE ${schema}.users SET
-            firstname = $1, lastname = $2, email = $3, city = $4, country = $5,
-            documento = $6, correo_personal = $7, telefono = $8, celular = $9,
+            firstname = COALESCE($1, firstname), lastname = COALESCE($2, lastname),
+            email = COALESCE($3, email), city = $4, country = $5,
+            documento = COALESCE($6, documento), correo_personal = $7, telefono = $8, celular = $9,
             fecha_nacimiento = $10, jornada = $11, departamento_academico = $12,
             plan_estudios = $13
         WHERE id = $14
     `;
 
+    // nombre/email/documento nunca se dejan en NULL si no vienen en el body:
+    // son los campos que lee Moodle por BD externa (vista moodle_auth_users /
+    // moodle_enrol) y sin documento el usuario desaparece de esas vistas.
     const values = [
-        firstname, lastname, email,
+        firstname || null, lastname || null, email || null,
         city || 'Medellín',
         country || 'CO',
         documento || null,
@@ -161,8 +165,8 @@ const findUserById = (id) => ({
 
 const updateUserSicau = (data) => ({
     text: `UPDATE ${schema}.users SET
-        firstname = $1, lastname = $2, city = $3, country = $4,
-        documento = $5, correo_personal = $6, telefono = $7, celular = $8,
+        firstname = COALESCE($1, firstname), lastname = COALESCE($2, lastname), city = $3, country = $4,
+        documento = COALESCE($5, documento), correo_personal = $6, telefono = $7, celular = $8,
         fecha_nacimiento = $9, jornada = $10, departamento_academico = $11,
         plan_estudios = $12 WHERE id = $13`,
     values: [
@@ -1100,13 +1104,14 @@ const selectLogsData = (limit) => ({
 // Updates acotados a los campos que se normalizan antes de sincronizar, para no
 // interferir con updateUsuarioData / updateCourseData.
 
-const updateUserNormalizedData = (id, { firstname, lastname, email, correo_personal }) => ({
+const updateUserNormalizedData = (id, { firstname, lastname, email, correo_personal, jornada, departamento_academico, plan_estudios }) => ({
     text: `
         UPDATE ${schema}.users
-        SET firstname = $1, lastname = $2, email = $3, correo_personal = $4
-        WHERE id = $5
+        SET firstname = $1, lastname = $2, email = $3, correo_personal = $4,
+            jornada = $5, departamento_academico = $6, plan_estudios = $7
+        WHERE id = $8
     `,
-    values: [firstname, lastname, email, correo_personal ?? null, id]
+    values: [firstname, lastname, email, correo_personal ?? null, jornada ?? null, departamento_academico ?? null, plan_estudios ?? null, id]
 });
 
 const updateCourseNormalizedData = (id, { fullname, shortname, nombre_asignatura, nombre_profesor, departamento, programa }) => ({

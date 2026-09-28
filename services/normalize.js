@@ -36,6 +36,32 @@ function titleCaseName(s) {
     .join(' ');
 }
 
+// Textos académicos de SICAU que traen código o sigla ("PR - PRODUCCIÓN",
+// "022 - INGENIERÍA EN LOGÍSTICA (Presencial)", "... SNIES 103168"): Title
+// Case como titleCaseName, pero el código inicial ("FB", "022") y las siglas
+// conocidas quedan en mayúscula, y la palabra dentro de paréntesis también se
+// capitaliza (titleCaseName la dejaba "(presencial)").
+const SIGLAS = new Set(['SNIES']);
+
+function titleCaseAcademico(s) {
+  if (s == null) return s;
+  const limpio = cleanSpaces(s);
+  if (!limpio) return limpio;
+  const m = limpio.match(/^([A-Za-z]{2,3}|\d{1,4})\s*-\s*(.+)$/);
+  const codigo = m ? m[1].toUpperCase() : null;
+  let primera = true;
+  const texto = (m ? m[2] : limpio).replace(/\p{L}+/gu, (palabra) => {
+    const esPrimera = primera;
+    primera = false;
+    const mayus = palabra.toLocaleUpperCase('es');
+    if (SIGLAS.has(mayus)) return mayus;
+    const minus = palabra.toLocaleLowerCase('es');
+    if (!esPrimera && CONECTORES.has(minus)) return minus;
+    return minus.charAt(0).toLocaleUpperCase('es') + minus.slice(1);
+  });
+  return codigo ? `${codigo} - ${texto}` : texto;
+}
+
 function normalizeEmail(s) {
   if (s == null) return s;
   const limpio = String(s).replace(/\s+/g, '').toLowerCase();
@@ -50,6 +76,9 @@ function normalizeUser(u) {
     lastname: titleCaseName(u.lastname),
     email: normalizeEmail(u.email),
     correo_personal: normalizeEmail(u.correo_personal),
+    jornada: titleCaseAcademico(u.jornada),
+    departamento_academico: titleCaseAcademico(u.departamento_academico),
+    plan_estudios: titleCaseAcademico(u.plan_estudios),
   };
 }
 
@@ -64,8 +93,8 @@ function normalizeCourse(c) {
     shortname: cleanSpaces(c.shortname),
     nombre_asignatura: titleCaseName(c.nombre_asignatura),
     nombre_profesor: titleCaseName(c.nombre_profesor),
-    departamento: titleCaseName(c.departamento),
-    programa: titleCaseName(c.programa),
+    departamento: titleCaseAcademico(c.departamento),
+    programa: titleCaseAcademico(c.programa),
   };
 }
 
@@ -96,7 +125,7 @@ function normalizeEstado(estado) {
 function normalizeEnrollment(e) {
   return {
     nombre_asignatura: titleCaseName(e.nombre_asignatura),
-    programa: titleCaseName(e.programa),
+    programa: titleCaseAcademico(e.programa),
     estado: normalizeEstado(e.estado),
   };
 }
@@ -142,6 +171,7 @@ function difiere(original, normalizado, keys) {
 module.exports = {
   cleanSpaces,
   titleCaseName,
+  titleCaseAcademico,
   normalizeEmail,
   normalizeUser,
   normalizeCourse,
