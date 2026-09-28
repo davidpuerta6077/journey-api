@@ -1,5 +1,5 @@
 const { getCategorias, filtrarCategorias, getCursosDeCategoria } = require('./moodleRest');
-const { meta, normCategoryId } = require('../util');
+const { meta, normCategoryId, moodleCourseUrl } = require('../util');
 
 async function hiddenCourses(params = {}) {
     const categoryId = normCategoryId(params.categoryId);
@@ -12,6 +12,7 @@ async function hiddenCourses(params = {}) {
             if (Number(c.visible) === 0) {
                 rows.push({
                     curso: c.fullname,
+                    curso_url: moodleCourseUrl(c.id),
                     shortname: c.shortname,
                     categoria: cat.name,
                     idnumber: c.idnumber || '',
@@ -22,7 +23,7 @@ async function hiddenCourses(params = {}) {
 
     return {
         columns: [
-            { key: 'curso', label: 'Curso' },
+            { key: 'curso', label: 'Curso', link: 'curso_url' },
             { key: 'shortname', label: 'Nombre corto' },
             { key: 'categoria', label: 'Categoría' },
             { key: 'idnumber', label: 'ID number' },

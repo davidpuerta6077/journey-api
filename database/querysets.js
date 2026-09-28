@@ -190,13 +190,15 @@ function updateUserUnsyncQuery(id) {
     };
 }
 const selectEnrollmentsByUserId = (userId) => ({
-    text: `SELECT e.id, e.codigo_journey, e.nombre_asignatura, e.programa,
+    text: `SELECT e.id, e.codigo_journey, e.codigo_asignatura, e.nombre_asignatura, e.programa,
            e.periodo, e.grupo, e.role, e.sincronizado, e.estado,
-           c.fullname, c.shortname, c.idnumber
+           e.estado_anterior, e.fecha_cambio_estado, e.estado_sync, e.ultimo_error_sync,
+           COALESCE(e.fecha_creacion_journey, e.created_at) AS fecha_matricula,
+           c.fullname, c.shortname, c.idnumber, c.moodle_id AS course_moodle_id
            FROM ${schema}.enrollments e
            LEFT JOIN ${schema}.courses c ON c.id = e.courseid::integer
            WHERE e.userid = $1
-           ORDER BY e.id DESC`,
+           ORDER BY e.periodo DESC NULLS LAST, e.id DESC`,
     values: [userId]
 });
 
@@ -1273,10 +1275,101 @@ const reportCourseById = (id) => ({
     values: [id]
 });
 
-const reportEnrollmentCountByCourse = (courseid) => ({
-    text: `SELECT COUNT(*)::int AS n FROM ${schema}.enrollments WHERE courseid = $1`,
+// ─── REPORTS: DETALLE ─────────────────────────────────────────────────────────
+// Filas individuales detrás de cada reporte agregado (qué cursos, qué
+// estudiantes...). La columna de agrupación se llama igual que en el agregado
+// (estado, rol, usuario, modulo, dia) para que el front filtre el detalle al
+// hacer clic en una barra/porción del gráfico.
+
+const reportCoursesDetail = () => ({
+    text: `SELECT id, idnumber, shortname, fullname, periodo,
+                  COALESCE(estado_sync,'(sin estado)') AS estado,
+                  ultimo_error_sync, moodle_id, synced_at
+           FROM ${schema}.courses
+           ORDER BY estado, shortname`,
+    values: []
+});
+
+const reportEnrollmentsDetail = () => ({
+    text: `SELECT e.id, TRIM(CONCAT(u.firstname, ' ', u.lastname)) AS estudiante, u.documento, u.email,
+                  e.codigo_journey, e.nombre_asignatura, e.periodo, e.grupo, e.role,
+                  COALESCE(e.estado,'(sin estado)') AS estado,
+                  COALESCE(e.sincronizado,false) AS sincronizado, e.estado_sync,
+                  COALESCE(e.fecha_creacion_journey, e.created_at) AS fecha
+           FROM ${schema}.enrollments e
+           LEFT JOIN ${schema}.users u ON u.id = e.userid
+           ORDER BY estado, estudiante`,
+    values: []
+});
+
+const reportPlatformUsersDetail = () => ({
+    text: `SELECT pu.username, pu.email, COALESCE(r.name,'(sin rol)') AS rol, pu.estado,
+                  pu.departamento, pu.last_login, pu.created_at
+           FROM ${schema}.platform_users pu
+           LEFT JOIN ${schema}.roles r ON r.id = pu.role_id
+           ORDER BY rol, pu.username`,
+    values: []
+});
+
+// Mismas expresiones de usuario/modulo/dia que reportAuditActivity. Tope de
+// filas para no mandar al navegador años de logs en una sola respuesta.
+const reportAuditDetail = ({ dias }) => ({
+    text: `SELECT l.date AS fecha,
+                  to_char(date_trunc('day', l.date),'YYYY-MM-DD') AS dia,
+                  COALESCE(l.username,'(anónimo)') AS usuario,
+                  COALESCE(m.name,'(sin módulo)') AS aplicacion,
+                  COALESCE(sm.name, l.entity_type, '(sin submódulo)') AS modulo,
+                  l.type AS accion, l.description AS descripcion
+           FROM ${schema}.logs l
+           LEFT JOIN ${schema}.submodules sm ON sm.code = l.entity_type
+           LEFT JOIN ${schema}.modules m ON m.id = sm.module_id
+           WHERE l.date >= now() - ($1 || ' days')::interval
+           ORDER BY l.date DESC
+           LIMIT 5000`,
+    values: [String(dias)]
+});
+
+const reportEnrollmentsOfCourse = (courseid) => ({
+    text: `SELECT u.documento, u.username, u.email, TRIM(CONCAT(u.firstname, ' ', u.lastname)) AS nombre,
+                  e.role, e.estado
+           FROM ${schema}.enrollments e
+           JOIN ${schema}.users u ON u.id = e.userid
+           WHERE e.courseid = $1`,
     values: [courseid]
 });
+
+// Detalle por curso de moodle_courses_by_category (MySQL de Moodle). Mismo
+// filtro de categoría que countCoursesStudentsByCategory.
+const coursesDetailByCategory = ({ categoryId = null, incluirSubcategorias = true }) => {
+    const where = ['c.id <> 1'];
+    const values = [];
+    if (categoryId != null) {
+        if (incluirSubcategorias) {
+            where.push(`(cc.id = ? OR cc.path LIKE CONCAT((SELECT path FROM mdl_course_categories WHERE id = ?), '/%'))`);
+            values.push(categoryId, categoryId);
+        } else {
+            where.push(`cc.id = ?`);
+            values.push(categoryId);
+        }
+    }
+    return {
+        text: `
+            SELECT c.id AS curso_id, c.fullname AS curso, c.shortname, c.visible,
+                   cc.name AS categoria,
+                   COUNT(DISTINCT CASE WHEN r.shortname = 'student' THEN ra.userid END) AS estudiantes,
+                   COUNT(DISTINCT CASE WHEN r.shortname IN ('editingteacher','teacher') THEN ra.userid END) AS profesores
+            FROM mdl_course c
+            JOIN mdl_course_categories cc     ON cc.id = c.category
+            LEFT JOIN mdl_context ctx         ON ctx.instanceid = c.id AND ctx.contextlevel = 50
+            LEFT JOIN mdl_role_assignments ra ON ra.contextid = ctx.id
+            LEFT JOIN mdl_role r              ON r.id = ra.roleid
+            WHERE ${where.join(' AND ')}
+            GROUP BY c.id, c.fullname, c.shortname, c.visible, cc.name
+            ORDER BY cc.name, c.fullname
+        `,
+        values
+    };
+};
 
 
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
@@ -1335,6 +1428,7 @@ module.exports = {
     findMoodleEnrolmentId,
     findActiveMoodleEnrolments,
     countCoursesStudentsByCategory,
+    coursesDetailByCategory,
     // health
     healthCheck,
 
@@ -1403,7 +1497,11 @@ module.exports = {
     reportPermissionsMatrix,
     reportCoursesForDiscrepancy,
     reportCourseById,
-    reportEnrollmentCountByCourse,
+    reportCoursesDetail,
+    reportEnrollmentsDetail,
+    reportPlatformUsersDetail,
+    reportAuditDetail,
+    reportEnrollmentsOfCourse,
 
     //Permission
     checkPermissions,

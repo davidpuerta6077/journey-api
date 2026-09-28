@@ -1,5 +1,5 @@
 const { getCategorias, filtrarCategorias, getCursosDeCategoria, getEnrolados, tieneRol, diasDesde, fechaCorta } = require('./moodleRest');
-const { meta, normCategoryId, normInt } = require('../util');
+const { meta, normCategoryId, normInt, moodleUserUrl } = require('../util');
 
 async function studentsAtRiskPlatform(params = {}) {
     const diasSinAcceso = normInt(params.diasSinAcceso, 30);
@@ -17,8 +17,13 @@ async function studentsAtRiskPlatform(params = {}) {
                 if (!tieneRol(u, 'student')) continue;
                 const la = u.lastaccess || 0;
                 const prev = porUsuario.get(u.id);
-                if (!prev || la > prev.lastaccess) {
-                    porUsuario.set(u.id, { nombre: u.fullname, email: u.email, username: u.username, lastaccess: la });
+                // Se guardan los cursos donde está matriculado para saber a
+                // qué profesor/curso avisar, no solo que el estudiante está inactivo.
+                if (!prev) {
+                    porUsuario.set(u.id, { id: u.id, nombre: u.fullname, email: u.email, username: u.username, lastaccess: la, cursos: [curso.shortname] });
+                } else {
+                    prev.cursos.push(curso.shortname);
+                    if (la > prev.lastaccess) prev.lastaccess = la;
                 }
             }
         }
@@ -29,6 +34,8 @@ async function studentsAtRiskPlatform(params = {}) {
         if (v.lastaccess === 0 || diasDesde(v.lastaccess) >= diasSinAcceso) {
             rows.push({
                 nombre: v.nombre,
+                perfil_url: moodleUserUrl(v.id),
+                cursos: v.cursos.join(', '),
                 email: v.email,
                 username: v.username,
                 ultimo_acceso: fechaCorta(v.lastaccess),
@@ -39,11 +46,12 @@ async function studentsAtRiskPlatform(params = {}) {
 
     return {
         columns: [
-            { key: 'nombre', label: 'Estudiante' },
+            { key: 'nombre', label: 'Estudiante', link: 'perfil_url' },
             { key: 'email', label: 'Correo' },
             { key: 'username', label: 'Usuario' },
             { key: 'ultimo_acceso', label: 'Último acceso' },
             { key: 'dias_inactivo', label: 'Días inactivo' },
+            { key: 'cursos', label: 'Cursos matriculados' },
         ],
         rows,
         meta: meta('moodle_students_at_risk_platform', { diasSinAcceso, categoryId }),

@@ -51,7 +51,11 @@ const {
     reportPermissionsMatrix: qReportPermissionsMatrix,
     reportCoursesForDiscrepancy: qReportCoursesForDiscrepancy,
     reportCourseById: qReportCourseById,
-    reportEnrollmentCountByCourse: qReportEnrollmentCountByCourse,
+    reportCoursesDetail: qReportCoursesDetail,
+    reportEnrollmentsDetail: qReportEnrollmentsDetail,
+    reportPlatformUsersDetail: qReportPlatformUsersDetail,
+    reportAuditDetail: qReportAuditDetail,
+    reportEnrollmentsOfCourse: qReportEnrollmentsOfCourse,
 } = require('./querysets');
  
 const pool = new Pool({
@@ -1002,9 +1006,45 @@ function reportCourseById(id) {
     });
 }
 
-function reportEnrollmentCountByCourse(courseid) {
+function reportCoursesDetail() {
     return new Promise((resolve, reject) => {
-        pool.query(qReportEnrollmentCountByCourse(courseid), (err, data) => {
+        pool.query(qReportCoursesDetail(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportEnrollmentsDetail() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportEnrollmentsDetail(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportPlatformUsersDetail() {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportPlatformUsersDetail(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportAuditDetail(params) {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportAuditDetail(params), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function reportEnrollmentsOfCourse(courseid) {
+    return new Promise((resolve, reject) => {
+        pool.query(qReportEnrollmentsOfCourse(courseid), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -1119,5 +1159,9 @@ module.exports = {
     reportPermissionsMatrix,
     reportCoursesForDiscrepancy,
     reportCourseById,
-    reportEnrollmentCountByCourse,
+    reportCoursesDetail,
+    reportEnrollmentsDetail,
+    reportPlatformUsersDetail,
+    reportAuditDetail,
+    reportEnrollmentsOfCourse,
 };

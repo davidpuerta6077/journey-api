@@ -29,10 +29,27 @@ async function auditActivity(params = {}) {
         mapRow = (r) => ({ usuario: r.usuario, acciones: r.acciones });
     }
 
-    const rows = await db.reportAuditActivity({ dias, agruparPor });
+    const [rows, acciones] = await Promise.all([
+        db.reportAuditActivity({ dias, agruparPor }),
+        db.reportAuditDetail({ dias }),
+    ]);
     return {
         columns,
         rows: rows.map(mapRow),
+        // Las acciones concretas (quién, qué, cuándo); usuario/modulo/dia se
+        // llaman igual que en el agregado para poder filtrar por clic.
+        detalle: {
+            titulo: acciones.length >= 5000 ? 'Acciones (últimas 5000)' : 'Acciones',
+            columns: [
+                { key: 'fecha', label: 'Fecha' },
+                { key: 'usuario', label: 'Usuario' },
+                { key: 'aplicacion', label: 'Aplicación' },
+                { key: 'modulo', label: 'Módulo' },
+                { key: 'accion', label: 'Tipo' },
+                { key: 'descripcion', label: 'Descripción' },
+            ],
+            rows: acciones,
+        },
         meta: meta('journey_audit_activity', { dias, agruparPor }),
     };
 }

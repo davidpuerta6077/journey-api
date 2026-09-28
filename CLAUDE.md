@@ -22,5 +22,10 @@
 
 ## Entorno local
 
-- La BD real se alcanza vía túnel PuTTY en `127.0.0.1:5434`. Si `/auth/permissions` falla, el front manda a "no autorizado", o cualquier endpoint que toque BD tira error raro: revisar primero `netstat -ano | findstr ":5434"` (debe estar LISTENING) antes de sospechar del código.
+- La BD real se alcanza vía túnel PuTTY en `127.0.0.1:5434`. Si `/auth/permissions` falla, el front muestra "No se pudieron cargar tus permisos" (Reintentar), o cualquier endpoint que toque BD tira error raro: revisar primero `netstat -ano | findstr ":5434"` (debe estar LISTENING) antes de sospechar del código.
 - `npm run dev` usa nodemon — si los cambios no parecen tomar efecto, puede haber un proceso zombie en el puerto 3001 sirviendo código viejo (`netstat -ano | findstr ":3001"` y matar el PID viejo si nodemon no se reinició solo).
+
+## Reportes (`services/reports/`)
+
+- Un reporte nunca se queda en conteos: si devuelve cifras agregadas (por estado, rol, categoría...) debe devolver también `detalle: { titulo, columns, rows }` con las filas reales (qué cursos, qué estudiantes). La columna de agrupación se llama igual en `rows` y en `detalle.rows` para que el clic en el gráfico filtre el detalle.
+- Cursos/usuarios de Moodle llevan enlace: columna con `link: '<clave_url>'` y la URL armada con `moodleCourseUrl`/`moodleUserUrl` de `services/reports/util.js`.
