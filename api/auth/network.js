@@ -3,20 +3,9 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const response = require('../../network/response')
-const { login } = require('./index')
 const checkAuth = require('../../middleware/checkAuth');
 const saveLog = require('../../middleware/saveLog');
 const ctrl = require('./index');
-
-router.post('/login', (req, res) => {
-    login(req.body.user_email)
-        .then(token => {
-            response.success(req, res, token, 200)
-        })
-        .catch(e => {
-            response.error(req, res, `Denegado ${e}`, 405)
-        });
-});
 
 // El email sale del token verificado, no del query string: así nadie puede
 // consultar los permisos de otro usuario.
