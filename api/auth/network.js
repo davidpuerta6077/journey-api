@@ -18,13 +18,12 @@ router.post('/login', (req, res) => {
         });
 });
 
+// El email sale del token verificado, no del query string: así nadie puede
+// consultar los permisos de otro usuario.
 router.get('/permissions', checkAuth, async (req, res) => {
-    console.log("Query parameters:", req.query);
-    const userEmail = req.query.user_email;
-    const responseData = await ctrl.permissions(userEmail);
     try {
+        const responseData = await ctrl.permissions(req.user.email);
         response.success(req, res, responseData[0], 200)
-
     } catch (error) {
         response.error(req, res, error.message, 500);
     }
