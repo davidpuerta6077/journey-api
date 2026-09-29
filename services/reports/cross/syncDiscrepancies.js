@@ -1,6 +1,6 @@
 const db = require('../../../database/postgresql');
 const { getCategorias, filtrarCategorias, getCursosDeCategoria } = require('../moodle/moodleRest');
-const { meta, normCategoryId } = require('../util');
+const { meta, normCategoryId, moodleCourseUrl } = require('../util');
 
 async function syncDiscrepancies(params = {}) {
     const categoryId = normCategoryId(params.categoryId);
@@ -36,11 +36,11 @@ async function syncDiscrepancies(params = {}) {
     return {
         columns: [
             { key: 'tipo', label: 'Discrepancia' },
-            { key: 'shortname', label: 'Nombre corto' },
+            { key: 'shortname', label: 'Nombre corto', link: 'moodle_url' },
             { key: 'id_journey', label: 'ID Nexo' },
             { key: 'moodle_id', label: 'ID Moodle' },
         ],
-        rows,
+        rows: rows.map((r) => ({ ...r, moodle_url: moodleCourseUrl(r.moodle_id) })),
         meta: meta('sync_discrepancies', { categoryId }),
     };
 }

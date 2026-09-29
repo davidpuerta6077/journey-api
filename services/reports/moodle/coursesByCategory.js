@@ -1,7 +1,7 @@
 const moodleDB = require('../../../database/mysqlMoodle');
 const queries = require('../../../database/querysets');
 const { getCategorias, filtrarCategorias, getCursosDeCategoria, getEnrolados, tieneRol } = require('./moodleRest');
-const { normCategoryId } = require('../util');
+const { normCategoryId, moodleCourseUrl } = require('../util');
 
 // Reporte 'moodle_courses_by_category': conteo de cursos y estudiantes (rol
 // 'student') por categoría de Moodle. Devuelve el formato unificado
@@ -20,6 +20,17 @@ const COLUMNS = [
     { key: 'path', label: 'Ruta' },
     { key: 'cursos', label: 'Cursos' },
     { key: 'estudiantes', label: 'Estudiantes' },
+];
+
+// Detalle: cada curso de las categorías del resumen (clic en una categoría
+// del gráfico filtra por la columna `categoria`).
+const DETALLE_COLUMNS = [
+    { key: 'curso', label: 'Curso', link: 'curso_url' },
+    { key: 'shortname', label: 'Nombre corto' },
+    { key: 'categoria', label: 'Categoría' },
+    { key: 'estudiantes', label: 'Estudiantes' },
+    { key: 'profesores', label: 'Profesores' },
+    { key: 'visible', label: 'Visible' },
 ];
 
 // Códigos de error que significan "no se pudo conectar a la BD" -> usar REST.
@@ -49,12 +60,25 @@ function normalizarParams(params = {}) {
 async function desdeDB({ categoryId, incluirSubcategorias }) {
     const query = queries.countCoursesStudentsByCategory({ categoryId, incluirSubcategorias });
     const [rows] = await moodleDB.query(query.text, query.values);
-    return rows.map((r) => ({
-        categoria: r.categoria,
-        path: r.path,
-        cursos: Number(r.cursos),
-        estudiantes: Number(r.estudiantes),
-    }));
+    const qDetalle = queries.coursesDetailByCategory({ categoryId, incluirSubcategorias });
+    const [cursos] = await moodleDB.query(qDetalle.text, qDetalle.values);
+    return {
+        rows: rows.map((r) => ({
+            categoria: r.categoria,
+            path: r.path,
+            cursos: Number(r.cursos),
+            estudiantes: Number(r.estudiantes),
+        })),
+        cursos: cursos.map((c) => ({
+            curso: c.curso,
+            curso_url: moodleCourseUrl(c.curso_id),
+            shortname: c.shortname,
+            categoria: c.categoria,
+            estudiantes: Number(c.estudiantes),
+            profesores: Number(c.profesores),
+            visible: Number(c.visible) === 1 ? 'Sí' : 'No',
+        })),
+    };
 }
 
 // ─── Fuente 2: REST API de Moodle (fallback) ─────────────────────────────────
@@ -62,6 +86,7 @@ async function desdeREST({ categoryId, incluirSubcategorias }) {
     const objetivo = filtrarCategorias(await getCategorias(), categoryId, incluirSubcategorias);
 
     const filas = [];
+    const detalle = [];
     for (const cat of objetivo) {
         const cursos = await getCursosDeCategoria(cat.id);
 
@@ -73,11 +98,20 @@ async function desdeREST({ categoryId, incluirSubcategorias }) {
         const alumnos = new Set();
         let contable = true;
         for (const curso of cursos) {
-            const enrol = await getEnrolados(curso.id);
-            if (!enrol) { contable = false; break; }
-            for (const u of enrol) {
+            const enrol = contable ? await getEnrolados(curso.id) : null;
+            if (!enrol) contable = false;
+            for (const u of enrol || []) {
                 if (tieneRol(u, 'student')) alumnos.add(u.id);
             }
+            detalle.push({
+                curso: curso.fullname,
+                curso_url: moodleCourseUrl(curso.id),
+                shortname: curso.shortname,
+                categoria: cat.name,
+                estudiantes: enrol ? enrol.filter((u) => tieneRol(u, 'student')).length : null,
+                profesores: enrol ? enrol.filter((u) => tieneRol(u, 'editingteacher') || tieneRol(u, 'teacher')).length : null,
+                visible: Number(curso.visible) === 1 ? 'Sí' : 'No',
+            });
         }
 
         filas.push({
@@ -87,25 +121,26 @@ async function desdeREST({ categoryId, incluirSubcategorias }) {
             estudiantes: contable ? alumnos.size : null,
         });
     }
-    return filas;
+    return { rows: filas, cursos: detalle };
 }
 
 async function coursesByCategory(params = {}) {
     const norm = normalizarParams(params);
 
-    let rows;
+    let datos;
     let fuente = 'db';
     try {
-        rows = await desdeDB(norm);
+        datos = await desdeDB(norm);
     } catch (err) {
         if (!esErrorDeConexion(err)) throw err;
         fuente = 'rest';
-        rows = await desdeREST(norm);
+        datos = await desdeREST(norm);
     }
 
     return {
         columns: COLUMNS,
-        rows,
+        rows: datos.rows,
+        detalle: { titulo: 'Cursos', columns: DETALLE_COLUMNS, rows: datos.cursos },
         meta: {
             tipo: 'moodle_courses_by_category',
             params: norm,

@@ -102,15 +102,19 @@ const updateUsuarioJourney = (data) => {
 
     const text = `
         UPDATE ${schema}.users SET
-            firstname = $1, lastname = $2, email = $3, city = $4, country = $5,
-            documento = $6, correo_personal = $7, telefono = $8, celular = $9,
+            firstname = COALESCE($1, firstname), lastname = COALESCE($2, lastname),
+            email = COALESCE($3, email), city = $4, country = $5,
+            documento = COALESCE($6, documento), correo_personal = $7, telefono = $8, celular = $9,
             fecha_nacimiento = $10, jornada = $11, departamento_academico = $12,
             plan_estudios = $13
         WHERE id = $14
     `;
 
+    // nombre/email/documento nunca se dejan en NULL si no vienen en el body:
+    // son los campos que lee Moodle por BD externa (vista moodle_auth_users /
+    // moodle_enrol) y sin documento el usuario desaparece de esas vistas.
     const values = [
-        firstname, lastname, email,
+        firstname || null, lastname || null, email || null,
         city || 'Medellín',
         country || 'CO',
         documento || null,
@@ -143,7 +147,7 @@ const clearUserMoodleId = (id) => ({
 });
 
 const findUserByEmailOrUsername = (email, username) => ({
-    text: `SELECT id, moodle_id, email FROM ${schema}.users WHERE email = $1 OR username = $2 LIMIT 1`,
+    text: `SELECT id, moodle_id, email FROM ${schema}.users WHERE lower(email) = lower($1) OR lower(username) = lower($2) LIMIT 1`,
     values: [email, username]
 });
 
@@ -161,17 +165,17 @@ const findUserById = (id) => ({
 
 const updateUserSicau = (data) => ({
     text: `UPDATE ${schema}.users SET
-        firstname = $1, lastname = $2, city = $3, country = $4,
-        documento = $5, correo_personal = $6, telefono = $7, celular = $8,
+        firstname = COALESCE($1, firstname), lastname = COALESCE($2, lastname), city = $3, country = $4,
+        documento = COALESCE($5, documento), correo_personal = $6, telefono = $7, celular = $8,
         fecha_nacimiento = $9, jornada = $10, departamento_academico = $11,
-        plan_estudios = $12 WHERE email = $13 OR username = $14`,
+        plan_estudios = $12 WHERE id = $13`,
     values: [
         data.firstname, data.lastname, data.city || 'Medellín', data.country || 'CO',
         data.documento || null, data.correo_personal || null,
         data.telefono || null, data.celular || null,
         data.fecha_nacimiento || null, data.jornada || null,
         data.departamento_academico || null, data.plan_estudios || null,
-        data.email, data.username
+        data.id
     ]
 });
 
@@ -190,13 +194,15 @@ function updateUserUnsyncQuery(id) {
     };
 }
 const selectEnrollmentsByUserId = (userId) => ({
-    text: `SELECT e.id, e.codigo_journey, e.nombre_asignatura, e.programa,
+    text: `SELECT e.id, e.codigo_journey, e.codigo_asignatura, e.nombre_asignatura, e.programa,
            e.periodo, e.grupo, e.role, e.sincronizado, e.estado,
-           c.fullname, c.shortname, c.idnumber
+           e.estado_anterior, e.fecha_cambio_estado, e.estado_sync, e.ultimo_error_sync,
+           COALESCE(e.fecha_creacion_journey, e.created_at) AS fecha_matricula,
+           c.fullname, c.shortname, c.idnumber, c.moodle_id AS course_moodle_id
            FROM ${schema}.enrollments e
            LEFT JOIN ${schema}.courses c ON c.id = e.courseid::integer
            WHERE e.userid = $1
-           ORDER BY e.id DESC`,
+           ORDER BY e.periodo DESC NULLS LAST, e.id DESC`,
     values: [userId]
 });
 
@@ -375,11 +381,6 @@ const findCourseByIdnumber = (idnumber) => ({
     values: [idnumber]
 });
 
-const findCourseByShortname = (shortname) => ({
-    text: `SELECT id, nombre_profesor FROM ${schema}.courses WHERE shortname = $1 LIMIT 1`,
-    values: [shortname]
-});
-
 // ─── ENROLLMENTS ──────────────────────────────────────────────────────────────
 
 const selectAllEnrollments = () => ({
@@ -457,11 +458,6 @@ const updateEnrollmentData = (data) => {
 const updateEnrollmentMoodleId = (id, moodleEnrollmentId) => ({
     text: `UPDATE ${schema}.enrollments SET moodle_enrollment_id = $1 WHERE id = $2`,
     values: [moodleEnrollmentId, id]
-});
-
-const findEnrollmentByCodigoJourney = (codigoJourney) => ({
-    text: `SELECT id FROM ${schema}.enrollments WHERE codigo_journey = $1 LIMIT 1`,
-    values: [codigoJourney]
 });
 
 const findAllEnrollmentsWithUsers = () => ({
@@ -601,11 +597,6 @@ const updateJourneyEnrollmentData = (data) => {
 
     return { text, values };
 };
-
-const deleteEnrollmentData = (id) => ({
-    text: `DELETE FROM ${schema}.enrollments WHERE id = $1`,
-    values: [id]
-});
 
 // ─── MOODLE ───────────────────────────────────────────────────────────────────
 
@@ -1113,13 +1104,14 @@ const selectLogsData = (limit) => ({
 // Updates acotados a los campos que se normalizan antes de sincronizar, para no
 // interferir con updateUsuarioData / updateCourseData.
 
-const updateUserNormalizedData = (id, { firstname, lastname, email, correo_personal }) => ({
+const updateUserNormalizedData = (id, { firstname, lastname, email, correo_personal, jornada, departamento_academico, plan_estudios }) => ({
     text: `
         UPDATE ${schema}.users
-        SET firstname = $1, lastname = $2, email = $3, correo_personal = $4
-        WHERE id = $5
+        SET firstname = $1, lastname = $2, email = $3, correo_personal = $4,
+            jornada = $5, departamento_academico = $6, plan_estudios = $7
+        WHERE id = $8
     `,
-    values: [firstname, lastname, email, correo_personal ?? null, id]
+    values: [firstname, lastname, email, correo_personal ?? null, jornada ?? null, departamento_academico ?? null, plan_estudios ?? null, id]
 });
 
 const updateCourseNormalizedData = (id, { fullname, shortname, nombre_asignatura, nombre_profesor, departamento, programa }) => ({
@@ -1288,10 +1280,101 @@ const reportCourseById = (id) => ({
     values: [id]
 });
 
-const reportEnrollmentCountByCourse = (courseid) => ({
-    text: `SELECT COUNT(*)::int AS n FROM ${schema}.enrollments WHERE courseid = $1`,
+// ─── REPORTS: DETALLE ─────────────────────────────────────────────────────────
+// Filas individuales detrás de cada reporte agregado (qué cursos, qué
+// estudiantes...). La columna de agrupación se llama igual que en el agregado
+// (estado, rol, usuario, modulo, dia) para que el front filtre el detalle al
+// hacer clic en una barra/porción del gráfico.
+
+const reportCoursesDetail = () => ({
+    text: `SELECT id, idnumber, shortname, fullname, periodo,
+                  COALESCE(estado_sync,'(sin estado)') AS estado,
+                  ultimo_error_sync, moodle_id, synced_at
+           FROM ${schema}.courses
+           ORDER BY estado, shortname`,
+    values: []
+});
+
+const reportEnrollmentsDetail = () => ({
+    text: `SELECT e.id, TRIM(CONCAT(u.firstname, ' ', u.lastname)) AS estudiante, u.documento, u.email,
+                  e.codigo_journey, e.nombre_asignatura, e.periodo, e.grupo, e.role,
+                  COALESCE(e.estado,'(sin estado)') AS estado,
+                  COALESCE(e.sincronizado,false) AS sincronizado, e.estado_sync,
+                  COALESCE(e.fecha_creacion_journey, e.created_at) AS fecha
+           FROM ${schema}.enrollments e
+           LEFT JOIN ${schema}.users u ON u.id = e.userid
+           ORDER BY estado, estudiante`,
+    values: []
+});
+
+const reportPlatformUsersDetail = () => ({
+    text: `SELECT pu.username, pu.email, COALESCE(r.name,'(sin rol)') AS rol, pu.estado,
+                  pu.departamento, pu.last_login, pu.created_at
+           FROM ${schema}.platform_users pu
+           LEFT JOIN ${schema}.roles r ON r.id = pu.role_id
+           ORDER BY rol, pu.username`,
+    values: []
+});
+
+// Mismas expresiones de usuario/modulo/dia que reportAuditActivity. Tope de
+// filas para no mandar al navegador años de logs en una sola respuesta.
+const reportAuditDetail = ({ dias }) => ({
+    text: `SELECT l.date AS fecha,
+                  to_char(date_trunc('day', l.date),'YYYY-MM-DD') AS dia,
+                  COALESCE(l.username,'(anónimo)') AS usuario,
+                  COALESCE(m.name,'(sin módulo)') AS aplicacion,
+                  COALESCE(sm.name, l.entity_type, '(sin submódulo)') AS modulo,
+                  l.type AS accion, l.description AS descripcion
+           FROM ${schema}.logs l
+           LEFT JOIN ${schema}.submodules sm ON sm.code = l.entity_type
+           LEFT JOIN ${schema}.modules m ON m.id = sm.module_id
+           WHERE l.date >= now() - ($1 || ' days')::interval
+           ORDER BY l.date DESC
+           LIMIT 5000`,
+    values: [String(dias)]
+});
+
+const reportEnrollmentsOfCourse = (courseid) => ({
+    text: `SELECT u.documento, u.username, u.email, TRIM(CONCAT(u.firstname, ' ', u.lastname)) AS nombre,
+                  e.role, e.estado
+           FROM ${schema}.enrollments e
+           JOIN ${schema}.users u ON u.id = e.userid
+           WHERE e.courseid = $1`,
     values: [courseid]
 });
+
+// Detalle por curso de moodle_courses_by_category (MySQL de Moodle). Mismo
+// filtro de categoría que countCoursesStudentsByCategory.
+const coursesDetailByCategory = ({ categoryId = null, incluirSubcategorias = true }) => {
+    const where = ['c.id <> 1'];
+    const values = [];
+    if (categoryId != null) {
+        if (incluirSubcategorias) {
+            where.push(`(cc.id = ? OR cc.path LIKE CONCAT((SELECT path FROM mdl_course_categories WHERE id = ?), '/%'))`);
+            values.push(categoryId, categoryId);
+        } else {
+            where.push(`cc.id = ?`);
+            values.push(categoryId);
+        }
+    }
+    return {
+        text: `
+            SELECT c.id AS curso_id, c.fullname AS curso, c.shortname, c.visible,
+                   cc.name AS categoria,
+                   COUNT(DISTINCT CASE WHEN r.shortname = 'student' THEN ra.userid END) AS estudiantes,
+                   COUNT(DISTINCT CASE WHEN r.shortname IN ('editingteacher','teacher') THEN ra.userid END) AS profesores
+            FROM mdl_course c
+            JOIN mdl_course_categories cc     ON cc.id = c.category
+            LEFT JOIN mdl_context ctx         ON ctx.instanceid = c.id AND ctx.contextlevel = 50
+            LEFT JOIN mdl_role_assignments ra ON ra.contextid = ctx.id
+            LEFT JOIN mdl_role r              ON r.id = ra.roleid
+            WHERE ${where.join(' AND ')}
+            GROUP BY c.id, c.fullname, c.shortname, c.visible, cc.name
+            ORDER BY cc.name, c.fullname
+        `,
+        values
+    };
+};
 
 
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
@@ -1325,7 +1408,6 @@ module.exports = {
     updateCourseData,
     updateCourseMoodleId,
     findCourseByIdnumber,
-    findCourseByShortname,
     updateCourseSyncStatusQuery,
     updateCourseSyncingQuery,
     updateCourseSyncErrorQuery,
@@ -1336,7 +1418,6 @@ module.exports = {
     insertEnrollmentData,
     updateEnrollmentData,
     updateEnrollmentMoodleId,
-    findEnrollmentByCodigoJourney,
     findAllEnrollmentsWithUsers,
     findEnrollmentByUserAndCourse,
     findEnrollmentWithUserById,
@@ -1347,12 +1428,12 @@ module.exports = {
     findEnrollmentByUserSubjectPeriod,
     updateEnrollmentSyncStatusQuery,
     updateJourneyEnrollmentData,
-    deleteEnrollmentData,
     // moodle
     findMoodleUserByUsername,
     findMoodleEnrolmentId,
     findActiveMoodleEnrolments,
     countCoursesStudentsByCategory,
+    coursesDetailByCategory,
     // health
     healthCheck,
 
@@ -1421,7 +1502,11 @@ module.exports = {
     reportPermissionsMatrix,
     reportCoursesForDiscrepancy,
     reportCourseById,
-    reportEnrollmentCountByCourse,
+    reportCoursesDetail,
+    reportEnrollmentsDetail,
+    reportPlatformUsersDetail,
+    reportAuditDetail,
+    reportEnrollmentsOfCourse,
 
     //Permission
     checkPermissions,

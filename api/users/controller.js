@@ -1,6 +1,9 @@
 const path = require('path');
 const xlsx = require('xlsx');
 const fs = require('fs');
+const config = require('../../config');
+
+const MOODLE_SITE_URL = new URL(config.moodle.url).origin;
 
 module.exports = (injectedDB) => {
     let data = injectedDB;
@@ -175,7 +178,11 @@ async function resetUserPassword(id) {
 }
 
 async function getUserEnrollments(userId) {
-    return data.getEnrollmentsByUserId(userId);
+    const enrollments = await data.getEnrollmentsByUserId(userId);
+    return enrollments.map(e => ({
+        ...e,
+        moodle_course_url: e.course_moodle_id ? `${MOODLE_SITE_URL}/course/view.php?id=${e.course_moodle_id}` : null,
+    }));
 }
 
 /* Adding User to Auth */
