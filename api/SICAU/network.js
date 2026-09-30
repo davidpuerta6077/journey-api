@@ -179,7 +179,7 @@ router.post('/send_users_sicau', async (req, res, next) => {
             results.push(result);
         }
         logIngestaSicau(req, `${lista.length} usuario(s)`, lista.map((u, i) => ({
-            username: u.username, email: u.email, nombre: `${u.firstname || ''} ${u.lastname || ''}`.trim(), status: results[i]?.status,
+            username: u.username, email: u.email, nombre: `${u.firstname || ''} ${u.lastname || ''}`.trim(), status: results[i]?.status, error: results[i]?.error,
         })), lista[0]?.usuario);
         response.success(req, res, { results }, 200);
     } catch (error) {

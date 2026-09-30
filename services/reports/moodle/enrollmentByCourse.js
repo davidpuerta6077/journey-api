@@ -6,7 +6,7 @@ async function enrollmentByCourse(params = {}) {
     const resumen = await resumenPorCurso(categoryId);
     return {
         columns: [
-            { key: 'curso', label: 'Curso' },
+            { key: 'curso', label: 'Curso', link: 'curso_url' },
             { key: 'categoria', label: 'Categoría' },
             { key: 'estudiantes', label: 'Estudiantes' },
             { key: 'profesores', label: 'Profesores' },
@@ -14,6 +14,7 @@ async function enrollmentByCourse(params = {}) {
         ],
         rows: resumen.map((r) => ({
             curso: r.curso,
+            curso_url: r.curso_url,
             categoria: r.categoria,
             estudiantes: r.estudiantes,
             profesores: r.profesores,

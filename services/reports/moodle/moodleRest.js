@@ -1,5 +1,6 @@
 const { moodleRequest } = require('../../moodleService');
 const { assertMoodleOk } = require('../../moodleAssert');
+const { moodleCourseUrl } = require('../util');
 
 async function getCategorias() {
     return assertMoodleOk(
@@ -47,7 +48,7 @@ function fechaCorta(ts) {
     return ts ? new Date(ts * 1000).toISOString().slice(0, 10) : 'nunca';
 }
 
-// Devuelve [{ curso, categoria, categoria_id, estudiantes, profesores, total }]
+// Devuelve [{ curso, curso_url, categoria, categoria_id, estudiantes, profesores, total }]
 // estudiantes/profesores/total = null si core_enrol_get_enrolled_users falló para ese curso.
 async function resumenPorCurso(categoryId) {
     const cats = filtrarCategorias(await getCategorias(), categoryId, true);
@@ -57,11 +58,12 @@ async function resumenPorCurso(categoryId) {
         for (const curso of cursos) {
             const enrol = await getEnrolados(curso.id);
             if (!enrol) {
-                out.push({ curso: curso.fullname, categoria: cat.name, categoria_id: cat.id, estudiantes: null, profesores: null, total: null });
+                out.push({ curso: curso.fullname, curso_url: moodleCourseUrl(curso.id), categoria: cat.name, categoria_id: cat.id, estudiantes: null, profesores: null, total: null });
                 continue;
             }
             out.push({
                 curso: curso.fullname,
+                curso_url: moodleCourseUrl(curso.id),
                 categoria: cat.name,
                 categoria_id: cat.id,
                 estudiantes: enrol.filter((u) => tieneRol(u, 'student')).length,

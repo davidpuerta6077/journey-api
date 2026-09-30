@@ -1,5 +1,5 @@
 const { getEnrolados, tieneRol, diasDesde, fechaCorta } = require('./moodleRest');
-const { meta, normInt } = require('../util');
+const { meta, normInt, moodleUserUrl } = require('../util');
 
 async function studentsAtRiskCourse(params = {}) {
     const courseid = Number(params.courseid);
@@ -22,7 +22,7 @@ async function studentsAtRiskCourse(params = {}) {
 
     return {
         columns: [
-            { key: 'nombre', label: 'Estudiante' },
+            { key: 'nombre', label: 'Estudiante', link: 'perfil_url' },
             { key: 'email', label: 'Correo' },
             { key: 'username', label: 'Usuario' },
             { key: 'ultimo_acceso_curso', label: 'Últ. acceso al curso' },
@@ -30,6 +30,7 @@ async function studentsAtRiskCourse(params = {}) {
         ],
         rows: enRiesgo.map((u) => ({
             nombre: u.fullname,
+            perfil_url: moodleUserUrl(u.id),
             email: u.email,
             username: u.username,
             ultimo_acceso_curso: fechaCorta(u.lastcourseaccess),

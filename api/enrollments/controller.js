@@ -1,6 +1,7 @@
 const path = require('path');
 const xlsx = require('xlsx');
 const fs = require('fs');
+const { normalizeEstado } = require('../../services/normalize');
 
 // ─── MAPEO DE ROLES ───────────────────────────────────────────────────────────
 const ROLE_MAP = {
@@ -126,13 +127,16 @@ module.exports = (injectedDB) => {
         const existing = await data.findEnrollmentByUserAndCourse(enr.userid, codigoJourney);
         if (existing.length > 0) {
             const matricula = existing[0];
-            if (enr.estado && enr.estado !== matricula.estado) {
-                await data.updateEnrollmentEstado(matricula.id, enr.estado);
+            // Se compara ya normalizado: "Activa" de SICAU contra "Matriculado"
+            // guardado es el mismo estado y no es una novedad.
+            const estadoNuevo = normalizeEstado(enr.estado);
+            if (estadoNuevo && estadoNuevo !== normalizeEstado(matricula.estado)) {
+                await data.updateEnrollmentEstado(matricula.id, estadoNuevo);
                 await data.updateEnrollmentEstadoSync(matricula.id, 'pendiente');
                 await data.updateEnrollmentSyncStatus(matricula.id, false);
                 return {
                     codigo_journey: codigoJourney, id: matricula.id, status: 'estado_actualizado',
-                    estado_anterior: matricula.estado, estado_nuevo: enr.estado
+                    estado_anterior: matricula.estado, estado_nuevo: estadoNuevo
                 };
             }
             return { codigo_journey: codigoJourney, id: matricula.id, status: 'exists' };

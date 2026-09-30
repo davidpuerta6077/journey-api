@@ -23,34 +23,45 @@ module.exports = (injectedDB) => {
     let data = injectedDB;
     if (!data) data = require('../../database/postgresql');
 
+    // Un usuario = una persona: se localiza por documento (es el username/
+    // idnumber en Moodle) y solo si SICAU no lo manda se cae al email. Si el
+    // documento es nuevo pero el email ya es de otra persona, no se crea un
+    // segundo usuario con el mismo email: se reporta como error de esa fila.
     async function saveSicauUsuario(user) {
-        const existing = await data.findUserSicau(user.email, user.username);
+        const existing = user.documento
+            ? await data.findUserByDoc(String(user.documento))
+            : await data.findUserSicau(user.email, user.username);
 
         if (existing.length > 0) {
-            await data.updateUserFromSicau(user);
+            await data.updateUserFromSicau({ ...user, id: existing[0].id });
             return { username: user.username, status: 'updated' };
-        } else {
-            await data.insertUser({
-                username:               user.username,
-                firstname:              user.firstname,
-                lastname:               user.lastname,
-                email:                  user.email,
-                password:               user.documento ? String(user.documento) : 'Pascual2024*',
-                city:                   user.city                   || 'Medellín',
-                country:                user.country                || 'CO',
-                documento:              user.documento              || null,
-                correo_personal:        user.correo_personal        || null,
-                telefono:               user.telefono               || null,
-                celular:                user.celular                || null,
-                fecha_nacimiento:       user.fecha_nacimiento       || null,
-                jornada:                user.jornada                || null,
-                departamento_academico: user.departamento_academico || null,
-                plan_estudios:          user.plan_estudios          || null,
-                moodle_id:              null,
-                sincronizado:           false
-            });
-            return { username: user.username, status: 'saved' };
         }
+        if (user.documento) {
+            const emailTomado = await data.findUserSicau(user.email, user.username);
+            if (emailTomado.length > 0) {
+                return { username: user.username, status: 'error', error: `El email ${user.email} ya pertenece a otro usuario` };
+            }
+        }
+        await data.insertUser({
+            username:               user.username,
+            firstname:              user.firstname,
+            lastname:               user.lastname,
+            email:                  user.email,
+            password:               user.documento ? String(user.documento) : 'Pascual2024*',
+            city:                   user.city                   || 'Medellín',
+            country:                user.country                || 'CO',
+            documento:              user.documento              || null,
+            correo_personal:        user.correo_personal        || null,
+            telefono:               user.telefono               || null,
+            celular:                user.celular                || null,
+            fecha_nacimiento:       user.fecha_nacimiento       || null,
+            jornada:                user.jornada                || null,
+            departamento_academico: user.departamento_academico || null,
+            plan_estudios:          user.plan_estudios          || null,
+            moodle_id:              null,
+            sincronizado:           false
+        });
+        return { username: user.username, status: 'saved' };
     }
 
     // ─── CURSOS ───────────────────────────────────────────────────────────────
@@ -177,6 +188,12 @@ module.exports = (injectedDB) => {
         if (existentes.length > 0) {
             userid = existentes[0].id;
         } else {
+            // Documento nuevo con un correo que ya es de otra persona: no se
+            // crea un segundo usuario con el mismo email (ver saveSicauUsuario).
+            const emailTomado = await data.findUserSicau(correo_institucional, correo_institucional);
+            if (emailTomado.length > 0) {
+                return { status: 'error', error: `El email ${correo_institucional} ya pertenece a otro usuario` };
+            }
             const { firstname, lastname } = splitNombreCompleto(nombre_profesor);
             const insertado = await data.insertUser({
                 username:  correo_institucional,
