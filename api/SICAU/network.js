@@ -19,6 +19,9 @@ const SICAU_USER_HEADER_CANDIDATES = ['x-sicau-user', 'x-sicau-usuario', 'x-usua
 
 function getSicauUsername(req, bodyUsuario) {
     if (bodyUsuario) return String(bodyUsuario);
+    // También puede venir al final del body, al mismo nivel que la lista
+    // ({ users: [...], usuario: "..." }) en vez de dentro de cada ítem.
+    if (req.body && !Array.isArray(req.body) && req.body.usuario) return String(req.body.usuario);
     for (const header of SICAU_USER_HEADER_CANDIDATES) {
         const value = req.headers[header];
         if (value) return String(value);
