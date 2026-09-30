@@ -114,6 +114,7 @@ Always run the Pre-Delivery Checklist before delivering UI code (icons, interact
   - Prohibido usar `core_user_create_users`, `enrol_manual_enrol_users` o `enrol_manual_unenrol_users` para crear usuarios o matricular/desmatricular: deja al estudiante con dos métodos de matrícula a la vez ("Manual" + "Base de datos externa").
   - Desmatricular = cambiar el estado académico en Nexo (la fila sale de `moodle_enrol` y Moodle aplica su acción de desmatrícula). Única excepción: la limpieza de matrículas heredadas al duplicar una semilla (`services/sync/duplicateSeedCourse.js`).
 - Toda llamada a Moodle pasa por `services/moodleService.js:moodleRequest()`. Nunca axios directo a la URL de Moodle desde otro archivo.
+- Única excepción a "no escribir en Moodle por webservice": desbloquear cuenta y reiniciar doble factor, vía el plugin propio `local_nexo` (código fuera de este repo, en `Dev/moodle-plugins/nexo`). Se llama solo desde `services/moodleAccount.js` con el token `MOODLE_NEXO_TOKEN` (servicio externo "Nexo"; si no está, `moodle_token`). No agregar otras escrituras a Moodle por ese camino.
 - Normalización de texto (Title Case, limpieza de nombres/asignaturas) centralizada en `services/normalize.js` — no reimplementar normalización ad-hoc en otro módulo.
 
 ## Entorno local
