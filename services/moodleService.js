@@ -4,10 +4,10 @@ const config = require('../config');
 
 const agent = new https.Agent({ rejectUnauthorized: false });
 
-const moodleRequest = async (wsfunction, params, timeoutMs = 15000) => {
+const moodleRequest = async (wsfunction, params, timeoutMs = 15000, token = config.moodle_token) => {
   try {
     const data = new URLSearchParams({
-      wstoken: config.moodle_token,
+      wstoken: token,
       wsfunction,
       moodlewsrestformat: 'json',
       ...params

@@ -47,7 +47,9 @@ module.exports = {
     },
     moodle: {
         url:   process.env.MOODLE_URL   || 'https://moodle50.pascualbravovirtual.edu.co/webservice/rest/server.php',
-        token: process.env.MOODLE_TOKEN || 'a9667c932d294bca8924ec0888140768'
+        token: process.env.MOODLE_TOKEN || 'a9667c932d294bca8924ec0888140768',
+        // Token del servicio externo "Nexo" del plugin local_nexo; si no se define se usa moodle_token.
+        nexo_token: process.env.MOODLE_NEXO_TOKEN || null
     },
     moodle_cli: {
         php_path:    process.env.PHP_PATH    || 'C:\\xampp\\php\\php.exe',
