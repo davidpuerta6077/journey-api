@@ -11,20 +11,22 @@ const postgresql = require('../../database/postgresql');
 // auditoría best-effort, para que en Ver Logs quede rastro de lo que llegó
 // desde afuera y no solo de lo que se hace dentro del panel.
 //
-// SICAU ahora manda el usuario que originó el envío en un header propio
-// (en vez de quemarlo como 'SICAU' fijo). Todavía no se confirmó el nombre
-// exacto del header con el equipo de SICAU, así que se prueban los nombres
-// más probables y, si ninguno trae valor, se cae a 'SICAU' y se deja un
-// console.error con los headers completos de esa petición para poder
-// identificar el correcto revisando los logs del servidor.
+// SICAU manda el usuario que originó el envío como campo "usuario" en el
+// body (a nivel de cada curso/usuario/matrícula). Antes se buscaba en un
+// header propio (nunca se confirmó el nombre exacto), así que eso se deja
+// como fallback por si algún envío viejo todavía lo manda así.
 const SICAU_USER_HEADER_CANDIDATES = ['x-sicau-user', 'x-sicau-usuario', 'x-usuario', 'x-user', 'usuario'];
 
-function getSicauUsername(req) {
+function getSicauUsername(req, bodyUsuario) {
+    if (bodyUsuario) return String(bodyUsuario);
+    // También puede venir al final del body, al mismo nivel que la lista
+    // ({ users: [...], usuario: "..." }) en vez de dentro de cada ítem.
+    if (req.body && !Array.isArray(req.body) && req.body.usuario) return String(req.body.usuario);
     for (const header of SICAU_USER_HEADER_CANDIDATES) {
         const value = req.headers[header];
         if (value) return String(value);
     }
-    console.error('[SICAU] No se encontró el header de usuario en la petición, headers recibidos:', JSON.stringify(req.headers));
+    console.error('[SICAU] No se encontró el usuario (ni en el body ni en headers) en la petición, headers recibidos:', JSON.stringify(req.headers));
     return 'SICAU';
 }
 
@@ -34,9 +36,9 @@ function getSicauUsername(req) {
 // nombre/correo de cada uno) va aparte en la columna `detail`, para el
 // desplegable "ver detalle" del front — así la tabla no queda ilegible con
 // una lista larga pegada en la descripción.
-function logIngestaSicau(req, resumen, detail) {
+function logIngestaSicau(req, resumen, detail, bodyUsuario) {
     const descripcion = `${req.method} ${req.baseUrl}${req.path} — ${resumen}`;
-    const username = getSicauUsername(req);
+    const username = getSicauUsername(req, bodyUsuario);
     postgresql
         .insertLog(req.method.toLowerCase(), descripcion, username, 'sicau', null, detail)
         .catch((err) => console.error('No se pudo registrar el log de auditoría (SICAU):', err.message));
@@ -144,7 +146,11 @@ router.post('/search_user_sicau', async (req, res) => {
  *               users:
  *                 type: array
  *                 items:
- *                   $ref: '#/components/schemas/User'
+ *                   allOf:
+ *                     - $ref: '#/components/schemas/User'
+ *                     - type: object
+ *                       properties:
+ *                         usuario: { type: string, example: "jor.ramirez", description: "Usuario de SICAU que originó el envío, para el log de auditoría" }
  *     responses:
  *       200:
  *         description: Usuarios guardados
@@ -177,7 +183,7 @@ router.post('/send_users_sicau', async (req, res, next) => {
         }
         logIngestaSicau(req, `${lista.length} usuario(s)`, lista.map((u, i) => ({
             username: u.username, email: u.email, nombre: `${u.firstname || ''} ${u.lastname || ''}`.trim(), status: results[i]?.status, error: results[i]?.error,
-        })));
+        })), lista[0]?.usuario);
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);
@@ -213,6 +219,7 @@ router.post('/send_users_sicau', async (req, res, next) => {
  *                     correo_institucional: { type: string, example: "johana.ramirez@pascualbravo.edu.co" }
  *                     fecha_inicio:      { type: string, example: "2026-01-15" }
  *                     fecha_fin:         { type: string, example: "2026-06-15" }
+ *                     usuario:           { type: string, example: "jor.ramirez", description: "Usuario de SICAU que originó el envío, para el log de auditoría" }
  *     responses:
  *       200:
  *         description: Cursos guardados
@@ -238,7 +245,7 @@ router.post('/send_courses_sicau', async (req, res, next) => {
         }
         logIngestaSicau(req, `${lista.length} curso(s)`, lista.map((c, i) => ({
             codigo_asignatura: c.codigo_asignatura, nombre_asignatura: c.nombre_asignatura, grupo: c.grupo, periodo: c.periodo, docente: c.docente, status: results[i]?.status,
-        })));
+        })), lista[0]?.usuario);
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);
@@ -271,6 +278,7 @@ router.post('/send_courses_sicau', async (req, res, next) => {
  *                     periodo:           { type: string, example: "20261" }
  *                     grupo:             { type: string, example: "G101" }
  *                     estado:            { type: string, example: "Activa" }
+ *                     usuario:           { type: string, example: "jor.ramirez", description: "Usuario de SICAU que originó el envío, para el log de auditoría" }
  *     responses:
  *       200:
  *         description: Matrículas guardadas
@@ -289,14 +297,16 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
     try {
         const items = req.body.enrollments || req.body.items || req.body || [];
         const lista = Array.isArray(items) ? items : [items];
+        const usuario = getSicauUsername(req, lista[0]?.usuario);
         const results = [];
         for (const enr of lista) {
-            const result = await ctrl.saveSicauMatricula(enr);
+            const result = await ctrl.saveSicauMatricula(enr, usuario);
             results.push(result);
         }
         logIngestaSicau(req, `${lista.length} matrícula(s)`, lista.map((e, i) => ({
             cedula: e.cedula, role: e.role, codigo_asignatura: e.codigo_asignatura, grupo: e.grupo, periodo: e.periodo, estado: e.estado, status: results[i]?.status,
-        })));
+            ...(e.novedad ? { novedad: e.novedad } : {}),
+        })), usuario);
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);
@@ -308,7 +318,11 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
  * /sicau/send_courses_enrollments_sicau:
  *   post:
  *     summary: Guardar un curso junto con sus matrículas en una sola operación (SICAU)
- *     description: Endpoint unificado que combina la creación/actualización de un curso con la matrícula de los usuarios asociados a él, evitando tener que llamar por separado a los endpoints de cursos y matrículas.
+ *     description: >
+ *       Endpoint unificado que combina la creación/actualización de un curso con la matrícula de los
+ *       usuarios asociados a él, evitando tener que llamar por separado a los endpoints de cursos y
+ *       matrículas. Acepta tanto un lote (`{ items: [{course, enrollments}, ...] }`) como un único
+ *       curso enviado directo en el body (`{ course: {...}, enrollments: [...] }`).
  *     tags: [SICAU]
  *     requestBody:
  *       required: true
@@ -338,6 +352,7 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
  *                         correo_institucional: { type: string, example: "johana.ramirez@pascualbravo.edu.co" }
  *                         fecha_inicio:      { type: string, example: "2026-01-15" }
  *                         fecha_fin:         { type: string, example: "2026-06-15" }
+ *                         usuario:           { type: string, example: "jor.ramirez", description: "Usuario de SICAU que originó el envío, para el log de auditoría" }
  *                     enrollments:
  *                       type: array
  *                       items:
@@ -356,6 +371,23 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
  *                           periodo:           { type: string, example: "20261" }
  *                           grupo:             { type: string, example: "G101" }
  *                           estado:            { type: string, example: "Activa" }
+ *                           novedad:
+ *                             type: object
+ *                             description: >
+ *                               Novedad ya calculada del lado de SICAU (p.ej. cambio de grupo). Se guarda
+ *                               tal cual en el log de auditoría como referencia; journey sigue detectando
+ *                               sus propias novedades (traslado/cambio de estado) comparando contra lo
+ *                               que ya tiene guardado, este campo no altera esa lógica.
+ *                             properties:
+ *                               tipo: { type: string, example: "CAMBIO_DE_GRUPO" }
+ *                               cambios:
+ *                                 type: array
+ *                                 items:
+ *                                   type: object
+ *                                   properties:
+ *                                     campo:    { type: string, example: "grupo" }
+ *                                     anterior: { type: string, example: "G101" }
+ *                                     actual:   { type: string, example: "G102" }
  *     responses:
  *       200:
  *         description: Curso y matrículas guardados
@@ -408,15 +440,18 @@ router.post('/send_courses_enrollments_sicau', async (req, res, next) => {
     try {
         const items = req.body.items || req.body || [];
         const lista = Array.isArray(items) ? items : [items];
+        const usuario = getSicauUsername(req, lista[0]?.course?.usuario || lista[0]?.usuario);
         const results = [];
         for (const item of lista) {
-            const result = await ctrl.saveSicauCursoYMatriculas(item);
+            const result = await ctrl.saveSicauCursoYMatriculas(item, usuario);
             results.push(result);
         }
         logIngestaSicau(req, `${lista.length} curso(s)+matrícula(s)`, lista.map((it, i) => ({
             codigo_asignatura: it.course?.codigo_asignatura, grupo: it.course?.grupo, nombre_asignatura: it.course?.nombre_asignatura,
             estado_curso: results[i]?.course?.status, cedulas_matriculadas: (it.enrollments || []).map(e => e.cedula).join(', '),
-        })));
+            ...(it.course?.novedad ? { novedad_curso: it.course.novedad, desmatriculadas: results[i]?.course?.desmatriculadas } : {}),
+            novedades: (it.enrollments || []).filter(e => e.novedad).map(e => ({ cedula: e.cedula, novedad: e.novedad })),
+        })), usuario);
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);

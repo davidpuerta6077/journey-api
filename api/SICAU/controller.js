@@ -1,4 +1,4 @@
-const { normalizeCourse, buildCourseNames, cleanSpaces, normalizeEmail, splitNombreCompleto } = require('../../services/normalize');
+const { normalizeCourse, buildCourseNames, cleanSpaces, normalizeEmail, splitNombreCompleto, normalizeEstado } = require('../../services/normalize');
 const enrollmentsCtrl = require('../enrollments/index');
 
 // ─── MAPEO DE ROLES ───────────────────────────────────────────────────────────
@@ -229,14 +229,74 @@ module.exports = (injectedDB) => {
     // tanto esta ingesta automática de SICAU como la creación manual desde
     // Módulos > Matrículas, para que el comportamiento sea idéntico sin
     // importar de dónde venga la matrícula.
-    async function saveSicauMatricula(enr) {
+    // ─── NOVEDADES REPORTADAS POR SICAU ──────────────────────────────────────
+    // SICAU manda su propia novedad ya calculada (CAMBIO_DE_GRUPO,
+    // CAMBIO_DE_ESTADO, RETIRO...). La lógica de Nexo sigue por `estado`; esto
+    // solo la guarda en sicau_novedades para mostrarla en Sync > Novedades.
+    // Best-effort: si falla el registro, la ingesta no se cae.
+    async function registrarNovedadSicau(row) {
+        try {
+            await data.insertSicauNovedad(row);
+        } catch (err) {
+            console.error('No se pudo registrar la novedad de SICAU:', err.message);
+        }
+    }
+
+    // RETIRO de curso (p.ej. desde "Gestión de grupos virtuales" desmarcan que
+    // requiere curso virtual): se desmatriculan sus estudiantes activos por la
+    // misma vía que "Desmatricular" en Nexo (estado 'Desmatriculado', la fila
+    // sale de moodle_enrol). El curso no se crea, actualiza ni oculta.
+    async function retirarCursoSicau(course, usuario) {
+        const codigoJourney = `${course.codigo_asignatura}${course.periodo}${normalizeGrupo(course.grupo)}`;
+        const matriculas = await data.findEnrollmentsByCodigoJourney(codigoJourney);
+        const activas = matriculas.filter(m => normalizeEstado(m.estado) === 'Matriculado');
+        for (const m of activas) {
+            await data.updateEnrollmentEstado(m.id, 'Desmatriculado');
+            await data.updateEnrollmentEstadoSync(m.id, 'pendiente');
+            await data.updateEnrollmentSyncStatus(m.id, false);
+        }
+        await registrarNovedadSicau({
+            nivel: 'curso',
+            tipo: course.novedad.tipo,
+            motivo: course.novedad.motivo || null,
+            codigo_journey: codigoJourney,
+            codigo_asignatura: course.codigo_asignatura,
+            nombre_asignatura: course.nombre_asignatura || null,
+            periodo: course.periodo,
+            grupo: normalizeGrupo(course.grupo),
+            cedula: null,
+            cambios: course.novedad.cambios || [],
+            usuario_sicau: usuario || null,
+            resultado: `${activas.length} matrícula(s) desmatriculada(s)`,
+        });
+        return { codigo_journey: codigoJourney, status: 'retiro', desmatriculadas: activas.length };
+    }
+
+    async function saveSicauMatricula(enr, usuario) {
+        const grupo = normalizeGrupo(enr.grupo);
+        if (enr.novedad) {
+            await registrarNovedadSicau({
+                nivel: 'matricula',
+                tipo: enr.novedad.tipo,
+                motivo: enr.novedad.motivo || null,
+                codigo_journey: `${enr.codigo_asignatura}${enr.periodo}${grupo}`,
+                codigo_asignatura: enr.codigo_asignatura,
+                nombre_asignatura: enr.nombre_asignatura || null,
+                periodo: enr.periodo,
+                grupo,
+                cedula: String(enr.cedula),
+                cambios: enr.novedad.cambios || [],
+                usuario_sicau: usuario || enr.usuario || null,
+                resultado: null,
+            });
+        }
+
         // 1. Buscar userid por cédula (SICAU manda cédula, no el id interno)
         const userResult = await data.findUserByDoc(String(enr.cedula));
         if (userResult.length === 0) {
             return { cedula: enr.cedula, status: 'error', error: 'Usuario no encontrado' };
         }
         const userid = userResult[0].id;
-        const grupo = normalizeGrupo(enr.grupo);
         const moodleRole = ROLE_MAP[enr.role?.toUpperCase()] || 'student';
 
         const result = await enrollmentsCtrl.saveEnrollmentConNovedades({
@@ -263,8 +323,12 @@ module.exports = (injectedDB) => {
     // padre; ahora ganan los de la matrícula si vienen, y solo se completa
     // con los del curso los que falten (para seguir aceptando el envío
     // mínimo {cedula, role, estado} si algún día se usa así).
-    async function saveSicauCursoYMatriculas(item) {
+    async function saveSicauCursoYMatriculas(item, usuario) {
         const { course, enrollments } = item;
+        usuario = usuario || course?.usuario || item.usuario;
+        if (course?.novedad?.tipo === 'RETIRO') {
+            return { course: await retirarCursoSicau(course, usuario), enrollments: [] };
+        }
         const courseResult = await saveSicauCurso(course);
 
         const enrollmentResults = [];
@@ -277,8 +341,13 @@ module.exports = (injectedDB) => {
                 periodo:           enr.periodo           || course.periodo,
                 grupo:             enr.grupo             || course.grupo
             };
-            const result = await saveSicauMatricula(merged);
-            enrollmentResults.push(result);
+            const result = await saveSicauMatricula(merged, usuario);
+            // SICAU manda la novedad ya calculada de su lado (p.ej. CAMBIO_DE_GRUPO
+            // con el detalle de campos que cambiaron); journey sigue detectando sus
+            // propias novedades en saveEnrollmentConNovedades, así que esto no altera
+            // esa lógica: solo se conserva en la respuesta/log como referencia de lo
+            // que SICAU reportó.
+            enrollmentResults.push(enr.novedad ? { ...result, novedad: enr.novedad } : result);
         }
 
         return { course: courseResult, enrollments: enrollmentResults };

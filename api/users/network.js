@@ -10,6 +10,7 @@ const fs = require('fs');
 const checkAuth = require('../../middleware/checkAuth');
 const checkPermission = require('../../middleware/checkPermissions');
 const saveLog = require('../../middleware/saveLog');
+const moodleAccount = require('../../services/moodleAccount')();
 
 // ─── RUTAS EXCEL ──────────────────────────────────────────────────────────────
 
@@ -574,6 +575,119 @@ router.post('/reset-password/:id', checkAuth, checkPermission("reset_password_us
         req._logUser = await postgresql.getUserById(req.params.id);
         const result = await ctrl.resetUserPassword(req.params.id);
         response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ── Cuenta Moodle (plugin local_nexo) ──
+const loadMoodleTarget = async (req) => {
+    const user = await postgresql.getUserById(req.params.id);
+    if (!user) throw Object.assign(new Error('Usuario no encontrado'), { statusCode: 404 });
+    if (!user.documento) throw Object.assign(new Error('El usuario no tiene documento registrado'), { statusCode: 400 });
+    req._logUser = user;
+    return user;
+};
+const logNombre = (req) => {
+    const u = req._logUser;
+    return u ? `${u.firstname || ''} ${u.lastname || ''}`.trim() || u.email : `id ${req.params.id}`;
+};
+const logDetalle = (req) => [{ id: req.params.id, nombre: logNombre(req), email: req._logUser?.email, documento: req._logUser?.documento }];
+
+/**
+ * @swagger
+ * /users/{id}/moodle/status:
+ *   get:
+ *     summary: Estado de la cuenta Moodle (bloqueo y doble factor) vía plugin local_nexo
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Estado de la cuenta
+ *       404:
+ *         description: Usuario no existe en Nexo o en Moodle
+ *       502:
+ *         description: Moodle no responde o plugin no instalado
+ */
+router.get('/:id/moodle/status', checkAuth, checkPermission('moodle_unlock_user'), async (req, res, next) => {
+    try {
+        const user = await loadMoodleTarget(req);
+        response.success(req, res, await moodleAccount.getStatus(user.documento), 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /users/{id}/moodle/unlock:
+ *   post:
+ *     summary: Desbloquear la cuenta Moodle del usuario vía plugin local_nexo
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Cuenta desbloqueada
+ *       404:
+ *         description: Usuario no existe en Nexo o en Moodle
+ *       409:
+ *         description: Usuario protegido o acción desactivada en el plugin
+ *       502:
+ *         description: Moodle no responde o plugin no instalado
+ */
+router.post('/:id/moodle/unlock', checkAuth, checkPermission('moodle_unlock_user'), saveLog('moodle_unlock_user', {
+    descripcion: (req) => `Desbloqueó en Moodle la cuenta de "${logNombre(req)}"`,
+    entityId: (req) => req.params.id,
+    detalle: logDetalle,
+}), async (req, res, next) => {
+    try {
+        const user = await loadMoodleTarget(req);
+        response.success(req, res, await moodleAccount.unlock(user.documento, req.user.email), 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /users/{id}/moodle/reset-mfa:
+ *   post:
+ *     summary: Reiniciar el doble factor (MFA) del usuario en Moodle vía plugin local_nexo
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Doble factor reiniciado
+ *       404:
+ *         description: Usuario no existe en Nexo o en Moodle
+ *       409:
+ *         description: Usuario protegido o acción desactivada en el plugin
+ *       502:
+ *         description: Moodle no responde o plugin no instalado
+ */
+router.post('/:id/moodle/reset-mfa', checkAuth, checkPermission('moodle_reset_mfa'), saveLog('moodle_reset_mfa', {
+    descripcion: (req) => `Reinició en Moodle el doble factor de "${logNombre(req)}"`,
+    entityId: (req) => req.params.id,
+    detalle: logDetalle,
+}), async (req, res, next) => {
+    try {
+        const user = await loadMoodleTarget(req);
+        response.success(req, res, await moodleAccount.resetMfa(user.documento, req.user.email), 200);
     } catch (error) {
         next(error);
     }

@@ -1075,6 +1075,38 @@ const insertLogData = (type, description, username, entityType, entityId, detail
     values: [type, description, username || null, entityType || null, entityId || null, detail ? JSON.stringify(detail) : null]
 });
 
+// ─── Novedades reportadas por SICAU (solo registro para mostrar) ──────────
+const insertSicauNovedadData = (n) => ({
+    text: `
+        INSERT INTO ${schema}.sicau_novedades
+            (nivel, tipo, motivo, codigo_journey, codigo_asignatura, nombre_asignatura, periodo, grupo, cedula, cambios, usuario_sicau, resultado)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `,
+    values: [n.nivel, n.tipo || null, n.motivo || null, n.codigo_journey || null, n.codigo_asignatura || null,
+             n.nombre_asignatura || null, n.periodo || null, n.grupo || null, n.cedula || null,
+             JSON.stringify(n.cambios || []), n.usuario_sicau || null, n.resultado || null]
+});
+
+// Nombre del estudiante por cédula al listar (la novedad puede llegar antes
+// que el usuario exista en Nexo, por eso no se guarda al insertar).
+const selectSicauNovedades = (limit) => ({
+    text: `
+        SELECT n.id, n.fecha, n.nivel, n.tipo, n.motivo, n.codigo_journey, n.codigo_asignatura,
+               n.nombre_asignatura, n.periodo, n.grupo, n.cedula, n.cambios, n.usuario_sicau, n.resultado,
+               NULLIF(TRIM(CONCAT(u.firstname, ' ', u.lastname)), '') AS nombre_estudiante
+        FROM ${schema}.sicau_novedades n
+        LEFT JOIN ${schema}.users u ON u.documento = n.cedula
+        ORDER BY n.fecha DESC, n.id DESC
+        LIMIT $1
+    `,
+    values: [limit]
+});
+
+const findEnrollmentsByCodigoJourneyQuery = (codigoJourney) => ({
+    text: `SELECT id, estado FROM ${schema}.enrollments WHERE codigo_journey = $1`,
+    values: [codigoJourney]
+});
+
 // entity_type guarda el código de submódulo (el mismo que checkPermission).
 // Se resuelve contra submodules/modules: modules.name es la categoría principal
 // del menú lateral (Nexo Sync, Administrador, ...) y submodules.name el módulo.
@@ -1382,6 +1414,9 @@ const coursesDetailByCategory = ({ categoryId = null, incluirSubcategorias = tru
 
 
 module.exports = {
+    insertSicauNovedadData,
+    selectSicauNovedades,
+    findEnrollmentsByCodigoJourneyQuery,
     selectAllItems,
     // users
     selectAllUsers,
