@@ -19,6 +19,9 @@ module.exports = (request = moodleRequest, token = config.moodle.nexo_token || c
         if (data === null || data === undefined) {
             throw httpError('No se pudo contactar a Moodle', 502);
         }
+        if (typeof data !== 'object' || Array.isArray(data)) {
+            throw httpError('Respuesta inválida de Moodle (¿plugin Nexo instalado?)', 502);
+        }
         if (data.exception) {
             const status = PLUGIN_ERRORS[data.errorcode];
             if (status) throw httpError(data.message, status);

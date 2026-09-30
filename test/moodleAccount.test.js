@@ -40,6 +40,11 @@ test('usuario protegido → 409', async () => {
     await assert.rejects(createMoodleAccount(fn, 'tok').unlock('1001', 'a'), (e) => e.statusCode === 409 && e.message === 'Protegido');
 });
 
+test('respuesta no JSON de Moodle (HTML de mantenimiento, proxy) → 502', async () => {
+    const { fn } = fakeRequest('<html>Sitio en mantenimiento</html>');
+    await assert.rejects(createMoodleAccount(fn, 'tok').getStatus('1001'), (e) => e.statusCode === 502);
+});
+
 test('plugin no instalado o token sin acceso → 502 con aviso', async () => {
     const { fn } = fakeRequest({ exception: 'webservice_access_exception', errorcode: 'accessexception', message: 'Access control exception' });
     await assert.rejects(createMoodleAccount(fn, 'tok').getStatus('1001'),
