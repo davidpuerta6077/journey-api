@@ -278,7 +278,12 @@ module.exports = (injectedDB) => {
                 grupo:             enr.grupo             || course.grupo
             };
             const result = await saveSicauMatricula(merged);
-            enrollmentResults.push(result);
+            // SICAU manda la novedad ya calculada de su lado (p.ej. CAMBIO_DE_GRUPO
+            // con el detalle de campos que cambiaron); journey sigue detectando sus
+            // propias novedades en saveEnrollmentConNovedades, así que esto no altera
+            // esa lógica: solo se conserva en la respuesta/log como referencia de lo
+            // que SICAU reportó.
+            enrollmentResults.push(enr.novedad ? { ...result, novedad: enr.novedad } : result);
         }
 
         return { course: courseResult, enrollments: enrollmentResults };
