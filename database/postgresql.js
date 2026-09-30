@@ -2,6 +2,7 @@ const config = require('../config');
 const { Pool } = require('pg');
 const { normalizeUser, normalizeCourse, normalizeEnrollment, normalizeEstado } = require('../services/normalize');
 const {
+    insertSicauNovedadData, selectSicauNovedades, findEnrollmentsByCodigoJourneyQuery,
     selectAllItems,
     selectAllUsers, selectUsersForSync, insertUsuarioData, updateUsuarioData,
     updateUsuarioJourney, deleteUsuarioData,
@@ -356,6 +357,33 @@ function findSyncRuleById(id) {
 }
 
 // ─── LOGS ───────────────────────────────────────────────────────────────────────
+
+function insertSicauNovedad(novedad) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertSicauNovedadData(novedad), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function listSicauNovedades(limit) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectSicauNovedades(limit), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function findEnrollmentsByCodigoJourney(codigoJourney) {
+    return new Promise((resolve, reject) => {
+        pool.query(findEnrollmentsByCodigoJourneyQuery(codigoJourney), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
 
 function insertLog(type, description, username, entityType, entityId, detail) {
     return new Promise((resolve, reject) => {
@@ -1054,6 +1082,9 @@ function reportEnrollmentsOfCourse(courseid) {
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 module.exports = {
+    insertSicauNovedad,
+    listSicauNovedades,
+    findEnrollmentsByCodigoJourney,
     listAll,
     query,
     insertUser,

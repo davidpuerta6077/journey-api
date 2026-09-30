@@ -297,14 +297,16 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
     try {
         const items = req.body.enrollments || req.body.items || req.body || [];
         const lista = Array.isArray(items) ? items : [items];
+        const usuario = getSicauUsername(req, lista[0]?.usuario);
         const results = [];
         for (const enr of lista) {
-            const result = await ctrl.saveSicauMatricula(enr);
+            const result = await ctrl.saveSicauMatricula(enr, usuario);
             results.push(result);
         }
         logIngestaSicau(req, `${lista.length} matrícula(s)`, lista.map((e, i) => ({
             cedula: e.cedula, role: e.role, codigo_asignatura: e.codigo_asignatura, grupo: e.grupo, periodo: e.periodo, estado: e.estado, status: results[i]?.status,
-        })), lista[0]?.usuario);
+            ...(e.novedad ? { novedad: e.novedad } : {}),
+        })), usuario);
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);
@@ -438,16 +440,18 @@ router.post('/send_courses_enrollments_sicau', async (req, res, next) => {
     try {
         const items = req.body.items || req.body || [];
         const lista = Array.isArray(items) ? items : [items];
+        const usuario = getSicauUsername(req, lista[0]?.course?.usuario || lista[0]?.usuario);
         const results = [];
         for (const item of lista) {
-            const result = await ctrl.saveSicauCursoYMatriculas(item);
+            const result = await ctrl.saveSicauCursoYMatriculas(item, usuario);
             results.push(result);
         }
         logIngestaSicau(req, `${lista.length} curso(s)+matrícula(s)`, lista.map((it, i) => ({
             codigo_asignatura: it.course?.codigo_asignatura, grupo: it.course?.grupo, nombre_asignatura: it.course?.nombre_asignatura,
             estado_curso: results[i]?.course?.status, cedulas_matriculadas: (it.enrollments || []).map(e => e.cedula).join(', '),
+            ...(it.course?.novedad ? { novedad_curso: it.course.novedad, desmatriculadas: results[i]?.course?.desmatriculadas } : {}),
             novedades: (it.enrollments || []).filter(e => e.novedad).map(e => ({ cedula: e.cedula, novedad: e.novedad })),
-        })), lista[0]?.course?.usuario);
+        })), usuario);
         response.success(req, res, { results }, 200);
     } catch (error) {
         next(error);

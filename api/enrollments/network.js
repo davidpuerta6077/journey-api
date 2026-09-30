@@ -801,4 +801,22 @@ router.delete('/:id', checkAuth, checkPermission("delete_enrollment_journey"), s
     }
 });
 
+/**
+ * @swagger
+ * /enrollments/sicau-novedades:
+ *   get:
+ *     summary: Novedades reportadas por SICAU (cambio de grupo, de estado, retiro de curso). Solo lectura.
+ *     tags: [Enrollments]
+ *     responses:
+ *       200:
+ *         description: Últimas 500 novedades, más recientes primero
+ */
+router.get('/sicau-novedades', checkAuth, checkPermission("sync_preview_enrollments"), async (req, res, next) => {
+    try {
+        response.success(req, res, await postgresql.listSicauNovedades(500), 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
 module.exports = router;
