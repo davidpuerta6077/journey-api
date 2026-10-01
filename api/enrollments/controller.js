@@ -142,9 +142,12 @@ module.exports = (injectedDB) => {
             return { codigo_journey: codigoJourney, id: matricula.id, status: 'exists' };
         }
 
-        const traslados = await data.findEnrollmentByUserSubjectPeriod(
-            enr.userid, enr.codigo_asignatura, enr.periodo, codigoJourney
-        );
+        // Un profesor/tutor puede dictar varios grupos de la misma asignatura y
+        // periodo a la vez: que aparezca en un grupo nuevo no significa que dejó
+        // el anterior, así que el traslado solo aplica a estudiantes.
+        const traslados = enr.role === 'student'
+            ? await data.findEnrollmentByUserSubjectPeriod(enr.userid, enr.codigo_asignatura, enr.periodo, codigoJourney)
+            : [];
         for (const previa of traslados) {
             await data.updateEnrollmentEstadoSync(previa.id, 'traslado');
             await data.updateEnrollmentEstado(previa.id, 'Trasladado');

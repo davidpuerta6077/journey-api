@@ -32,6 +32,13 @@ const {
     selectSubmodulesAdmin, insertSubmoduleData, updateSubmoduleData,
     selectRolePermissionsGrid, findRolePermission, insertRolePermissionData, deleteRolePermissionData, findSubmoduleById,
     selectLabsGrades, insertLabGradeData,
+    selectFormsByUser, findFormById, findFormByIdAndUser, findFormByToken,
+    insertFormData, updateFormData, updateFormStatusData, updateFormTokenData, softDeleteFormData,
+    selectQuestionsByForm, insertQuestionData, updateQuestionData, softDeleteQuestionData,
+    findResponseByIdentifier, insertResponseData, insertAnswerData, selectResponsesByForm,
+    countFormResponses, deleteResponseData,
+    selectFormsOwnedOrShared, selectAllFormsWithOwner, insertFormShareData, deleteFormShareData,
+    selectFormSharesByForm, findFormShare, findPlatformUserByIdData, searchPlatformUsersForShare,
     resolveSyncRule, updateCourseSyncFields, insertLogData, selectLogsData,
     updateUserNormalizedData, updateCourseNormalizedData,
     selectSyncRulesAdmin, selectSyncRuleById, findSyncRuleExactMatch, insertSyncRuleData,
@@ -886,6 +893,251 @@ function insertLabGrade(data) {
     });
 }
 
+// ─── ATTENDANCE FORMS ─────────────────────────────────────────────────────────
+
+function listFormsByUser(userId) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectFormsByUser(userId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function getFormById(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(findFormById(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0] || null);
+        });
+    });
+}
+
+function getFormByIdAndUser(id, userId) {
+    return new Promise((resolve, reject) => {
+        pool.query(findFormByIdAndUser(id, userId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0] || null);
+        });
+    });
+}
+
+function getFormByToken(token) {
+    return new Promise((resolve, reject) => {
+        pool.query(findFormByToken(token), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0] || null);
+        });
+    });
+}
+
+function insertForm(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertFormData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function updateForm(id, data) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateFormData(id, data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function updateFormStatus(id, status) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateFormStatusData(id, status), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function updateFormToken(id, token) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateFormTokenData(id, token), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function softDeleteForm(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(softDeleteFormData(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function listQuestionsByForm(formId) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectQuestionsByForm(formId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function insertQuestion(formId, q) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertQuestionData(formId, q), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function updateQuestion(id, q) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateQuestionData(id, q), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function softDeleteQuestion(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(softDeleteQuestionData(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function getResponseByIdentifier(formId, identifier) {
+    return new Promise((resolve, reject) => {
+        pool.query(findResponseByIdentifier(formId, identifier), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0] || null);
+        });
+    });
+}
+
+function insertResponse(formId, identifier, ipAddress) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertResponseData(formId, identifier, ipAddress), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function insertAnswer(responseId, questionId, value) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertAnswerData(responseId, questionId, value), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function listResponsesByForm(formId) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectResponsesByForm(formId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function countFormResponsesTotal(formId) {
+    return new Promise((resolve, reject) => {
+        pool.query(countFormResponses(formId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]?.total || 0);
+        });
+    });
+}
+
+function deleteResponse(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(deleteResponseData(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0] || null);
+        });
+    });
+}
+
+function listFormsOwnedOrShared(userId) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectFormsOwnedOrShared(userId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function listAllFormsWithOwner(userId) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectAllFormsWithOwner(userId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function insertFormShare(formId, userId) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertFormShareData(formId, userId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0] || null);
+        });
+    });
+}
+
+function deleteFormShare(formId, userId) {
+    return new Promise((resolve, reject) => {
+        pool.query(deleteFormShareData(formId, userId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0] || null);
+        });
+    });
+}
+
+function listFormShares(formId) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectFormSharesByForm(formId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function getFormShare(formId, userId) {
+    return new Promise((resolve, reject) => {
+        pool.query(findFormShare(formId, userId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0] || null);
+        });
+    });
+}
+
+function getPlatformUserById(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(findPlatformUserByIdData(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0] || null);
+        });
+    });
+}
+
+function searchPlatformUsersShare(q) {
+    return new Promise((resolve, reject) => {
+        pool.query(searchPlatformUsersForShare(q), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 // ─── REPORTS ──────────────────────────────────────────────────────────────────
 
 function listReports() {
@@ -1170,6 +1422,34 @@ module.exports = {
     // virtual labs
     listLabsGrades,
     insertLabGrade,
+    // attendance forms
+    listFormsByUser,
+    getFormById,
+    getFormByIdAndUser,
+    getFormByToken,
+    insertForm,
+    updateForm,
+    updateFormStatus,
+    updateFormToken,
+    softDeleteForm,
+    listQuestionsByForm,
+    insertQuestion,
+    updateQuestion,
+    softDeleteQuestion,
+    getResponseByIdentifier,
+    insertResponse,
+    insertAnswer,
+    listResponsesByForm,
+    countFormResponsesTotal,
+    deleteResponse,
+    listFormsOwnedOrShared,
+    listAllFormsWithOwner,
+    insertFormShare,
+    deleteFormShare,
+    listFormShares,
+    getFormShare,
+    getPlatformUserById,
+    searchPlatformUsersShare,
     grantRolePermission,
     getSubmoduleById,
     revokeRolePermission,

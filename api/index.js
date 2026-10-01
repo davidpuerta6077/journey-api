@@ -15,6 +15,8 @@ const sicau = require('./SICAU/network');
 const admin = require('./admin/network');
 const virtualLabs = require('./virtual_labs/network');
 const reports = require('./reports/network');
+const attendanceForms = require('./attendance_forms/network');
+const attendanceFormsPublic = require('./attendance_forms/networkPublic');
 const ROOT = path.resolve(__dirname, '..');
 const swaggerUi   = require('swagger-ui-express');
 const swaggerSpec = require('../swagger');  
@@ -57,6 +59,8 @@ app.use('/sicau', sicau);
 app.use('/admin', admin);
 app.use('/virtual_labs', virtualLabs);
 app.use('/reports', reports);
+app.use('/forms', attendanceForms);
+app.use('/f', attendanceFormsPublic);
 
 
 // ─── PÁGINAS ──────────────────────────────────────────────────────────────────

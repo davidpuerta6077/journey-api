@@ -956,6 +956,215 @@ const insertLabGradeData = (data) => {
 };
 
 
+// ___ FORMULARIOS DE ASISTENCIA _________________________________________________
+
+const selectFormsByUser = (userId) => ({
+    text: `
+        SELECT f.*, COUNT(r.id)::int AS inscritos
+        FROM ${schema}.forms f
+        LEFT JOIN ${schema}.form_responses r ON r.form_id = f.id
+        WHERE f.user_id = $1 AND f.deleted_at IS NULL
+        GROUP BY f.id
+        ORDER BY f.created_at DESC
+    `,
+    values: [userId]
+});
+
+const findFormById = (id) => ({
+    text: `SELECT * FROM ${schema}.forms WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+    values: [id]
+});
+
+const findFormByIdAndUser = (id, userId) => ({
+    text: `SELECT * FROM ${schema}.forms WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL LIMIT 1`,
+    values: [id, userId]
+});
+
+const findFormByToken = (token) => ({
+    text: `SELECT * FROM ${schema}.forms WHERE public_token = $1 AND deleted_at IS NULL LIMIT 1`,
+    values: [token]
+});
+
+const insertFormData = (data) => {
+    const { user_id, title, description, event_date, location, modality, opens_at, closes_at, max_capacity } = data;
+    const text = `
+        INSERT INTO ${schema}.forms (user_id, title, description, event_date, location, modality, opens_at, closes_at, max_capacity)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING *
+    `;
+    return { text, values: [user_id, title, description || null, event_date || null, location || null, modality || 'presencial', opens_at || null, closes_at || null, max_capacity || null] };
+};
+
+const updateFormData = (id, data) => {
+    const { title, description, event_date, location, modality, opens_at, closes_at, max_capacity } = data;
+    const text = `
+        UPDATE ${schema}.forms
+        SET title = $1, description = $2, event_date = $3, location = $4, modality = $5,
+            opens_at = $6, closes_at = $7, max_capacity = $8, updated_at = NOW()
+        WHERE id = $9
+        RETURNING *
+    `;
+    return { text, values: [title, description || null, event_date || null, location || null, modality || 'presencial', opens_at || null, closes_at || null, max_capacity || null, id] };
+};
+
+const updateFormStatusData = (id, status) => ({
+    text: `UPDATE ${schema}.forms SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+    values: [status, id]
+});
+
+const updateFormTokenData = (id, token) => ({
+    text: `UPDATE ${schema}.forms SET public_token = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+    values: [token, id]
+});
+
+const softDeleteFormData = (id) => ({
+    text: `UPDATE ${schema}.forms SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *`,
+    values: [id]
+});
+
+const selectQuestionsByForm = (formId) => ({
+    text: `SELECT * FROM ${schema}.form_questions WHERE form_id = $1 AND deleted_at IS NULL ORDER BY position ASC, id ASC`,
+    values: [formId]
+});
+
+const insertQuestionData = (formId, q) => {
+    const { label, type, options, required, help_text, position } = q;
+    const text = `
+        INSERT INTO ${schema}.form_questions (form_id, label, type, options, required, help_text, position)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+    `;
+    return { text, values: [formId, label, type, options ? JSON.stringify(options) : null, !!required, help_text || null, position || 0] };
+};
+
+const updateQuestionData = (id, q) => {
+    const { label, type, options, required, help_text, position } = q;
+    const text = `
+        UPDATE ${schema}.form_questions
+        SET label = $1, type = $2, options = $3, required = $4, help_text = $5, position = $6
+        WHERE id = $7
+        RETURNING *
+    `;
+    return { text, values: [label, type, options ? JSON.stringify(options) : null, !!required, help_text || null, position || 0, id] };
+};
+
+const softDeleteQuestionData = (id) => ({
+    text: `UPDATE ${schema}.form_questions SET deleted_at = NOW() WHERE id = $1`,
+    values: [id]
+});
+
+const findResponseByIdentifier = (formId, identifier) => ({
+    text: `SELECT id FROM ${schema}.form_responses WHERE form_id = $1 AND identifier = $2 LIMIT 1`,
+    values: [formId, identifier]
+});
+
+const insertResponseData = (formId, identifier, ipAddress) => ({
+    text: `INSERT INTO ${schema}.form_responses (form_id, identifier, ip_address) VALUES ($1, $2, $3) RETURNING *`,
+    values: [formId, identifier, ipAddress || null]
+});
+
+const insertAnswerData = (responseId, questionId, value) => ({
+    text: `INSERT INTO ${schema}.form_answers (response_id, question_id, value) VALUES ($1, $2, $3) RETURNING *`,
+    values: [responseId, questionId, value === undefined || value === null ? null : String(value)]
+});
+
+const selectResponsesByForm = (formId) => ({
+    text: `
+        SELECT r.id AS response_id, r.identifier, r.submitted_at, q.id AS question_id, q.label AS question_label, q.position, a.value
+        FROM ${schema}.form_responses r
+        LEFT JOIN ${schema}.form_answers a ON a.response_id = r.id
+        LEFT JOIN ${schema}.form_questions q ON q.id = a.question_id
+        WHERE r.form_id = $1
+        ORDER BY r.submitted_at ASC, q.position ASC
+    `,
+    values: [formId]
+});
+
+const countFormResponses = (formId) => ({
+    text: `SELECT COUNT(*)::int AS total FROM ${schema}.form_responses WHERE form_id = $1`,
+    values: [formId]
+});
+
+const deleteResponseData = (id) => ({
+    text: `DELETE FROM ${schema}.form_responses WHERE id = $1 RETURNING id`,
+    values: [id]
+});
+
+const selectFormsOwnedOrShared = (userId) => ({
+    text: `
+        SELECT f.*, COUNT(DISTINCT r.id)::int AS inscritos,
+               (f.user_id = $1) AS is_owner,
+               (f.user_id != $1) AS is_shared,
+               pu.username AS owner_name, pu.email AS owner_email
+        FROM ${schema}.forms f
+        LEFT JOIN ${schema}.form_responses r ON r.form_id = f.id
+        LEFT JOIN ${schema}.platform_users pu ON pu.id = f.user_id
+        WHERE f.deleted_at IS NULL
+          AND (f.user_id = $1 OR f.id IN (SELECT form_id FROM ${schema}.form_shares WHERE user_id = $1))
+        GROUP BY f.id, pu.username, pu.email
+        ORDER BY f.created_at DESC
+    `,
+    values: [userId]
+});
+
+const selectAllFormsWithOwner = (userId) => ({
+    text: `
+        SELECT f.*, COUNT(DISTINCT r.id)::int AS inscritos,
+               (f.user_id = $1) AS is_owner,
+               (f.user_id != $1) AS is_shared,
+               pu.username AS owner_name, pu.email AS owner_email
+        FROM ${schema}.forms f
+        LEFT JOIN ${schema}.form_responses r ON r.form_id = f.id
+        LEFT JOIN ${schema}.platform_users pu ON pu.id = f.user_id
+        WHERE f.deleted_at IS NULL
+        GROUP BY f.id, pu.username, pu.email
+        ORDER BY f.created_at DESC
+    `,
+    values: [userId]
+});
+
+const insertFormShareData = (formId, userId) => ({
+    text: `INSERT INTO ${schema}.form_shares (form_id, user_id) VALUES ($1, $2) ON CONFLICT (form_id, user_id) DO NOTHING RETURNING *`,
+    values: [formId, userId]
+});
+
+const deleteFormShareData = (formId, userId) => ({
+    text: `DELETE FROM ${schema}.form_shares WHERE form_id = $1 AND user_id = $2 RETURNING id`,
+    values: [formId, userId]
+});
+
+const selectFormSharesByForm = (formId) => ({
+    text: `
+        SELECT s.id, s.user_id, pu.username, pu.email
+        FROM ${schema}.form_shares s
+        JOIN ${schema}.platform_users pu ON pu.id = s.user_id
+        WHERE s.form_id = $1
+        ORDER BY pu.username
+    `,
+    values: [formId]
+});
+
+const findFormShare = (formId, userId) => ({
+    text: `SELECT id FROM ${schema}.form_shares WHERE form_id = $1 AND user_id = $2 LIMIT 1`,
+    values: [formId, userId]
+});
+
+const findPlatformUserByIdData = (id) => ({
+    text: `SELECT id, username, email FROM ${schema}.platform_users WHERE id = $1 LIMIT 1`,
+    values: [id]
+});
+
+const searchPlatformUsersForShare = (q) => ({
+    text: `
+        SELECT id, username, email FROM ${schema}.platform_users
+        WHERE estado = true AND (username ILIKE $1 OR email ILIKE $1)
+        ORDER BY username
+        LIMIT 15
+    `,
+    values: [`%${q}%`]
+});
+
+
 // ___ SYNC RULES ________________________________________________________________
 
 // Resuelve la regla mas especifica que matchee: codigo_asignatura (peso 4) >
@@ -1505,6 +1714,34 @@ module.exports = {
     // virtual labs
     selectLabsGrades,
     insertLabGradeData,
+    // attendance forms
+    selectFormsByUser,
+    findFormById,
+    findFormByIdAndUser,
+    findFormByToken,
+    insertFormData,
+    updateFormData,
+    updateFormStatusData,
+    updateFormTokenData,
+    softDeleteFormData,
+    selectQuestionsByForm,
+    insertQuestionData,
+    updateQuestionData,
+    softDeleteQuestionData,
+    findResponseByIdentifier,
+    insertResponseData,
+    insertAnswerData,
+    selectResponsesByForm,
+    countFormResponses,
+    deleteResponseData,
+    selectFormsOwnedOrShared,
+    selectAllFormsWithOwner,
+    insertFormShareData,
+    deleteFormShareData,
+    selectFormSharesByForm,
+    findFormShare,
+    findPlatformUserByIdData,
+    searchPlatformUsersForShare,
     // sync rules
     resolveSyncRule,
     updateCourseSyncFields,
