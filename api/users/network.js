@@ -580,6 +580,94 @@ router.post('/reset-password/:id', checkAuth, checkPermission("reset_password_us
     }
 });
 
+// ── Novedad de correo reportada por SICAU (ver api/SICAU/controller.js) ──
+/**
+ * @swagger
+ * /users/{id}/correo-pendiente/aplicar:
+ *   post:
+ *     summary: Aplica el correo propuesto por SICAU al usuario existente
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Correo actualizado }
+ *       500: { description: Error interno }
+ */
+router.post('/:id/correo-pendiente/aplicar', checkAuth, checkPermission('update_user_journey'), saveLog('update_user_journey', {
+    descripcion: (req) => `Actualizó el correo de "${logNombre(req)}" por novedad de SICAU`,
+    entityId: (req) => req.params.id,
+    detalle: (req) => [{ id: req.params.id, correo_anterior: req._logUser?.email, correo_nuevo: req._logUser?.correo_pendiente }],
+}), async (req, res, next) => {
+    try {
+        req._logUser = await postgresql.getUserById(req.params.id);
+        const result = await ctrl.aplicarCorreoPendiente(req.params.id);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /users/{id}/correo-pendiente/duplicar:
+ *   post:
+ *     summary: Crea un usuario nuevo con el correo propuesto por SICAU; el original queda archivado (documento + "0") para historial
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Usuario nuevo creado }
+ *       500: { description: Error interno }
+ */
+router.post('/:id/correo-pendiente/duplicar', checkAuth, checkPermission('update_user_journey'), saveLog('update_user_journey', {
+    descripcion: (req) => `Creó un usuario nuevo con el correo propuesto por SICAU, a partir de "${logNombre(req)}"`,
+    entityId: (req) => req.params.id,
+    detalle: (req) => [{ id: req.params.id, correo_anterior: req._logUser?.email, correo_nuevo: req._logUser?.correo_pendiente }],
+}), async (req, res, next) => {
+    try {
+        req._logUser = await postgresql.getUserById(req.params.id);
+        const result = await ctrl.duplicarPorCorreoPendiente(req.params.id);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /users/{id}/correo-pendiente:
+ *   delete:
+ *     summary: Descarta el cambio de correo propuesto por SICAU (falso positivo)
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Novedad descartada }
+ *       500: { description: Error interno }
+ */
+router.delete('/:id/correo-pendiente', checkAuth, checkPermission('update_user_journey'), saveLog('update_user_journey', {
+    descripcion: (req) => `Descartó el cambio de correo propuesto por SICAU para "${logNombre(req)}"`,
+    entityId: (req) => req.params.id,
+    detalle: (req) => [{ id: req.params.id, correo_descartado: req._logUser?.correo_pendiente }],
+}), async (req, res, next) => {
+    try {
+        req._logUser = await postgresql.getUserById(req.params.id);
+        const result = await ctrl.descartarCorreoPendiente(req.params.id);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
 // ── Cuenta Moodle (plugin local_nexo) ──
 const loadMoodleTarget = async (req) => {
     const user = await postgresql.getUserById(req.params.id);

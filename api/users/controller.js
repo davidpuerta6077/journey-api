@@ -177,6 +177,65 @@ async function resetUserPassword(id) {
     return { status: 'reset', message: `Contraseña restablecida al documento` };
 }
 
+// ─── NOVEDAD DE USUARIOS (SICAU reportó un cambio de correo) ──────────────
+// El correo es el username en Moodle: cuando SICAU manda uno distinto para un
+// usuario ya existente, api/SICAU/controller.js no lo pisa solo, lo deja en
+// correo_pendiente (ver saveSicauUsuario). Estas tres acciones son la decisión
+// humana desde Sync > Usuarios: actualizar el usuario existente, crear uno
+// nuevo con el correo nuevo (el viejo queda intacto para historial), o
+// descartar la propuesta si fue un falso positivo de SICAU.
+
+async function findUserForSyncById(id) {
+    const users = await data.getUsersForSync();
+    return users.find(u => u.id === parseInt(id));
+}
+
+async function aplicarCorreoPendiente(id) {
+    const user = await findUserForSyncById(id);
+    if (!user) throw new Error('Usuario no encontrado');
+    if (!user.correo_pendiente) throw new Error('Este usuario no tiene un cambio de correo pendiente');
+    const result = await data.applyCorreoPendiente(id);
+    return result[0];
+}
+
+async function duplicarPorCorreoPendiente(id) {
+    const user = await findUserForSyncById(id);
+    if (!user) throw new Error('Usuario no encontrado');
+    if (!user.correo_pendiente) throw new Error('Este usuario no tiene un cambio de correo pendiente');
+    // documento tiene índice único (un usuario = una persona): el original se
+    // archiva primero (documento + "0") para liberar el documento real antes
+    // de insertar el usuario nuevo con ese mismo documento.
+    await data.archiveUserDocumento(id);
+    const nuevo = await data.insertUser({
+        username:               user.correo_pendiente,
+        firstname:               user.firstname,
+        lastname:                user.lastname,
+        email:                   user.correo_pendiente,
+        password:                user.documento ? String(user.documento) : 'Pascual2024*',
+        city:                    user.city,
+        country:                 user.country,
+        documento:               user.documento,
+        correo_personal:         user.correo_personal,
+        telefono:                user.telefono,
+        celular:                 user.celular,
+        fecha_nacimiento:        user.fecha_nacimiento,
+        jornada:                 user.jornada,
+        departamento_academico:  user.departamento_academico,
+        plan_estudios:           user.plan_estudios,
+        moodle_id:               null,
+        sincronizado:            false
+    });
+    return nuevo[0];
+}
+
+async function descartarCorreoPendiente(id) {
+    const user = await findUserForSyncById(id);
+    if (!user) throw new Error('Usuario no encontrado');
+    if (!user.correo_pendiente) throw new Error('Este usuario no tiene un cambio de correo pendiente');
+    await data.clearUserCorreoPendiente(id);
+    return { status: 'descartado' };
+}
+
 async function getUserEnrollments(userId) {
     const enrollments = await data.getEnrollmentsByUserId(userId);
     return enrollments.map(e => ({
@@ -208,6 +267,9 @@ async function itemByEmailData(TABLE, EMAIL) {
         listUsersForSync,
         saveJourneyUsuario,
         resetUserPassword,
+        aplicarCorreoPendiente,
+        duplicarPorCorreoPendiente,
+        descartarCorreoPendiente,
         getUserEnrollments,
         updateMoodleId,
         clearMoodleId,

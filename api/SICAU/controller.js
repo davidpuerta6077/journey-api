@@ -1,4 +1,4 @@
-const { normalizeCourse, buildCourseNames, cleanSpaces, normalizeEmail, splitNombreCompleto, normalizeEstado } = require('../../services/normalize');
+const { normalizeCourse, buildCourseNames, cleanSpaces, normalizeEmail, normalizeUser, splitNombreCompleto, normalizeEstado } = require('../../services/normalize');
 const enrollmentsCtrl = require('../enrollments/index');
 
 // ─── MAPEO DE ROLES ───────────────────────────────────────────────────────────
@@ -7,6 +7,14 @@ const ROLE_MAP = {
     'DOCENTE':    'editingteacher',
     'TUTOR':      'teacher'
 };
+
+// Campos (no-correo) que se comparan contra lo que ya había en Nexo para armar
+// la novedad informativa de saveSicauUsuario (ver ahí). El correo se trata
+// aparte porque es el username en Moodle y no se pisa solo (ver CAMPOS_NOVEDAD).
+const CAMPOS_NOVEDAD = [
+    'firstname', 'lastname', 'correo_personal', 'telefono', 'celular',
+    'fecha_nacimiento', 'jornada', 'departamento_academico', 'plan_estudios', 'city'
+];
 
 // SICAU manda el grupo como número plano (ej. "105"), pero el código de curso
 // journey siempre debe llevar la "G" al frente (ej. "G105") para que el
@@ -33,6 +41,25 @@ module.exports = (injectedDB) => {
             : await data.findUserSicau(user.email, user.username);
 
         if (existing.length > 0) {
+            // Antes de pisar nada: comparar contra lo que ya había para detectar
+            // la novedad. El correo (username en Moodle) nunca se pisa solo -se
+            // deja en correo_pendiente esperando una decisión humana (actualizar
+            // o crear un usuario nuevo, ver api/users)-; el resto de campos sigue
+            // aplicándose automático como siempre, solo que ahora queda un
+            // registro de qué cambió (novedad_datos) para que se vea en Sync >
+            // Usuarios.
+            const before = (await data.getUserCompareFields(existing[0].id))[0] || {};
+            const incomingEmail = user.email ? normalizeEmail(user.email) : null;
+            if (incomingEmail && before.email && incomingEmail !== before.email) {
+                await data.setUserCorreoPendiente(existing[0].id, incomingEmail);
+            }
+            const normalizado = normalizeUser(user);
+            const cambios = CAMPOS_NOVEDAD
+                .filter(campo => user[campo] !== undefined)
+                .map(campo => ({ campo, anterior: before[campo] ?? null, actual: (normalizado[campo] ?? user[campo]) ?? null }))
+                .filter(c => c.anterior !== c.actual);
+            if (cambios.length > 0) await data.setUserNovedadDatos(existing[0].id, cambios);
+
             await data.updateUserFromSicau({ ...user, id: existing[0].id });
             return { username: user.username, status: 'updated' };
         }

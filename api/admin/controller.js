@@ -258,6 +258,63 @@ module.exports = (injectedDB) => {
         return data.listLogs(300);
     }
 
+    // ─── SETTINGS (apartado Configuración) ───────────────────────────────────────
+
+    async function listSettings(categoria) {
+        return data.getSettings(categoria);
+    }
+
+    async function saveSetting(body, updatedBy) {
+        const { categoria, clave, valor } = body;
+        if (!categoria || !clave) {
+            const err = new Error('categoria y clave son obligatorios');
+            err.status = 400;
+            throw err;
+        }
+        return data.upsertSetting(categoria, clave, valor, updatedBy);
+    }
+
+    async function removeSetting(categoria, clave) {
+        await data.deleteSetting(categoria, clave);
+        return { categoria, clave, deleted: true };
+    }
+
+    // ─── MENU LINKS (accesos externos editables del sidebar) ─────────────────────
+
+    async function listMenuLinksAdmin() {
+        return data.getAllMenuLinks();
+    }
+
+    // Consumida por el sidebar: cualquier usuario logueado, solo los activos.
+    async function listActiveMenuLinks() {
+        return data.getMenuLinks();
+    }
+
+    async function createMenuLink(body) {
+        const { nombre, url } = body;
+        if (!nombre || !url) {
+            const err = new Error('nombre y url son obligatorios');
+            err.status = 400;
+            throw err;
+        }
+        return data.insertMenuLink(body);
+    }
+
+    async function updateMenuLinkAdmin(id, body) {
+        const { nombre, url } = body;
+        if (!nombre || !url) {
+            const err = new Error('nombre y url son obligatorios');
+            err.status = 400;
+            throw err;
+        }
+        return data.updateMenuLink(id, body);
+    }
+
+    async function deleteMenuLinkAdmin(id) {
+        await data.deleteMenuLink(id);
+        return { id: Number(id), deleted: true };
+    }
+
     return {
         listUsuarios, createUsuario, updateUsuario, setUsuarioEstado,
         listRoles, createRole, updateRole,
@@ -266,6 +323,8 @@ module.exports = (injectedDB) => {
         listReglas, createRegla, updateRegla, deleteRegla,
         listMoodleCategorias, listMoodleSemillas, createMoodleCategoria, listAsignaturas,
         getPermisosMatrix, grantPermiso, revokePermiso,
-        listLogs
+        listLogs,
+        listSettings, saveSetting, removeSetting,
+        listMenuLinksAdmin, listActiveMenuLinks, createMenuLink, updateMenuLinkAdmin, deleteMenuLinkAdmin
     };
 };
