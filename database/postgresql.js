@@ -8,6 +8,8 @@ const {
     updateUsuarioJourney, deleteUsuarioData,
     updateUserMoodleId, clearUserMoodleId, findUserByEmailOrUsername,
     findUserByDocumento, findUserById, updateUserSicau,
+    selectUserCompareFields, setUserCorreoPendienteQuery, setUserNovedadDatosQuery,
+    clearUserCorreoPendienteQuery, archiveUserDocumentoQuery, applyCorreoPendienteQuery,
     updateUserSyncStatusQuery, updateUserUnsyncQuery,selectEnrollmentsByUserId,
     updateUserPassword,
     selectAllCourses, selectCoursesForSync, selectDistinctAsignaturas, insertCourseData, updateCourseData,
@@ -64,6 +66,8 @@ const {
     reportPlatformUsersDetail: qReportPlatformUsersDetail,
     reportAuditDetail: qReportAuditDetail,
     reportEnrollmentsOfCourse: qReportEnrollmentsOfCourse,
+    selectSettings, upsertSettingQuery, deleteSettingQuery,
+    selectMenuLinks, selectAllMenuLinks, insertMenuLinkQuery, updateMenuLinkQuery, deleteMenuLinkQuery,
 } = require('./querysets');
  
 const pool = new Pool({
@@ -203,6 +207,60 @@ function updateUserFromSicau(user) {
         pool.query(updateUserSicau({ ...user, ...normalizeUser(user) }), (err, data) => {
             if (err) return reject(userDupError(err));
             resolve(data.rows);
+        });
+    });
+}
+
+function getUserCompareFields(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectUserCompareFields(id), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function setUserCorreoPendiente(id, correo) {
+    return new Promise((resolve, reject) => {
+        pool.query(setUserCorreoPendienteQuery(id, correo), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function setUserNovedadDatos(id, cambios) {
+    return new Promise((resolve, reject) => {
+        pool.query(setUserNovedadDatosQuery(id, cambios), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function clearUserCorreoPendiente(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(clearUserCorreoPendienteQuery(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function archiveUserDocumento(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(archiveUserDocumentoQuery(id), (err, result) => {
+            if (err) return reject(userDupError(err));
+            resolve(result.rows);
+        });
+    });
+}
+
+function applyCorreoPendiente(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(applyCorreoPendienteQuery(id), (err, result) => {
+            if (err) return reject(userDupError(err));
+            resolve(result.rows);
         });
     });
 }
@@ -855,6 +913,82 @@ function revokeRolePermission(role_id, submodule_id) {
 
 // ___ PERMISSIONS ______________________________________________________________
 
+// ─── SETTINGS ───────────────────────────────────────────────────────────────
+
+function getSettings(categoria) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectSettings(categoria), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function upsertSetting(categoria, clave, valor, updatedBy) {
+    return new Promise((resolve, reject) => {
+        pool.query(upsertSettingQuery(categoria, clave, valor, updatedBy), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function deleteSetting(categoria, clave) {
+    return new Promise((resolve, reject) => {
+        pool.query(deleteSettingQuery(categoria, clave), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+// ─── MENU_LINKS ─────────────────────────────────────────────────────────────
+
+function getMenuLinks() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectMenuLinks(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function getAllMenuLinks() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectAllMenuLinks(), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function insertMenuLink(link) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertMenuLinkQuery(link), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function updateMenuLink(id, link) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateMenuLinkQuery(id, link), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function deleteMenuLink(id) {
+    return new Promise((resolve, reject) => {
+        pool.query(deleteMenuLinkQuery(id), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 function checkPermissionsData(email) {
     return new Promise((resolve, reject) => {
         pool.query(checkPermissions(email), (err, result) => {
@@ -1350,6 +1484,12 @@ module.exports = {
     findUserByDoc,
     getUserById,
     updateUserFromSicau,
+    getUserCompareFields,
+    setUserCorreoPendiente,
+    setUserNovedadDatos,
+    clearUserCorreoPendiente,
+    archiveUserDocumento,
+    applyCorreoPendiente,
     updateUserSyncStatus,
     updateUserUnsync,
     insertCourse,
@@ -1392,6 +1532,14 @@ module.exports = {
     resetPassword,
     checkPermissionsData,
     checkSubmodulesPermissionsData,
+    getSettings,
+    upsertSetting,
+    deleteSetting,
+    getMenuLinks,
+    getAllMenuLinks,
+    insertMenuLink,
+    updateMenuLink,
+    deleteMenuLink,
     // admin: platform users
     listPlatformUsers,
     findPlatformUser,

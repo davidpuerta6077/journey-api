@@ -1,5 +1,7 @@
 const { Router } = require('express');
 const router = Router();
+const path = require('path');
+const fs = require('fs');
 const response = require('../../network/response');
 const ctrl = require('./index');
 const postgresql = require('../../database/postgresql');
@@ -722,6 +724,268 @@ router.post('/permisos/revoke', checkAuth, checkPermission('admin_permissions'),
 router.get('/logs', checkAuth, checkPermission('admin_logs'), async (req, res, next) => {
     try {
         const result = await ctrl.listLogs();
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ─── SETTINGS (apartado Configuración) ─────────────────────────────────────────
+
+/**
+ * @swagger
+ * /admin/settings:
+ *   get:
+ *     summary: Listar settings (opcionalmente filtrados por categoría)
+ *     tags: [Admin]
+ *     parameters:
+ *       - in: query
+ *         name: categoria
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Lista de settings }
+ */
+router.get('/settings', checkAuth, checkPermission('settings'), async (req, res, next) => {
+    try {
+        const result = await ctrl.listSettings(req.query.categoria);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/settings:
+ *   put:
+ *     summary: Crear o actualizar un setting (categoria+clave)
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [categoria, clave]
+ *             properties:
+ *               categoria: { type: string, example: "apariencia" }
+ *               clave:     { type: string, example: "color_primario" }
+ *               valor:     { example: "#5b84ff" }
+ *     responses:
+ *       200: { description: Setting guardado }
+ *       400: { description: Faltan categoria/clave }
+ */
+router.put('/settings', checkAuth, checkPermission('settings'), saveLog('settings', {
+    descripcion: (req) => `Guardó el setting "${req.body?.categoria}.${req.body?.clave}"`,
+    detalle: (req) => [{ categoria: req.body?.categoria, clave: req.body?.clave, valor: req.body?.valor }],
+}), async (req, res, next) => {
+    try {
+        const result = await ctrl.saveSetting(req.body, req.user?.email);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/settings/{categoria}/{clave}:
+ *   delete:
+ *     summary: Eliminar un setting (vuelve al valor por defecto del código)
+ *     tags: [Admin]
+ *     parameters:
+ *       - in: path
+ *         name: categoria
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: clave
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Setting eliminado }
+ */
+router.delete('/settings/:categoria/:clave', checkAuth, checkPermission('settings'), saveLog('settings', {
+    descripcion: (req) => `Eliminó el setting "${req.params.categoria}.${req.params.clave}"`,
+    detalle: (req) => [{ categoria: req.params.categoria, clave: req.params.clave }],
+}), async (req, res, next) => {
+    try {
+        const result = await ctrl.removeSetting(req.params.categoria, req.params.clave);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/settings/logo:
+ *   post:
+ *     summary: Subir el logo del hub (se guarda como setting apariencia.logo_url)
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               logo: { type: string, format: binary }
+ *     responses:
+ *       200: { description: Logo actualizado }
+ *       400: { description: No se recibió ningún archivo }
+ */
+router.post('/settings/logo', checkAuth, checkPermission('settings'), saveLog('settings', {
+    descripcion: () => `Actualizó el logo del hub`,
+}), (req, res, next) => {
+    if (!req.files || !req.files.logo) {
+        return response.error(req, res, 'No se recibió ningún archivo.', 400);
+    }
+    const file = req.files.logo;
+    const uploadDir = path.join(__dirname, '../../uploads/branding');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    const ext = path.extname(file.name) || '.png';
+    const fileName = `logo_${Date.now()}${ext}`;
+    const filePath = path.join(uploadDir, fileName);
+    file.mv(filePath, async (err) => {
+        if (err) return response.error(req, res, err.message, 500);
+        try {
+            const logoUrl = `/uploads/branding/${fileName}`;
+            const result = await ctrl.saveSetting({ categoria: 'apariencia', clave: 'logo_url', valor: logoUrl }, req.user?.email);
+            response.success(req, res, result, 200);
+        } catch (error) {
+            next(error);
+        }
+    });
+});
+
+// ─── MENU LINKS (accesos externos editables del sidebar) ──────────────────────
+
+/**
+ * @swagger
+ * /admin/menu-links/active:
+ *   get:
+ *     summary: Listar accesos externos activos (para el sidebar, cualquier usuario logueado)
+ *     tags: [Admin]
+ *     responses:
+ *       200: { description: Lista de accesos externos activos }
+ */
+router.get('/menu-links/active', checkAuth, async (req, res, next) => {
+    try {
+        const result = await ctrl.listActiveMenuLinks();
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/menu-links:
+ *   get:
+ *     summary: Listar todos los accesos externos (incluye inactivos), para la pantalla de Configuración
+ *     tags: [Admin]
+ *     responses:
+ *       200: { description: Lista completa de accesos externos }
+ */
+router.get('/menu-links', checkAuth, checkPermission('settings'), async (req, res, next) => {
+    try {
+        const result = await ctrl.listMenuLinksAdmin();
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/menu-links:
+ *   post:
+ *     summary: Crear un acceso externo del sidebar
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [nombre, url]
+ *             properties:
+ *               nombre:        { type: string }
+ *               url:           { type: string }
+ *               icono:         { type: string }
+ *               nueva_pestana: { type: boolean, default: true }
+ *               orden:         { type: integer, default: 0 }
+ *     responses:
+ *       200: { description: Acceso creado }
+ *       400: { description: Faltan nombre/url }
+ */
+router.post('/menu-links', checkAuth, checkPermission('settings'), saveLog('settings', {
+    descripcion: (req) => `Creó el acceso de menú "${req.body?.nombre || '—'}"`,
+    detalle: (req) => [{ nombre: req.body?.nombre, url: req.body?.url }],
+}), async (req, res, next) => {
+    try {
+        const result = await ctrl.createMenuLink(req.body);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/menu-links/{id}:
+ *   put:
+ *     summary: Actualizar un acceso externo del sidebar
+ *     tags: [Admin]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Acceso actualizado }
+ *       400: { description: Faltan nombre/url }
+ */
+router.put('/menu-links/:id', checkAuth, checkPermission('settings'), saveLog('settings', {
+    descripcion: (req) => `Actualizó el acceso de menú "${req.body?.nombre || req.params.id}"`,
+    entityId: (req) => req.params.id,
+    detalle: (req) => [{ nombre: req.body?.nombre, url: req.body?.url, activo: req.body?.activo }],
+}), async (req, res, next) => {
+    try {
+        const result = await ctrl.updateMenuLinkAdmin(req.params.id, req.body);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/menu-links/{id}:
+ *   delete:
+ *     summary: Eliminar un acceso externo del sidebar
+ *     tags: [Admin]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Acceso eliminado }
+ */
+router.delete('/menu-links/:id', checkAuth, checkPermission('settings'), saveLog('settings', {
+    descripcion: (req) => {
+        const l = req._logMenuLink;
+        return `Eliminó el acceso de menú "${l?.nombre || `id ${req.params.id}`}"`;
+    },
+    entityId: (req) => req.params.id,
+    detalle: (req) => [{ nombre: req._logMenuLink?.nombre, url: req._logMenuLink?.url }],
+}), async (req, res, next) => {
+    try {
+        const all = await ctrl.listMenuLinksAdmin();
+        req._logMenuLink = all.find(l => l.id === Number(req.params.id)) || null;
+        const result = await ctrl.deleteMenuLinkAdmin(req.params.id);
         response.success(req, res, result, 200);
     } catch (error) {
         next(error);

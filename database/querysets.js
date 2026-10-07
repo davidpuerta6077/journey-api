@@ -19,8 +19,9 @@ const selectUsersForSync = () => ({
     text: `SELECT id, username, firstname, lastname, email, city, country,
            documento, correo_personal, telefono, celular, fecha_nacimiento,
            jornada, departamento_academico, plan_estudios, moodle_id, sincronizado,
+           correo_pendiente, novedad_datos,
            created_at
-           FROM ${schema}.users 
+           FROM ${schema}.users
            ORDER BY id DESC`,
     values: []
 });
@@ -159,7 +160,7 @@ const findUserByDocumento = (documento) => ({
 // Para armar descripciones de log legibles (nombre/email) justo antes de
 // borrar/actualizar, cuando el body de la petición solo trae el id.
 const findUserById = (id) => ({
-    text: `SELECT id, firstname, lastname, email, documento FROM ${schema}.users WHERE id = $1 LIMIT 1`,
+    text: `SELECT id, firstname, lastname, email, documento, correo_pendiente FROM ${schema}.users WHERE id = $1 LIMIT 1`,
     values: [id]
 });
 
@@ -177,6 +178,45 @@ const updateUserSicau = (data) => ({
         data.departamento_academico || null, data.plan_estudios || null,
         data.id
     ]
+});
+
+const selectUserCompareFields = (id) => ({
+    text: `SELECT email, firstname, lastname, correo_personal, telefono, celular,
+           fecha_nacimiento, jornada, departamento_academico, plan_estudios, city
+           FROM ${schema}.users WHERE id = $1`,
+    values: [id]
+});
+
+const setUserCorreoPendienteQuery = (id, correo) => ({
+    text: `UPDATE ${schema}.users SET correo_pendiente = $2 WHERE id = $1`,
+    values: [id, correo]
+});
+
+const setUserNovedadDatosQuery = (id, cambios) => ({
+    text: `UPDATE ${schema}.users SET novedad_datos = $2 WHERE id = $1`,
+    values: [id, JSON.stringify(cambios)]
+});
+
+const clearUserCorreoPendienteQuery = (id) => ({
+    text: `UPDATE ${schema}.users SET correo_pendiente = NULL WHERE id = $1`,
+    values: [id]
+});
+
+// "Crear otro" (ver api/users/controller.js:duplicarPorCorreoPendiente): el
+// documento tiene índice único (users_documento_uniq, un usuario = una
+// persona), así que el original no puede quedarse con el mismo documento que
+// el usuario nuevo. Se le agrega un "0" al final para liberarlo y conservarlo
+// como historial (sigue siendo buscable, solo que ya no es el documento real).
+const archiveUserDocumentoQuery = (id) => ({
+    text: `UPDATE ${schema}.users SET documento = documento || '0', correo_pendiente = NULL
+           WHERE id = $1 RETURNING *`,
+    values: [id]
+});
+
+const applyCorreoPendienteQuery = (id) => ({
+    text: `UPDATE ${schema}.users SET email = correo_pendiente, username = correo_pendiente,
+           correo_pendiente = NULL, sincronizado = false WHERE id = $1 RETURNING *`,
+    values: [id]
 });
 
 function updateUserSyncStatusQuery(id, statusValue) {
@@ -897,6 +937,65 @@ const checkSubmodulePermissions = (email, submoduleCode) => ({
     values: [email, submoduleCode]
 });
 
+
+// ─── SETTINGS (apartado Configuración) ─────────────────────────────────────
+// Valores sueltos clave-valor por categoría (ver addSettingsTables.js).
+
+const selectSettings = (categoria) => categoria
+    ? { text: `SELECT categoria, clave, valor, updated_at, updated_by FROM ${schema}.settings WHERE categoria = $1 ORDER BY clave`, values: [categoria] }
+    : { text: `SELECT categoria, clave, valor, updated_at, updated_by FROM ${schema}.settings ORDER BY categoria, clave`, values: [] };
+
+const upsertSettingQuery = (categoria, clave, valor, updatedBy) => ({
+    text: `
+        INSERT INTO ${schema}.settings (categoria, clave, valor, updated_by)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (categoria, clave)
+        DO UPDATE SET valor = $3, updated_at = NOW(), updated_by = $4
+        RETURNING categoria, clave, valor, updated_at, updated_by
+    `,
+    values: [categoria, clave, JSON.stringify(valor), updatedBy || null]
+});
+
+const deleteSettingQuery = (categoria, clave) => ({
+    text: `DELETE FROM ${schema}.settings WHERE categoria = $1 AND clave = $2`,
+    values: [categoria, clave]
+});
+
+// ─── MENU_LINKS (accesos externos editables del sidebar) ───────────────────
+
+const selectMenuLinks = () => ({
+    text: `SELECT id, nombre, url, icono, nueva_pestana, orden FROM ${schema}.menu_links WHERE activo = true ORDER BY orden, id`,
+    values: []
+});
+
+const selectAllMenuLinks = () => ({
+    text: `SELECT * FROM ${schema}.menu_links ORDER BY orden, id`,
+    values: []
+});
+
+const insertMenuLinkQuery = ({ nombre, url, icono, nueva_pestana, orden }) => ({
+    text: `
+        INSERT INTO ${schema}.menu_links (nombre, url, icono, nueva_pestana, orden)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING *
+    `,
+    values: [nombre, url, icono || null, nueva_pestana !== false, orden || 0]
+});
+
+const updateMenuLinkQuery = (id, { nombre, url, icono, nueva_pestana, orden, activo }) => ({
+    text: `
+        UPDATE ${schema}.menu_links
+        SET nombre = $2, url = $3, icono = $4, nueva_pestana = $5, orden = $6, activo = $7
+        WHERE id = $1
+        RETURNING *
+    `,
+    values: [id, nombre, url, icono || null, nueva_pestana !== false, orden || 0, activo !== false]
+});
+
+const deleteMenuLinkQuery = (id) => ({
+    text: `DELETE FROM ${schema}.menu_links WHERE id = $1`,
+    values: [id]
+});
 
 const checkPermissions = (email) => ({
     text: `
@@ -1640,6 +1739,12 @@ module.exports = {
     findUserByDocumento,
     findUserById,
     updateUserSicau,
+    selectUserCompareFields,
+    setUserCorreoPendienteQuery,
+    setUserNovedadDatosQuery,
+    clearUserCorreoPendienteQuery,
+    archiveUserDocumentoQuery,
+    applyCorreoPendienteQuery,
     updateUserSyncStatusQuery,
     updateUserUnsyncQuery,
     selectEnrollmentsByUserId,
@@ -1782,5 +1887,15 @@ module.exports = {
 
     //Permission
     checkPermissions,
-    checkSubmodulePermissions
+    checkSubmodulePermissions,
+
+    // settings
+    selectSettings,
+    upsertSettingQuery,
+    deleteSettingQuery,
+    selectMenuLinks,
+    selectAllMenuLinks,
+    insertMenuLinkQuery,
+    updateMenuLinkQuery,
+    deleteMenuLinkQuery
 };
