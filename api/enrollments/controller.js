@@ -374,11 +374,11 @@ module.exports = (injectedDB) => {
                     continue;
                 }
 
-                // Mismo criterio que "Desmatricular" en Módulos > Matrículas (ver
-                // deleteElement más arriba): no se llama a Moodle directo, se
-                // marca 'Desmatriculado' y se desincroniza para que el cron de la
-                // BD externa desmatricule al estudiante en su próxima corrida.
-                await data.updateEnrollmentEstado(enrollment.id, 'Desmatriculado');
+                // Cancelación masiva = Suspended en Moodle (ver mapeo de estados en
+                // ModulosMatriculas.jsx). No se llama a Moodle directo: se marca
+                // 'Cancelado' y se desincroniza para que el cron de la BD externa
+                // desmatricule al estudiante en su próxima corrida.
+                await data.updateEnrollmentEstado(enrollment.id, 'Cancelado');
                 await data.updateEnrollmentSyncStatus(enrollment.id, false);
                 successCount++;
             } catch (err) {

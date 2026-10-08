@@ -475,7 +475,7 @@ router.post('/process-excel', checkAuth, checkPermission("process_excel_enrollme
  * @swagger
  * /enrollments/process-novedades:
  *   post:
- *     summary: Procesar Excel y eliminar (desmatricular) usuarios de Moodle
+ *     summary: Procesar Excel de cancelación masiva (estado Cancelado, equivalente a Suspended en Moodle)
  *     tags: [Enrollments]
  *     requestBody:
  *       required: true
@@ -501,7 +501,7 @@ router.post('/process-excel', checkAuth, checkPermission("process_excel_enrollme
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/process-novedades', checkAuth, checkPermission("process_novedades"), saveLog("process_novedades", {
-    descripcion: (req) => `Procesó novedades (suspensiones) desde "${path.basename(req.body?.filePath || '—')}"`,
+    descripcion: (req) => `Procesó cancelación masiva desde "${path.basename(req.body?.filePath || '—')}"`,
     detalle: (req) => [{ archivo: path.basename(req.body?.filePath || '—') }],
 }), async (req, res) => {
     const { filePath } = req.body;
@@ -511,16 +511,16 @@ router.post('/process-novedades', checkAuth, checkPermission("process_novedades"
         if (result.errors.length > 0) {
             const errorExcelPath = await ctrl.generateErrorExcel(result.errors);
             response.success(req, res, {
-                message:      'Proceso de novedades con errores.',
+                message:      'Proceso de cancelación masiva con errores.',
                 successCount: result.successCount,
                 errorCount:   result.errorCount,
                 errorFileUrl: `/uploads/${path.basename(errorExcelPath)}`
             }, 200);
         } else {
-            response.success(req, res, { message: 'Matrículas desmatriculadas con éxito.', successCount: result.successCount }, 200);
+            response.success(req, res, { message: 'Matrículas canceladas con éxito.', successCount: result.successCount }, 200);
         }
     } catch (error) {
-        response.error(req, res, `Error procesando novedades: ${error.message}`, 500);
+        response.error(req, res, `Error procesando cancelación masiva: ${error.message}`, 500);
     } finally {
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }

@@ -479,6 +479,50 @@ router.post('/create_manual', checkAuth, checkPermission("add_course"), async (r
     }
 });
 
+/**
+ * @swagger
+ * /courses/finalize_enrollments:
+ *   post:
+ *     summary: Cierre de semestre de un curso - pasa a Finalizado sus matrículas activas
+ *     description: Solo cambia el estado académico en Nexo (Matriculado -> Finalizado) de las matrículas de ese curso. No llama a Moodle -- la BD externa desmatricula sola en el próximo cron, igual que con cualquier otro estado distinto de Matriculado.
+ *     tags: [Courses]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [courseid]
+ *             properties:
+ *               courseid: { type: integer, example: 10 }
+ *     responses:
+ *       200:
+ *         description: Matrículas finalizadas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       500:
+ *         description: Error interno
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post('/finalize_enrollments', checkAuth, checkPermission("finalize_course_enrollments"), saveLog("finalize_course_enrollments", {
+    descripcion: (req) => `Cerró el semestre del curso "${req._logCourse?.shortname || req.body?.courseid || '—'}" (${req._logFinalizadas ?? 0} matrícula(s) finalizadas)`,
+    detalle: (req) => [{ courseid: req.body?.courseid, shortname: req._logCourse?.shortname, finalizadas: req._logFinalizadas ?? 0 }],
+}), async (req, res, next) => {
+    try {
+        const result = await ctrl.finalizeEnrollments(req.body.courseid);
+        req._logCourse = result.course;
+        req._logFinalizadas = result.finalizadas;
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
 // ─── SYNC ─────────────────────────────────────────────────────────────────────
 
 /**

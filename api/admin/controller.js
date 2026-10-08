@@ -258,6 +258,12 @@ module.exports = (injectedDB) => {
         return data.listLogs(300);
     }
 
+    // "Actividad reciente" del Home de Nexo: a diferencia de listLogs (admin_logs),
+    // se expone con el permiso nexo_home -- cualquiera que vea esa página ve esto.
+    async function listRecentNexoActivity(limit = 8) {
+        return data.listRecentLogsByModule('nexo_sync', limit);
+    }
+
     // ─── SETTINGS (apartado Configuración) ───────────────────────────────────────
 
     async function listSettings(categoria) {
@@ -277,6 +283,22 @@ module.exports = (injectedDB) => {
     async function removeSetting(categoria, clave) {
         await data.deleteSetting(categoria, clave);
         return { categoria, clave, deleted: true };
+    }
+
+    // Cierre de semestre global (botón en Configuración > Académico): pasa a
+    // Finalizado todas las matrículas activas del periodo_actual configurado,
+    // sin importar el curso. Igual que el cierre por curso, no llama a
+    // Moodle -- la BD externa desmatricula sola en el próximo cron.
+    async function finalizePeriodo() {
+        const settings = await data.getSettings('academico');
+        const periodo = (settings || []).find(s => s.clave === 'periodo_actual')?.valor;
+        if (!periodo) {
+            const err = new Error('No hay un periodo_actual configurado en Académico');
+            err.status = 400;
+            throw err;
+        }
+        const finalizadas = await data.finalizePeriodoEnrollments(periodo);
+        return { periodo, finalizadas: finalizadas.length };
     }
 
     // ─── MENU LINKS (accesos externos editables del sidebar) ─────────────────────
@@ -323,8 +345,8 @@ module.exports = (injectedDB) => {
         listReglas, createRegla, updateRegla, deleteRegla,
         listMoodleCategorias, listMoodleSemillas, createMoodleCategoria, listAsignaturas,
         getPermisosMatrix, grantPermiso, revokePermiso,
-        listLogs,
-        listSettings, saveSetting, removeSetting,
+        listLogs, listRecentNexoActivity,
+        listSettings, saveSetting, removeSetting, finalizePeriodo,
         listMenuLinksAdmin, listActiveMenuLinks, createMenuLink, updateMenuLinkAdmin, deleteMenuLinkAdmin
     };
 };

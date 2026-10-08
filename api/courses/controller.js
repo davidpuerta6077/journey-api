@@ -63,6 +63,17 @@ module.exports = (injectedDB) => {
         return data.updateCourseNormalized(id, fields);
     }
 
+    // "Cierre de semestre" de un curso puntual: pasa a Finalizado sus
+    // matrículas activas. Moodle las desmatricula sola en el próximo cron
+    // (ver fixMoodleExternalDbViews.js), acá no se llama a Moodle.
+    async function finalizeEnrollments(courseid) {
+        const rows = await data.reportCourseById(courseid);
+        const course = rows[0] || null;
+        if (!course) throw new Error('Curso no encontrado');
+        const finalizadas = await data.finalizeCourseEnrollments(courseid);
+        return { course, finalizadas: finalizadas.length };
+    }
+
     return {
         list,
         addElement,
@@ -76,6 +87,7 @@ module.exports = (injectedDB) => {
         resolveSyncRule,
         getSyncRuleById,
         findByIdnumber,
-        applyNormalization
+        applyNormalization,
+        finalizeEnrollments
     };
 };
