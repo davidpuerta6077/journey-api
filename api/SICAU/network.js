@@ -151,6 +151,22 @@ router.post('/search_user_sicau', async (req, res) => {
  *                     - type: object
  *                       properties:
  *                         usuario: { type: string, example: "jor.ramirez", description: "Usuario de SICAU que originó el envío, para el log de auditoría" }
+ *                         novedad:
+ *                           type: object
+ *                           description: >
+ *                             Novedad ya calculada del lado de SICAU (p.ej. usuario nuevo o cambio de
+ *                             datos). Se guarda en sicau_novedades (nivel "usuario") para verse en
+ *                             Sync > Novedades; no altera la lógica de guardado del usuario.
+ *                           properties:
+ *                             tipo: { type: string, example: "NUEVO" }
+ *                             cambios:
+ *                               type: array
+ *                               items:
+ *                                 type: object
+ *                                 properties:
+ *                                   campo:    { type: string, example: "jornada" }
+ *                                   anterior: { type: string, example: "PRESENCIAL" }
+ *                                   actual:   { type: string, example: "VIRTUAL" }
  *     responses:
  *       200:
  *         description: Usuarios guardados
@@ -255,7 +271,7 @@ router.post('/send_courses_sicau', async (req, res, next) => {
 /**
  * @swagger
  * /sicau/send_enrollments_sicau:
- *   post:
+ * 
  *     summary: Guardar matrículas provenientes del sistema SICAU
  *     tags: [SICAU]
  *     requestBody:

@@ -730,6 +730,30 @@ router.get('/logs', checkAuth, checkPermission('admin_logs'), async (req, res, n
     }
 });
 
+/**
+ * @swagger
+ * /admin/logs/recent-nexo:
+ *   get:
+ *     summary: Actividad reciente de Nexo (últimos logs del módulo nexo_sync) para el Home
+ *     description: A diferencia de /admin/logs, se gatea con el permiso nexo_home (no admin_logs) -- cualquiera que pueda ver el Home de Nexo ve esto.
+ *     tags: [Admin]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 8 }
+ *     responses:
+ *       200: { description: Últimos logs de nexo_sync (usuario, descripción, fecha, módulo) }
+ */
+router.get('/logs/recent-nexo', checkAuth, checkPermission('nexo_home'), async (req, res, next) => {
+    try {
+        const limit = Math.min(Number(req.query.limit) || 8, 20);
+        const result = await ctrl.listRecentNexoActivity(limit);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
 // ─── SETTINGS (apartado Configuración) ─────────────────────────────────────────
 
 /**
@@ -857,6 +881,73 @@ router.post('/settings/logo', checkAuth, checkPermission('settings'), saveLog('s
             next(error);
         }
     });
+});
+
+/**
+ * @swagger
+ * /admin/settings/favicon:
+ *   post:
+ *     summary: Subir el favicon del hub (se guarda como setting apariencia.favicon_url)
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               favicon: { type: string, format: binary }
+ *     responses:
+ *       200: { description: Favicon actualizado }
+ *       400: { description: No se recibió ningún archivo }
+ */
+router.post('/settings/favicon', checkAuth, checkPermission('settings'), saveLog('settings', {
+    descripcion: () => `Actualizó el favicon del hub`,
+}), (req, res, next) => {
+    if (!req.files || !req.files.favicon) {
+        return response.error(req, res, 'No se recibió ningún archivo.', 400);
+    }
+    const file = req.files.favicon;
+    const uploadDir = path.join(__dirname, '../../uploads/branding');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    const ext = path.extname(file.name) || '.png';
+    const fileName = `favicon_${Date.now()}${ext}`;
+    const filePath = path.join(uploadDir, fileName);
+    file.mv(filePath, async (err) => {
+        if (err) return response.error(req, res, err.message, 500);
+        try {
+            const faviconUrl = `/uploads/branding/${fileName}`;
+            const result = await ctrl.saveSetting({ categoria: 'apariencia', clave: 'favicon_url', valor: faviconUrl }, req.user?.email);
+            response.success(req, res, result, 200);
+        } catch (error) {
+            next(error);
+        }
+    });
+});
+
+/**
+ * @swagger
+ * /admin/settings/finalize-periodo:
+ *   post:
+ *     summary: Cierre de semestre global - finaliza las matrículas activas del periodo_actual configurado
+ *     description: Usa el periodo_actual guardado en Configuración > Académico. Solo cambia el estado académico en Nexo (Matriculado -> Finalizado); no llama a Moodle, la BD externa desmatricula sola en el próximo cron.
+ *     tags: [Admin - Settings]
+ *     responses:
+ *       200: { description: Matrículas finalizadas }
+ *       400: { description: No hay periodo_actual configurado }
+ */
+router.post('/settings/finalize-periodo', checkAuth, checkPermission('settings'), saveLog('settings', {
+    descripcion: (req) => `Cerró el periodo "${req._logPeriodo || '—'}" (${req._logFinalizadas ?? 0} matrícula(s) finalizadas)`,
+    detalle: (req) => [{ periodo: req._logPeriodo, finalizadas: req._logFinalizadas ?? 0 }],
+}), async (req, res, next) => {
+    try {
+        const result = await ctrl.finalizePeriodo();
+        req._logPeriodo = result.periodo;
+        req._logFinalizadas = result.finalizadas;
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
+    }
 });
 
 // ─── MENU LINKS (accesos externos editables del sidebar) ──────────────────────

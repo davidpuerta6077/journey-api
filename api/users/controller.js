@@ -2,6 +2,7 @@ const path = require('path');
 const xlsx = require('xlsx');
 const fs = require('fs');
 const config = require('../../config');
+const { getDominioCorreoPermitido, emailTieneDominio } = require('../../services/emailDomain');
 
 const MOODLE_SITE_URL = new URL(config.moodle.url).origin;
 
@@ -79,7 +80,7 @@ module.exports = (injectedDB) => {
         return outputPath;
     }
 
-    function validateUser(userData) {
+    function validateUser(userData, dominioCorreo) {
         const errors = [];
         userData.name      = (userData.name      != null) ? String(userData.name).trim()      : '';
         userData.last_name = (userData.last_name != null) ? String(userData.last_name).trim() : '';
@@ -90,6 +91,7 @@ module.exports = (injectedDB) => {
         if (!userData.last_name) errors.push('El apellido es obligatorio.');
         if (!userData.document)  errors.push('El documento es obligatorio.');
         if (!userData.email || !/\S+@\S+\.\S+/.test(userData.email)) errors.push('El email es inválido.');
+        else if (!emailTieneDominio(userData.email, dominioCorreo)) errors.push(`El email debe ser del dominio institucional (@${dominioCorreo}).`);
 
         if (!userData.document) {
             errors.push('No se puede generar la contraseña.');
@@ -102,12 +104,13 @@ module.exports = (injectedDB) => {
 
     async function processExcelAndCreateUsers(filePath) {
         const excelData = readExcel(filePath);
+        const dominioCorreo = await getDominioCorreoPermitido(data);
         const errors = [];
         let successCount = 0;
         let errorCount = 0;
 
         for (const row of excelData) {
-            const validationErrors = validateUser(row);
+            const validationErrors = validateUser(row, dominioCorreo);
             if (validationErrors.length > 0) {
                 errors.push({ ...row, errors: validationErrors.join(', ') });
                 errorCount++;
@@ -142,6 +145,12 @@ module.exports = (injectedDB) => {
         return { successCount, errorCount, errors };
     }
     async function saveJourneyUsuario(user) {
+        const dominioCorreo = await getDominioCorreoPermitido(data);
+        if (!emailTieneDominio(user.email, dominioCorreo)) {
+            const err = new Error(`El email debe ser del dominio institucional (@${dominioCorreo})`);
+            err.status = 400;
+            throw err;
+        }
         const existing = await data.findUserSicau(user.email, user.username || user.email);
         if (existing.length > 0) {
             throw new Error('Ya existe un usuario con ese email o username');

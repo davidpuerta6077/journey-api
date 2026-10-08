@@ -1,4 +1,5 @@
 const { normalizeCourse, buildCourseNames, cleanSpaces, normalizeEmail, normalizeUser, splitNombreCompleto, normalizeEstado } = require('../../services/normalize');
+const { getDominioCorreoPermitido, emailTieneDominio } = require('../../services/emailDomain');
 const enrollmentsCtrl = require('../enrollments/index');
 
 // ─── MAPEO DE ROLES ───────────────────────────────────────────────────────────
@@ -54,20 +55,33 @@ module.exports = (injectedDB) => {
                 await data.setUserCorreoPendiente(existing[0].id, incomingEmail);
             }
             const normalizado = normalizeUser(user);
+            // fecha_nacimiento vuelve de Postgres como Date (columna DATE), no como
+            // string: sin esto se comparaba Date !== "YYYY-MM-DD" y SIEMPRE marcaba
+            // novedad aunque la fecha fuera la misma.
+            const toComparable = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v);
             const cambios = CAMPOS_NOVEDAD
                 .filter(campo => user[campo] !== undefined)
-                .map(campo => ({ campo, anterior: before[campo] ?? null, actual: (normalizado[campo] ?? user[campo]) ?? null }))
+                .map(campo => ({ campo, anterior: toComparable(before[campo]) ?? null, actual: toComparable(normalizado[campo] ?? user[campo]) ?? null }))
                 .filter(c => c.anterior !== c.actual);
             if (cambios.length > 0) await data.setUserNovedadDatos(existing[0].id, cambios);
 
             await data.updateUserFromSicau({ ...user, id: existing[0].id });
+            if (user.novedad) await registrarNovedadUsuario(user, 'Usuario actualizado');
             return { username: user.username, status: 'updated' };
         }
         if (user.documento) {
             const emailTomado = await data.findUserSicau(user.email, user.username);
             if (emailTomado.length > 0) {
-                return { username: user.username, status: 'error', error: `El email ${user.email} ya pertenece a otro usuario` };
+                const error = `El email ${user.email} ya pertenece a otro usuario`;
+                if (user.novedad) await registrarNovedadUsuario(user, error);
+                return { username: user.username, status: 'error', error };
             }
+        }
+        const dominioCorreo = await getDominioCorreoPermitido(data);
+        if (!emailTieneDominio(user.email, dominioCorreo)) {
+            const error = `El email ${user.email} no es del dominio institucional (@${dominioCorreo}), no se crea el usuario`;
+            if (user.novedad) await registrarNovedadUsuario(user, error);
+            return { username: user.username, status: 'error', error };
         }
         await data.insertUser({
             username:               user.username,
@@ -88,7 +102,24 @@ module.exports = (injectedDB) => {
             moodle_id:              null,
             sincronizado:           false
         });
+        if (user.novedad) await registrarNovedadUsuario(user, 'Usuario creado');
         return { username: user.username, status: 'saved' };
+    }
+
+    // SICAU manda su propia novedad ya calculada para el usuario (NUEVO,
+    // CAMBIO_DE_DATOS...), igual que hace con cursos/matrículas (ver
+    // registrarNovedadSicau). Nivel 'usuario' para que Sync > Novedades la
+    // distinga de las de curso/matrícula; se ubica por documento (= cédula).
+    async function registrarNovedadUsuario(user, resultado) {
+        await registrarNovedadSicau({
+            nivel: 'usuario',
+            tipo: user.novedad.tipo,
+            motivo: user.novedad.motivo || null,
+            cedula: user.documento ? String(user.documento) : null,
+            cambios: user.novedad.cambios || [],
+            usuario_sicau: user.usuario || null,
+            resultado,
+        });
     }
 
     // ─── CURSOS ───────────────────────────────────────────────────────────────

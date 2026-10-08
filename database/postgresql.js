@@ -19,7 +19,7 @@ const {
     selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
     updateEnrollmentData, updateEnrollmentMoodleId,
     findEnrollmentByUserAndCourse, findEnrollmentWithUserById,
-    updateEnrollmentEstadoQuery, updateEnrollmentSyncFields,
+    updateEnrollmentEstadoQuery, finalizeCourseEnrollmentsQuery, finalizePeriodoEnrollmentsQuery, updateEnrollmentSyncFields,
     updateEnrollmentSyncErrorQuery, updateEnrollmentEstadoSyncQuery, findEnrollmentByUserSubjectPeriod,
     findAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatusQuery,
@@ -41,7 +41,7 @@ const {
     countFormResponses, deleteResponseData,
     selectFormsOwnedOrShared, selectAllFormsWithOwner, insertFormShareData, deleteFormShareData,
     selectFormSharesByForm, findFormShare, findPlatformUserByIdData, searchPlatformUsersForShare,
-    resolveSyncRule, updateCourseSyncFields, insertLogData, selectLogsData,
+    resolveSyncRule, updateCourseSyncFields, insertLogData, selectLogsData, selectRecentModuleLogs,
     updateUserNormalizedData, updateCourseNormalizedData,
     selectSyncRulesAdmin, selectSyncRuleById, findSyncRuleExactMatch, insertSyncRuleData,
     updateSyncRuleData, deleteSyncRuleData,
@@ -468,6 +468,15 @@ function listLogs(limit) {
     });
 }
 
+function listRecentLogsByModule(moduleCode, limit) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectRecentModuleLogs(moduleCode, limit), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 // ─── NORMALIZACIÓN ────────────────────────────────────────────────────────────
 
 function updateUserNormalized(id, fields) {
@@ -622,6 +631,24 @@ function updateEnrollmentSyncStatus(id, statusValue) {
 function updateEnrollmentEstado(id, estado) {
     return new Promise((resolve, reject) => {
         pool.query(updateEnrollmentEstadoQuery(id, normalizeEstado(estado)), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function finalizeCourseEnrollments(courseid) {
+    return new Promise((resolve, reject) => {
+        pool.query(finalizeCourseEnrollmentsQuery(courseid), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function finalizePeriodoEnrollments(periodo) {
+    return new Promise((resolve, reject) => {
+        pool.query(finalizePeriodoEnrollmentsQuery(periodo), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -1507,6 +1534,7 @@ module.exports = {
     findSyncRuleById,
     insertLog,
     listLogs,
+    listRecentLogsByModule,
     updateUserNormalized,
     updateCourseNormalized,
     listSyncRulesAdmin,
@@ -1524,6 +1552,8 @@ module.exports = {
     listAllEnrollmentsWithUsers,
     updateEnrollmentSyncStatus,
     updateEnrollmentEstado,
+    finalizeCourseEnrollments,
+    finalizePeriodoEnrollments,
     setEnrollmentSyncFields,
     markEnrollmentSyncError,
     updateEnrollmentEstadoSync,

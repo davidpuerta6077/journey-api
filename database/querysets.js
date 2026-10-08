@@ -549,6 +549,29 @@ const updateEnrollmentEstadoQuery = (id, estado) => ({
     values: [id, estado]
 });
 
+// "Cierre de semestre" por curso (Módulo Cursos): pasa a Finalizado solo las
+// matrículas activas (Matriculado) de ese curso puntual. Igual que cualquier
+// otro cambio de estado, Moodle las desmatricula sola en el próximo cron de
+// la BD externa (ver fixMoodleExternalDbViews.js) -- esto no llama a Moodle.
+const finalizeCourseEnrollmentsQuery = (courseid) => ({
+    text: `UPDATE ${schema}.enrollments
+           SET estado_anterior = estado, estado = 'Finalizado', fecha_cambio_estado = NOW()
+           WHERE courseid::integer = $1 AND estado = 'Matriculado'
+           RETURNING id`,
+    values: [courseid]
+});
+
+// Mismo cierre de semestre, pero global: todas las matrículas activas del
+// periodo configurado en Configuración > Académico (periodo_actual), sin
+// importar el curso. Se usa desde el botón "Cerrar periodo" global.
+const finalizePeriodoEnrollmentsQuery = (periodo) => ({
+    text: `UPDATE ${schema}.enrollments
+           SET estado_anterior = estado, estado = 'Finalizado', fecha_cambio_estado = NOW()
+           WHERE periodo = $1 AND estado = 'Matriculado'
+           RETURNING id`,
+    values: [periodo]
+});
+
 // Usada por el sync de matrículas: re-vincula courseid (por si aún era null),
 // guarda el id real de la matrícula en Moodle y marca sincronizado = true.
 // El caller decide el estado_sync final: un sync exitoso limpia "error", pero
@@ -1419,6 +1442,31 @@ const findEnrollmentsByCodigoJourneyQuery = (codigoJourney) => ({
 // Se resuelve contra submodules/modules: modules.name es la categoría principal
 // del menú lateral (Nexo Sync, Administrador, ...) y submodules.name el módulo.
 // El front puede afinar el nombre con el árbol del menú (menuItems).
+// Actividad reciente del Home de Nexo: igual que selectLogsData pero
+// restringida al módulo dado (JOIN en vez de LEFT JOIN -- un log sin
+// entity_type o con un código que ya no existe como submódulo no puede
+// pertenecer a ningún módulo, así que se excluye en vez de salir con
+// aplicacion/modulo en null). Pensada para exponerse con un permiso de
+// acceso general (nexo_home), no con admin_logs.
+const selectRecentModuleLogs = (moduleCode, limit) => ({
+    text: `
+        SELECT l.id,
+               l.date,
+               l.type,
+               l.description,
+               l.username,
+               l.entity_type,
+               sm.name AS modulo
+        FROM ${schema}.logs l
+        JOIN ${schema}.submodules sm ON sm.code = l.entity_type
+        JOIN ${schema}.modules m ON m.id = sm.module_id
+        WHERE m.code = $1
+        ORDER BY l.date DESC
+        LIMIT $2
+    `,
+    values: [moduleCode, limit]
+});
+
 const selectLogsData = (limit) => ({
     text: `
         SELECT l.id,
@@ -1771,6 +1819,8 @@ module.exports = {
     findEnrollmentByUserAndCourse,
     findEnrollmentWithUserById,
     updateEnrollmentEstadoQuery,
+    finalizeCourseEnrollmentsQuery,
+    finalizePeriodoEnrollmentsQuery,
     updateEnrollmentSyncFields,
     updateEnrollmentSyncErrorQuery,
     updateEnrollmentEstadoSyncQuery,
@@ -1859,6 +1909,7 @@ module.exports = {
     // logs
     insertLogData,
     selectLogsData,
+    selectRecentModuleLogs,
     // normalización
     updateUserNormalizedData,
     updateCourseNormalizedData,
