@@ -14,7 +14,7 @@ const ROLE_MAP = {
 // aparte porque es el username en Moodle y no se pisa solo (ver CAMPOS_NOVEDAD).
 const CAMPOS_NOVEDAD = [
     'firstname', 'lastname', 'correo_personal', 'telefono', 'celular',
-    'fecha_nacimiento', 'jornada', 'departamento_academico', 'plan_estudios', 'city'
+    'fecha_nacimiento', 'jornada', 'departamento_academico', 'plan_estudios', 'city', 'estado'
 ];
 
 // SICAU manda el grupo como número plano (ej. "105"), pero el código de curso
@@ -99,6 +99,7 @@ module.exports = (injectedDB) => {
             jornada:                user.jornada                || null,
             departamento_academico: user.departamento_academico || null,
             plan_estudios:          user.plan_estudios          || null,
+            estado:                 user.estado                 || null,
             moodle_id:              null,
             sincronizado:           false
         });
@@ -124,7 +125,18 @@ module.exports = (injectedDB) => {
 
     // ─── CURSOS ───────────────────────────────────────────────────────────────
 
-    async function saveSicauCurso(course) {
+    async function saveSicauCurso(course, usuarioOverride) {
+        const usuario = usuarioOverride || course.usuario || null;
+        // RETIRO puede llegar tanto por el endpoint unificado (curso+matrículas)
+        // como por /send_courses_sicau a secas (p.ej. "Gestión de grupos
+        // virtuales" desmarca que un curso ya no lo necesita y manda solo el
+        // curso, sin enrollments): se revisa aquí, no en saveSicauCursoYMatriculas,
+        // para que ambos caminos lo manejen igual en vez de que el segundo caiga
+        // en el flujo normal de curso y falle por falta de datos de profesor.
+        if (course.novedad?.tipo === 'RETIRO') {
+            return retirarCursoSicau(course, usuario);
+        }
+
         const {
             codigo_asignatura,
             periodo,
@@ -162,11 +174,19 @@ module.exports = (injectedDB) => {
         // tiene que ser único en Moodle.
         let resultado;
         const existing = await data.findCourseSicau(idnumber);
+        // Las fechas vuelven de Postgres como Date (columna DATE, igual que
+        // fecha_nacimiento en usuarios): se normalizan a "YYYY-MM-DD" antes de
+        // comparar para no marcar novedad por un cambio de tipo que no es real.
+        const toFecha = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v) || null;
+        const fechaInicioNueva = fecha_inicio || null;
+        const fechaFinNueva = fecha_fin || null;
+
         if (existing.length > 0) {
             const curso = existing[0];
             const cambioProfesor  = (curso.nombre_profesor || null) !== (nombre_profesor || null);
             const cambioAsignatura = (curso.nombre_asignatura || null) !== (nombre_asignatura || null);
-            if (cambioProfesor || cambioAsignatura) {
+            const cambioFechas = toFecha(curso.fecha_inicio) !== fechaInicioNueva || toFecha(curso.fecha_fin) !== fechaFinNueva;
+            if (cambioProfesor || cambioAsignatura || cambioFechas) {
                 // Si el curso ya existe en Moodle (moodle_id), no es un curso nuevo,
                 // solo cambió su metadata: se marca "novedad" para que Módulo
                 // Cursos lo muestre en amarillo con opción de actualizar en Moodle
@@ -174,11 +194,67 @@ module.exports = (injectedDB) => {
                 // "pendiente": todavía necesita el ciclo completo de duplicado en
                 // Sync Cursos, no un simple update de metadata.
                 const estadoDestino = curso.moodle_id ? 'novedad' : 'pendiente';
+                // Mismo patrón que users.novedad_datos (ver CAMPOS_NOVEDAD arriba):
+                // se guarda el último cambio en la fila del curso para que Módulo
+                // Cursos lo muestre al expandir la fila, igual que ya se ve en
+                // Sync > Usuarios, sin tener que ir a buscarlo a Sync > Novedades.
+                const cambiosDatos = [];
+                if (cambioProfesor) cambiosDatos.push({ campo: 'nombre_profesor', anterior: curso.nombre_profesor || null, actual: nombre_profesor || null });
+                if (cambioFechas) cambiosDatos.push(
+                    ...[
+                        { campo: 'fecha_inicio', anterior: toFecha(curso.fecha_inicio), actual: fechaInicioNueva },
+                        { campo: 'fecha_fin', anterior: toFecha(curso.fecha_fin), actual: fechaFinNueva },
+                    ].filter(c => c.anterior !== c.actual)
+                );
                 await data.updateCourseFromSicau(curso.id, {
                     nombre_profesor, fullname, shortname, nombre_asignatura,
-                    documento, celular, correo_institucional, estado_sync: estadoDestino
+                    documento, celular, correo_institucional,
+                    fecha_inicio: fechaInicioNueva, fecha_fin: fechaFinNueva,
+                    estado_sync: estadoDestino,
+                    novedad_datos: cambiosDatos
                 });
                 resultado = { idnumber, status: 'updated_profesor' };
+
+                // Igual que con matrículas: se deja constancia en sicau_novedades
+                // (Sync > Novedades) de qué cambió, no solo se marca el curso en
+                // amarillo en Módulo Cursos. Antes esto no se registraba y un
+                // cambio de profesor o de fechas quedaba mudo para quien revisa
+                // novedades (solo se veía si entraban a Módulo Cursos).
+                if (cambioProfesor) {
+                    await registrarNovedadSicau({
+                        nivel: 'curso',
+                        tipo: 'CAMBIO_DE_PROFESOR',
+                        motivo: null,
+                        codigo_journey: idnumber,
+                        codigo_asignatura,
+                        nombre_asignatura,
+                        periodo,
+                        grupo,
+                        cedula: null,
+                        cambios: [{ campo: 'nombre_profesor', anterior: curso.nombre_profesor || null, actual: nombre_profesor || null }],
+                        usuario_sicau: usuario,
+                        resultado: 'Curso actualizado',
+                    });
+                }
+                if (cambioFechas) {
+                    await registrarNovedadSicau({
+                        nivel: 'curso',
+                        tipo: 'CAMBIO_DE_FECHAS',
+                        motivo: null,
+                        codigo_journey: idnumber,
+                        codigo_asignatura,
+                        nombre_asignatura,
+                        periodo,
+                        grupo,
+                        cedula: null,
+                        cambios: [
+                            { campo: 'fecha_inicio', anterior: toFecha(curso.fecha_inicio), actual: fechaInicioNueva },
+                            { campo: 'fecha_fin', anterior: toFecha(curso.fecha_fin), actual: fechaFinNueva },
+                        ].filter(c => c.anterior !== c.actual),
+                        usuario_sicau: usuario,
+                        resultado: 'Curso actualizado',
+                    });
+                }
             } else {
                 resultado = { idnumber, status: 'exists' };
             }
@@ -384,10 +460,10 @@ module.exports = (injectedDB) => {
     async function saveSicauCursoYMatriculas(item, usuario) {
         const { course, enrollments } = item;
         usuario = usuario || course?.usuario || item.usuario;
-        if (course?.novedad?.tipo === 'RETIRO') {
-            return { course: await retirarCursoSicau(course, usuario), enrollments: [] };
+        const courseResult = await saveSicauCurso(course, usuario);
+        if (courseResult.status === 'retiro') {
+            return { course: courseResult, enrollments: [] };
         }
-        const courseResult = await saveSicauCurso(course);
 
         const enrollmentResults = [];
         for (const enr of (enrollments || [])) {
