@@ -79,6 +79,7 @@ function normalizeUser(u) {
     jornada: titleCaseAcademico(u.jornada),
     departamento_academico: titleCaseAcademico(u.departamento_academico),
     plan_estudios: titleCaseAcademico(u.plan_estudios),
+    estado: normalizeEstado(u.estado),
   };
 }
 

@@ -151,6 +151,13 @@ router.post('/search_user_sicau', async (req, res) => {
  *                     - type: object
  *                       properties:
  *                         usuario: { type: string, example: "jor.ramirez", description: "Usuario de SICAU que originó el envío, para el log de auditoría" }
+ *                         estado:
+ *                           type: string
+ *                           example: "Matriculado"
+ *                           description: >
+ *                             Estado académico del estudiante que manda SICAU (mismo valor que el estado
+ *                             de matrícula, ver Enrollment.estado). Al crear el usuario siempre llega
+ *                             "Matriculado"; en envíos posteriores puede cambiar (retiro, cancelación...).
  *                         novedad:
  *                           type: object
  *                           description: >
@@ -236,6 +243,18 @@ router.post('/send_users_sicau', async (req, res, next) => {
  *                     fecha_inicio:      { type: string, example: "2026-01-15" }
  *                     fecha_fin:         { type: string, example: "2026-06-15" }
  *                     usuario:           { type: string, example: "jor.ramirez", description: "Usuario de SICAU que originó el envío, para el log de auditoría" }
+ *                     novedad:
+ *                       type: object
+ *                       description: >
+ *                         Si SICAU marca que el curso ya no necesita grupo virtual (p.ej. desde
+ *                         "Gestión de grupos virtuales"), manda tipo "RETIRO": se desmatriculan sus
+ *                         estudiantes activos y no se crea/actualiza el curso. Un cambio de profesor
+ *                         o de fechas de un curso existente NO se manda por aquí: journey lo detecta
+ *                         solo comparando contra lo ya guardado y registra la novedad (CAMBIO_DE_PROFESOR
+ *                         / CAMBIO_DE_FECHAS) automáticamente.
+ *                       properties:
+ *                         tipo:   { type: string, example: "RETIRO" }
+ *                         motivo: { type: string, example: "NO_REQUIERE_CURSO_VIRTUAL" }
  *     responses:
  *       200:
  *         description: Cursos guardados
@@ -369,6 +388,16 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
  *                         fecha_inicio:      { type: string, example: "2026-01-15" }
  *                         fecha_fin:         { type: string, example: "2026-06-15" }
  *                         usuario:           { type: string, example: "jor.ramirez", description: "Usuario de SICAU que originó el envío, para el log de auditoría" }
+ *                         novedad:
+ *                           type: object
+ *                           description: >
+ *                             tipo "RETIRO" si el curso ya no necesita grupo virtual: se desmatriculan
+ *                             sus estudiantes activos y no se crea/actualiza el curso (enrollments se
+ *                             ignora en ese caso). Un cambio de profesor o de fechas lo detecta journey
+ *                             solo, comparando contra lo ya guardado; no se manda por aquí.
+ *                           properties:
+ *                             tipo:   { type: string, example: "RETIRO" }
+ *                             motivo: { type: string, example: "NO_REQUIERE_CURSO_VIRTUAL" }
  *                     enrollments:
  *                       type: array
  *                       items:

@@ -79,6 +79,52 @@ test('matrícula sin novedad no registra nada', async () => {
     assert.ok(!calls.some(c => c[0] === 'insertSicauNovedad'));
 });
 
+test('RETIRO de curso enviado directo a saveSicauCurso (sin pasar por el endpoint unificado) también se retira', async () => {
+    const { db, calls } = fakeDB();
+    const result = await createSicauCtrl(db).saveSicauCurso(cursoRetiro);
+
+    assert.strictEqual(result.status, 'retiro');
+    assert.ok(!calls.some(c => c[0] === 'findCourseSicau'), 'no debe tratarse como curso normal');
+    assert.ok(calls.some(c => c[0] === 'insertSicauNovedad'));
+});
+
+test('cambio de profesor en un curso existente queda registrado como novedad', async () => {
+    const cursoExistente = {
+        id: 5, moodle_id: 10, nombre_profesor: 'Johana Ramirez', nombre_asignatura: 'Base de Datos II',
+        fecha_inicio: '2026-01-15', fecha_fin: '2026-06-15',
+    };
+    const { db, calls } = fakeDB({ findCourseSicau: async () => [cursoExistente], updateCourseFromSicau: async () => [] });
+    await createSicauCtrl(db).saveSicauCurso({
+        codigo_asignatura: 'FB0010', nombre_asignatura: 'Base de Datos II', periodo: '20261', grupo: '101',
+        nombre_profesor: 'Carlos Gomez', fecha_inicio: '2026-01-15', fecha_fin: '2026-06-15',
+    });
+
+    const [, row] = calls.find(c => c[0] === 'insertSicauNovedad');
+    assert.strictEqual(row.nivel, 'curso');
+    assert.strictEqual(row.tipo, 'CAMBIO_DE_PROFESOR');
+    assert.deepStrictEqual(row.cambios, [{ campo: 'nombre_profesor', anterior: 'Johana Ramirez', actual: 'Carlos Gomez' }]);
+});
+
+test('cambio de fechas en un curso existente queda registrado como novedad', async () => {
+    const cursoExistente = {
+        id: 5, moodle_id: 10, nombre_profesor: 'Johana Ramirez', nombre_asignatura: 'Base de Datos II',
+        fecha_inicio: '2026-01-15', fecha_fin: '2026-06-15',
+    };
+    const { db, calls } = fakeDB({ findCourseSicau: async () => [cursoExistente], updateCourseFromSicau: async () => [] });
+    await createSicauCtrl(db).saveSicauCurso({
+        codigo_asignatura: 'FB0010', nombre_asignatura: 'Base de Datos II', periodo: '20261', grupo: '101',
+        nombre_profesor: 'Johana Ramirez', fecha_inicio: '2026-01-20', fecha_fin: '2026-06-20',
+    });
+
+    const novedadesFechas = calls.filter(c => c[0] === 'insertSicauNovedad').map(c => c[1]);
+    const row = novedadesFechas.find(n => n.tipo === 'CAMBIO_DE_FECHAS');
+    assert.ok(row, 'debe registrar CAMBIO_DE_FECHAS');
+    assert.deepStrictEqual(row.cambios, [
+        { campo: 'fecha_inicio', anterior: '2026-01-15', actual: '2026-01-20' },
+        { campo: 'fecha_fin', anterior: '2026-06-15', actual: '2026-06-20' },
+    ]);
+});
+
 test('si falla el registro de la novedad, la ingesta sigue', async () => {
     const { db } = fakeDB({ insertSicauNovedad: async () => { throw new Error('tabla no existe'); } });
     const original = console.error; console.error = () => {};

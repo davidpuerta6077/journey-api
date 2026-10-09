@@ -30,16 +30,16 @@ const insertUsuarioData = (data) => {
     const {
         username, firstname, lastname, email, password, city, country,
         documento, correo_personal, telefono, celular, fecha_nacimiento,
-        jornada, departamento_academico, plan_estudios, moodle_id
+        jornada, departamento_academico, plan_estudios, moodle_id, estado
     } = data;
 
     const text = `
         INSERT INTO ${schema}.users (
             username, firstname, lastname, email, password, city, country,
             documento, correo_personal, telefono, celular, fecha_nacimiento,
-            jornada, departamento_academico, plan_estudios, moodle_id
+            jornada, departamento_academico, plan_estudios, moodle_id, estado
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
         ) RETURNING *
     `;
 
@@ -55,7 +55,12 @@ const insertUsuarioData = (data) => {
         jornada || null,
         departamento_academico || null,
         plan_estudios || null,
-        moodle_id || null
+        moodle_id || null,
+        // Estado académico (mismo catálogo que enrollments.estado, ver
+        // ESTADOS_MATRICULA en services/normalize.js): un estudiante que llega
+        // por primera vez siempre arranca "Matriculado"; SICAU puede mandarlo
+        // explícito en envíos posteriores (retiro, cancelación...).
+        estado || 'Matriculado'
     ];
 
     return { text, values };
@@ -169,20 +174,21 @@ const updateUserSicau = (data) => ({
         firstname = COALESCE($1, firstname), lastname = COALESCE($2, lastname), city = $3, country = $4,
         documento = COALESCE($5, documento), correo_personal = $6, telefono = $7, celular = $8,
         fecha_nacimiento = $9, jornada = $10, departamento_academico = $11,
-        plan_estudios = $12 WHERE id = $13`,
+        plan_estudios = $12, estado = COALESCE($13, estado) WHERE id = $14`,
     values: [
         data.firstname, data.lastname, data.city || 'Medellín', data.country || 'CO',
         data.documento || null, data.correo_personal || null,
         data.telefono || null, data.celular || null,
         data.fecha_nacimiento || null, data.jornada || null,
         data.departamento_academico || null, data.plan_estudios || null,
+        data.estado || null,
         data.id
     ]
 });
 
 const selectUserCompareFields = (id) => ({
     text: `SELECT email, firstname, lastname, correo_personal, telefono, celular,
-           fecha_nacimiento, jornada, departamento_academico, plan_estudios, city
+           fecha_nacimiento, jornada, departamento_academico, plan_estudios, city, estado
            FROM ${schema}.users WHERE id = $1`,
     values: [id]
 });
@@ -263,7 +269,7 @@ const selectCoursesForSync = () => ({
            numsections, moodle_id, sincronizado, estado_sync, ultimo_error_sync,
            departamento, programa, nombre_profesor, documento, celular, correo_institucional,
            fecha_inicio, fecha_fin, periodo, grupo, codigo_asignatura, nombre_asignatura, templatecourse,
-           created_at, synced_at
+           created_at, synced_at, novedad_datos
            FROM ${schema}.courses ORDER BY id DESC`,
     values: []
 });
@@ -319,15 +325,16 @@ function updateCourseSyncErrorQuery(id, errorMessage) {
 // falta empujarle la metadata nueva desde Módulo Cursos) o "pendiente" si
 // nunca se creó (todavía necesita el ciclo completo de duplicado en Sync
 // Cursos, no un simple update).
-function updateCourseFromSicauQuery(id, { nombre_profesor, documento, celular, correo_institucional, fullname, shortname, nombre_asignatura, estado_sync }) {
+function updateCourseFromSicauQuery(id, { nombre_profesor, documento, celular, correo_institucional, fullname, shortname, nombre_asignatura, fecha_inicio, fecha_fin, estado_sync, novedad_datos }) {
     return {
         text: `UPDATE ${schema}.courses
                SET nombre_profesor = $2, documento = $3, celular = $4, correo_institucional = $5,
-                   fullname = $6, shortname = $7, nombre_asignatura = $8,
-                   sincronizado = false, estado_sync = $9
+                   fullname = $6, shortname = $7, nombre_asignatura = $8, fecha_inicio = $9, fecha_fin = $10,
+                   sincronizado = false, estado_sync = $11, novedad_datos = $12
                WHERE id = $1::integer`,
         values: [id, nombre_profesor || null, documento || null, celular || null, correo_institucional || null,
-                 fullname, shortname, nombre_asignatura || null, estado_sync]
+                 fullname, shortname, nombre_asignatura || null, fecha_inicio || null, fecha_fin || null, estado_sync,
+                 JSON.stringify(novedad_datos || [])]
     };
 }
 
@@ -504,7 +511,7 @@ const findAllEnrollmentsWithUsers = () => ({
     text: `SELECT
         e.id, e.userid, e.courseid, e.role, e.moodle_enrollment_id,
         e.codigo_asignatura, e.nombre_asignatura, e.programa,
-        e.periodo, e.grupo, e.codigo_journey, e.estado,
+        e.periodo, e.grupo, e.codigo_journey, e.estado, e.estado_anterior, e.fecha_cambio_estado,
         e.fecha_creacion_journey, e.created_at, e.sincronizado, e.estado_sync, e.ultimo_error_sync,
         u.firstname, u.lastname, u.email, u.documento
     FROM ${schema}.enrollments e
