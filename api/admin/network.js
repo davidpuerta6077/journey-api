@@ -843,6 +843,47 @@ router.delete('/settings/:categoria/:clave', checkAuth, checkPermission('setting
 
 /**
  * @swagger
+ * /admin/ia:
+ *   get: { summary: Configuración de IA (sin la API key; solo si existe y sus últimos 4 caracteres), tags: [Admin] }
+ *   put: { summary: Guardar configuración de IA (proveedor, modelo, ollama_url, anthropic_key opcional se cifra, quitar_key), tags: [Admin] }
+ * /admin/ia/probar:
+ *   post: { summary: Probar la conexión con la IA configurada, tags: [Admin] }
+ */
+router.get('/ia', checkAuth, checkPermission('settings'), async (req, res, next) => {
+    try {
+        response.success(req, res, await ctrl.getIAConfig(), 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.put('/ia', checkAuth, checkPermission('settings'), saveLog('settings', {
+    // Nunca registrar valores: el body puede traer la API key.
+    descripcion: (req) => `Actualizó la configuración de IA (proveedor ${req._logIA?.proveedor || '—'}${req._logIA?.keyCambiada ? ', API key cambiada' : ''}${req._logIA?.keyQuitada ? ', API key quitada' : ''})`,
+}), async (req, res, next) => {
+    try {
+        const r = await ctrl.saveIAConfig(req.body, req.user?.email);
+        req._logIA = r;
+        response.success(req, res, r, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post('/ia/probar', checkAuth, checkPermission('settings'), saveLog('settings', {
+    descripcion: (req) => `Probó la conexión de IA (${req._logIA || '—'})`,
+}), async (req, res, next) => {
+    try {
+        const r = await ctrl.probarIA();
+        req._logIA = `${r.proveedor} ${r.modelo}`;
+        response.success(req, res, r, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
  * /admin/settings/logo:
  *   post:
  *     summary: Subir el logo del hub (se guarda como setting apariencia.logo_url)

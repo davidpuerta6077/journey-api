@@ -1,5 +1,7 @@
 const { moodleRequest } = require('../../services/moodleService');
 const { assertMoodleOk } = require('../../services/moodleAssert');
+const iaConfig = require('../../services/ia/config');
+const { createIAConfigurada } = require('../../services/ia');
 
 module.exports = (injectedDB) => {
     let data = injectedDB;
@@ -266,8 +268,19 @@ module.exports = (injectedDB) => {
 
     // ─── SETTINGS (apartado Configuración) ───────────────────────────────────────
 
+    // La categoría 'ia' (incluida la API key cifrada) solo se maneja por
+    // /admin/ia: así la key nunca se lista ni queda en claro en los logs.
+    function rechazarCategoriaIA(categoria) {
+        if (categoria === iaConfig.CATEGORIA) {
+            const err = new Error('La configuración de IA se edita en Configuración > Inteligencia artificial');
+            err.status = 400;
+            throw err;
+        }
+    }
+
     async function listSettings(categoria) {
-        return data.getSettings(categoria);
+        const rows = await data.getSettings(categoria);
+        return rows.filter((r) => !(r.categoria === iaConfig.CATEGORIA && r.clave === 'anthropic_key'));
     }
 
     async function saveSetting(body, updatedBy) {
@@ -277,12 +290,33 @@ module.exports = (injectedDB) => {
             err.status = 400;
             throw err;
         }
+        rechazarCategoriaIA(categoria);
         return data.upsertSetting(categoria, clave, valor, updatedBy);
     }
 
     async function removeSetting(categoria, clave) {
+        rechazarCategoriaIA(categoria);
         await data.deleteSetting(categoria, clave);
         return { categoria, clave, deleted: true };
+    }
+
+    // ─── IA (Configuración > Inteligencia artificial) ─────────────────────────
+
+    async function getIAConfig() {
+        return iaConfig.verConfig({ db: data });
+    }
+
+    async function saveIAConfig(body, email) {
+        return iaConfig.guardarConfig({ db: data, body: body || {}, email });
+    }
+
+    // Generación mínima con la configuración guardada, para el botón "Probar conexión".
+    async function probarIA() {
+        const r = await createIAConfigurada(data).generarTexto({
+            system: 'Responde únicamente con la palabra OK.',
+            prompt: 'Prueba de conexión. Responde OK.',
+        });
+        return { ok: true, proveedor: r.proveedor, modelo: r.modelo, respuesta: r.texto.slice(0, 100) };
     }
 
     // Cierre de semestre global (botón en Configuración > Académico): pasa a
@@ -347,6 +381,7 @@ module.exports = (injectedDB) => {
         getPermisosMatrix, grantPermiso, revokePermiso,
         listLogs, listRecentNexoActivity,
         listSettings, saveSetting, removeSetting, finalizePeriodo,
+        getIAConfig, saveIAConfig, probarIA,
         listMenuLinksAdmin, listActiveMenuLinks, createMenuLink, updateMenuLinkAdmin, deleteMenuLinkAdmin
     };
 };

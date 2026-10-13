@@ -53,7 +53,7 @@ module.exports = (injectedDB, deps = {}) => {
 
     let data = injectedDB;
     if (!data) data = require('../../database/postgresql');
-    const ia = deps.ia || require('../../services/ia').createIA();
+    const ia = deps.ia || require('../../services/ia').createIAConfigurada(data);
     const storage = deps.storage || require('../../services/onix/storage');
     const word = deps.word || require('../../services/onix/word');
 

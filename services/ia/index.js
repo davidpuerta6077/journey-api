@@ -2,33 +2,37 @@ const createClaude = require('./claude');
 const createOllama = require('./ollama');
 const { iaError } = require('./errors');
 
-// Servicio de IA genérico de Bravo Hub. El proveedor se elige con IA_PROVIDER
-// (claude | ollama, por defecto ollama); cambiarlo es editar .env y reiniciar.
-// No hay fallback automático entre proveedores: si el elegido falla, se informa.
-function createIA({ env = process.env, claudeClient, fetchFn } = {}) {
+// Servicio de IA genérico de Bravo Hub. El proveedor sale de IA_PROVIDER
+// (claude | ollama, por defecto ollama). Con `getEnv` las variables se leen en
+// cada generación (Configuración > Inteligencia artificial, sin reiniciar);
+// sin él se usa `env` fijo. No hay fallback automático entre proveedores.
+function construir(env, { claudeClient, fetchFn }) {
     const proveedor = (env.IA_PROVIDER || 'ollama').trim().toLowerCase();
-    let impl = null;
-
-    function getImpl() {
-        if (impl) return impl;
-        if (proveedor === 'claude') {
-            if (!env.ANTHROPIC_API_KEY && !claudeClient) {
-                throw iaError('La IA no está configurada: falta ANTHROPIC_API_KEY');
-            }
-            impl = createClaude({ client: claudeClient, apiKey: env.ANTHROPIC_API_KEY, model: env.IA_MODEL || 'claude-opus-5-5' });
-        } else if (proveedor === 'ollama') {
-            impl = createOllama({ fetchFn, url: env.OLLAMA_URL || 'http://10.0.17.77:11434', model: env.IA_MODEL || 'qwen2.5:7b' });
-        } else {
-            throw iaError(`La IA no está configurada: proveedor "${proveedor}" no válido (usa claude u ollama)`);
+    if (proveedor === 'claude') {
+        if (!env.ANTHROPIC_API_KEY && !claudeClient) {
+            throw iaError('La IA no está configurada: falta la API key de Claude (Configuración > Inteligencia artificial)');
         }
-        return impl;
+        return createClaude({ client: claudeClient, apiKey: env.ANTHROPIC_API_KEY, model: env.IA_MODEL || 'claude-opus-5-5' });
     }
+    if (proveedor === 'ollama') {
+        return createOllama({ fetchFn, url: env.OLLAMA_URL || 'http://10.0.17.77:11434', model: env.IA_MODEL || 'qwen2.5:7b' });
+    }
+    throw iaError(`La IA no está configurada: proveedor "${proveedor}" no válido (usa claude u ollama)`);
+}
 
+function createIA({ env = process.env, getEnv, claudeClient, fetchFn } = {}) {
     return {
         async generarTexto({ system, prompt }) {
-            return getImpl().generar({ system, prompt });
+            const e = getEnv ? await getEnv() : env;
+            return construir(e, { claudeClient, fetchFn }).generar({ system, prompt });
         },
     };
 }
 
-module.exports = { createIA };
+// IA de Bravo Hub: configuración guardada en BD (settings 'ia') sobre el .env.
+function createIAConfigurada(db = require('../../database/postgresql'), env = process.env) {
+    const { leerEnvEfectivo } = require('./config');
+    return createIA({ getEnv: () => leerEnvEfectivo({ db, env }) });
+}
+
+module.exports = { createIA, createIAConfigurada };
