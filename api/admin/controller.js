@@ -2,6 +2,7 @@ const fs = require('fs');
 const { moodleRequest } = require('../../services/moodleService');
 const { assertMoodleOk } = require('../../services/moodleAssert');
 const iaConfig = require('../../services/ia/config');
+const { esSecreto } = require('../../services/settingsSecretos');
 const { createIAConfigurada } = require('../../services/ia');
 
 module.exports = (injectedDB) => {
@@ -281,7 +282,11 @@ module.exports = (injectedDB) => {
 
     async function listSettings(categoria) {
         const rows = await data.getSettings(categoria);
-        return rows.filter((r) => !(r.categoria === iaConfig.CATEGORIA && r.clave === 'anthropic_key'));
+        return rows
+            .filter((r) => !(r.categoria === iaConfig.CATEGORIA && r.clave === 'anthropic_key'))
+            .map((r) => (esSecreto(r.categoria, r.clave)
+                ? { ...r, valor: '', secreto: { configurado: !!r.valor, ultimos: String(r.valor || '').slice(-4) } }
+                : r));
     }
 
     async function saveSetting(body, updatedBy) {
@@ -292,6 +297,11 @@ module.exports = (injectedDB) => {
             throw err;
         }
         rechazarCategoriaIA(categoria);
+        if (esSecreto(categoria, clave) && (typeof valor !== 'string' || !valor.trim())) {
+            const err = new Error('Escribe el nuevo valor (vacío no cambia el actual)');
+            err.status = 400;
+            throw err;
+        }
         return data.upsertSetting(categoria, clave, valor, updatedBy);
     }
 

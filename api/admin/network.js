@@ -8,6 +8,7 @@ const postgresql = require('../../database/postgresql');
 const checkAuth = require('../../middleware/checkAuth');
 const checkPermission = require('../../middleware/checkPermissions');
 const saveLog = require('../../middleware/saveLog');
+const { valorParaLog } = require('../../services/settingsSecretos');
 
 // ─── USUARIOS DE PLATAFORMA ─────────────────────────────────────────────────────
 
@@ -801,7 +802,7 @@ router.get('/settings', checkAuth, checkPermission('settings'), async (req, res,
  */
 router.put('/settings', checkAuth, checkPermission('settings'), saveLog('settings', {
     descripcion: (req) => `Guardó el setting "${req.body?.categoria}.${req.body?.clave}"`,
-    detalle: (req) => [{ categoria: req.body?.categoria, clave: req.body?.clave, valor: req.body?.valor }],
+    detalle: (req) => [{ categoria: req.body?.categoria, clave: req.body?.clave, valor: valorParaLog(req.body?.categoria, req.body?.clave, req.body?.valor) }],
 }), async (req, res, next) => {
     try {
         const result = await ctrl.saveSetting(req.body, req.user?.email);
