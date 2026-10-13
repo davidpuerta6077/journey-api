@@ -142,8 +142,8 @@ test('getEvidenciaArchivo: solo imágenes y solo con acceso', async () => {
     const ana = await ctrl.getActor('ana@x.co');
     const coord = await ctrl.getActor('coord@x.co');
     const beto = await ctrl.getActor('beto@x.co');
-    assert.deepStrictEqual(await ctrl.getEvidenciaArchivo(ana, '5000'), { ruta: '/base/1/a.png' });
-    assert.deepStrictEqual(await ctrl.getEvidenciaArchivo(coord, '5000'), { ruta: '/base/1/a.png' });
+    assert.deepStrictEqual(await ctrl.getEvidenciaArchivo(ana, '5000'), { datos: Buffer.from('img'), mime: 'image/png' });
+    assert.deepStrictEqual(await ctrl.getEvidenciaArchivo(coord, '5000'), { datos: Buffer.from('img'), mime: 'image/png' });
     await assert.rejects(ctrl.getEvidenciaArchivo(beto, '5000'), no(404));
     await assert.rejects(ctrl.getEvidenciaArchivo(ana, '5001'), no(404));
 });

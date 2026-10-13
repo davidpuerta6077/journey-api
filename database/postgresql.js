@@ -1533,6 +1533,9 @@ const onix = {
 
     listUsuariosConPerfil: (areaId, mes, anio) => query(onixQueries.usuariosConPerfil(areaId, mes, anio)),
 
+    insertArchivo: (userId, mime, datos) => queryOne(onixQueries.insertArchivo(userId, mime, datos)),
+    getArchivo: (id) => queryOne(onixQueries.archivo(id)),
+    deleteArchivo: (id) => query(onixQueries.deleteArchivo(id)),
     listLogsDisponibles: (email, mes, anio) => query(onixQueries.logsDisponibles(email, mes, anio)),
     getLogsPorIds: (ids) => query(onixQueries.logsPorIds(ids)),
     insertRegistroLogs: (registroId, ids) => query(onixQueries.insertRegistroLogs(registroId, ids)),

@@ -241,8 +241,10 @@ router.delete('/evidencias/:id', checkAuth, checkPermission(USE), saveLog(USE, {
 }));
 
 router.get('/evidencias/:id/archivo', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
-    const { ruta } = await ctrl.getEvidenciaArchivo(actor, req.params.id);
-    res.sendFile(ruta);
+    const { datos, mime } = await ctrl.getEvidenciaArchivo(actor, req.params.id);
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.send(datos);
 }));
 
 /**

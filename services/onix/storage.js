@@ -1,10 +1,9 @@
 const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
 
-// Archivos de evidencia del módulo Informes. Viven en storage/onix (fuera de
-// uploads/, que se sirve como estático público) y solo se entregan por el
-// endpoint autenticado GET /onix/evidencias/:id/archivo.
+// Imágenes de evidencia del módulo Informes. Se guardan en la BD (bytea, tabla
+// onix_archivos) porque el disco del contenedor (App Runner) no persiste entre
+// despliegues. La referencia que queda en onix_evidencias.contenido es el id.
+// Solo se entregan por el endpoint autenticado GET /onix/evidencias/:id/archivo.
 const TIPOS = { 'image/jpeg': 'jpg', 'image/png': 'png' };
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -14,41 +13,37 @@ function httpError(message, status) {
     return err;
 }
 
-function createStorage(baseDir) {
-    const base = path.resolve(baseDir);
+function createStorage(injectedDB) {
+    const db = () => injectedDB || require('../../database/postgresql');
 
-    function rutaAbsoluta(rel) {
-        const abs = path.resolve(base, String(rel));
-        if (!abs.startsWith(base + path.sep)) throw httpError('No encontrado', 404);
-        return abs;
+    function idDe(ref) {
+        const n = Number(ref);
+        if (!Number.isInteger(n) || n <= 0) throw httpError('No encontrado', 404);
+        return n;
     }
 
     async function guardarImagen(userId, file) {
-        const ext = TIPOS[file.mimetype];
-        if (!ext) throw httpError('Solo se permiten imágenes JPG o PNG', 400);
+        if (!TIPOS[file.mimetype]) throw httpError('Solo se permiten imágenes JPG o PNG', 400);
         if (file.size > MAX_BYTES) throw httpError('La imagen supera 5 MB', 400);
-        const dir = path.join(base, String(userId));
-        await fs.promises.mkdir(dir, { recursive: true });
-        const nombre = `${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
-        await file.mv(path.join(dir, nombre));
-        return `${userId}/${nombre}`;
+        // express-fileupload con useTempFiles deja los bytes en un temporal.
+        const datos = file.tempFilePath ? await fs.promises.readFile(file.tempFilePath) : file.data;
+        if (file.tempFilePath) await fs.promises.unlink(file.tempFilePath).catch(() => {});
+        const archivo = await db().onix.insertArchivo(userId, file.mimetype, datos);
+        return String(archivo.id);
     }
 
-    async function leer(rel) {
-        return fs.promises.readFile(rutaAbsoluta(rel));
+    async function leer(ref) {
+        const archivo = await db().onix.getArchivo(idDe(ref));
+        if (!archivo) throw httpError('No encontrado', 404);
+        return { datos: archivo.datos, mime: archivo.mime };
     }
 
-    async function borrar(rel) {
-        const abs = rutaAbsoluta(rel);
-        await fs.promises.unlink(abs).catch((e) => { if (e.code !== 'ENOENT') throw e; });
+    async function borrar(ref) {
+        await db().onix.deleteArchivo(idDe(ref));
     }
 
-    function extension(rel) {
-        return path.extname(String(rel)).toLowerCase() === '.png' ? 'png' : 'jpg';
-    }
-
-    return { guardarImagen, rutaAbsoluta, leer, borrar, extension };
+    return { guardarImagen, leer, borrar };
 }
 
-module.exports = createStorage(path.join(__dirname, '../../storage/onix'));
+module.exports = createStorage();
 module.exports.createStorage = createStorage;

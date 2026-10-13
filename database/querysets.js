@@ -1841,6 +1841,13 @@ const onixQueries = {
 
     // Acciones propias del mes en Bravo Hub (logs) aún no asignadas a un
     // registro. Sin consultas (GET) ni acciones del propio módulo Informes.
+    insertArchivo: (userId, mime, datos) => ({
+        text: `INSERT INTO ${schema}.onix_archivos (user_id, mime, datos) VALUES ($1, $2, $3) RETURNING id`,
+        values: [userId, mime, datos],
+    }),
+    archivo: (id) => ({ text: `SELECT id, mime, datos FROM ${schema}.onix_archivos WHERE id = $1`, values: [id] }),
+    deleteArchivo: (id) => ({ text: `DELETE FROM ${schema}.onix_archivos WHERE id = $1`, values: [id] }),
+
     logsDisponibles: (email, mes, anio) => ({
         text: `SELECT l.id, l.date, l.type, l.description, l.entity_type, m.name AS aplicacion, sm.name AS modulo
                FROM ${schema}.logs l

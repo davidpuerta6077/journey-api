@@ -77,9 +77,7 @@ function fakeStorage() {
         borrados,
         guardarImagen: async (uid, file) => `${uid}/nuevo.${file.mimetype === 'image/png' ? 'png' : 'jpg'}`,
         borrar: async (rel) => { borrados.push(rel); },
-        rutaAbsoluta: (rel) => `/base/${rel}`,
-        leer: async () => Buffer.from('img'),
-        extension: (rel) => (rel.endsWith('.png') ? 'png' : 'jpg'),
+        leer: async (rel) => ({ datos: Buffer.from('img'), mime: rel.endsWith('.png') ? 'image/png' : 'image/jpeg' }),
     };
 }
 

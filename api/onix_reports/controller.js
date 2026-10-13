@@ -334,7 +334,7 @@ module.exports = (injectedDB, deps = {}) => {
     async function getEvidenciaArchivo(actor, id) {
         const e = await data.onix.getEvidencia(idValido(id));
         if (!e || e.tipo !== 'imagen' || !(await puedeVer(actor, e.user_id))) throw noEncontrado();
-        return { ruta: storage.rutaAbsoluta(e.contenido) };
+        return storage.leer(e.contenido);
     }
 
     // ── Informes ────────────────────────────────────────────────────────────
@@ -392,9 +392,11 @@ module.exports = (injectedDB, deps = {}) => {
         if (!evidencias.length) {
             throw httpError(`No hay evidencias de "${act.nombre}" en ${MESES[p.mes - 1]} de ${p.anio}`, 400);
         }
-        const conImagen = await Promise.all(evidencias.map(async (e) => (e.tipo === 'imagen'
-            ? { ...e, imagen: await storage.leer(e.contenido).catch(() => null), ext: storage.extension(e.contenido) }
-            : e)));
+        const conImagen = await Promise.all(evidencias.map(async (e) => {
+            if (e.tipo !== 'imagen') return e;
+            const archivo = await storage.leer(e.contenido).catch(() => null);
+            return { ...e, imagen: archivo?.datos || null, ext: archivo?.mime === 'image/png' ? 'png' : 'jpg' };
+        }));
         const numero = await numeroDe(act);
         const buffer = await word.evidenciasActividad({ actividad: act, numero, registros, evidencias: conImagen, ...p });
         return { buffer, filename: `Evidencias_Actividad_${numero}_${word.nombreMes(p.mes)}_${p.anio}.docx` };
