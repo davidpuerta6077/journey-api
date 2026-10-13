@@ -26,7 +26,7 @@ const {
     healthCheck, checkPermissions,
     checkSubmodulePermissions,
     updateJourneyEnrollmentData,
-    selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData,
+    selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData, onixQueries, upsertHubArchivoQuery, selectHubArchivoQuery,
     updatePlatformUserData, updatePlatformUserEstadoData, updatePlatformUserPhotoData, updatePlatformUserUsernameData,
     updatePlatformUserLastLoginData,
     selectRoles, findRoleById, insertRoleData, updateRoleData,
@@ -960,6 +960,14 @@ function upsertSetting(categoria, clave, valor, updatedBy) {
     });
 }
 
+function upsertHubArchivo(clave, mime, datos, updatedBy) {
+    return query(upsertHubArchivoQuery(clave, mime, datos, updatedBy));
+}
+
+function getHubArchivo(clave) {
+    return query(selectHubArchivoQuery(clave)).then((rows) => rows[0] || null);
+}
+
 function deleteSetting(categoria, clave) {
     return new Promise((resolve, reject) => {
         pool.query(deleteSettingQuery(categoria, clave), (err, result) => {
@@ -1494,7 +1502,56 @@ function reportEnrollmentsOfCourse(courseid) {
 
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
+// ─── ONIX REPORTS (Informes Onix-IA) ──────────────────────────────────────────
+
+const queryOne = (q) => query(q).then((rows) => rows[0] || null);
+
+const onix = {
+    getPerfil: (userId) => queryOne(onixQueries.perfil(userId)),
+    upsertPerfil: (userId, d) => queryOne(onixQueries.upsertPerfil(userId, d)),
+
+    listAreas: () => query(onixQueries.areas()),
+    getArea: (id) => queryOne(onixQueries.area(id)),
+    insertArea: (d) => queryOne(onixQueries.insertArea(d)),
+    updateArea: (id, d) => queryOne(onixQueries.updateArea(id, d)),
+    deleteArea: (id) => queryOne(onixQueries.deleteArea(id)),
+
+    listActividades: (userId) => query(onixQueries.actividades(userId)),
+    getActividad: (id) => queryOne(onixQueries.actividad(id)),
+    insertActividad: (userId, d) => queryOne(onixQueries.insertActividad(userId, d)),
+    updateActividad: (id, d) => queryOne(onixQueries.updateActividad(id, d)),
+    deleteActividad: (id) => queryOne(onixQueries.deleteActividad(id)),
+    listImagenesDeActividad: (actividadId) => query(onixQueries.imagenesDeActividad(actividadId)),
+
+    listRegistros: (actividadId, mes, anio) => query(onixQueries.registros(actividadId, mes, anio)),
+    getRegistro: (id) => queryOne(onixQueries.registro(id)),
+    insertRegistro: (d) => queryOne(onixQueries.insertRegistro(d)),
+    updateRegistro: (id, desarrollo) => queryOne(onixQueries.updateRegistro(id, desarrollo)),
+    deleteRegistro: (id) => queryOne(onixQueries.deleteRegistro(id)),
+
+    listEvidenciasDeRegistros: (ids) => query(onixQueries.evidenciasDeRegistros(ids)),
+    getEvidencia: (id) => queryOne(onixQueries.evidencia(id)),
+    insertEvidencia: (d) => queryOne(onixQueries.insertEvidencia(d)),
+    deleteEvidencia: (id) => queryOne(onixQueries.deleteEvidencia(id)),
+
+    listInformes: (userId, mes, anio) => query(onixQueries.informes(userId, mes, anio)),
+    getInforme: (id) => queryOne(onixQueries.informe(id)),
+    upsertInforme: (d) => queryOne(onixQueries.upsertInforme(d)),
+    updateInformeTexto: (id, desarrollo) => queryOne(onixQueries.updateInformeTexto(id, desarrollo)),
+
+    listUsuariosConPerfil: (areaId, mes, anio) => query(onixQueries.usuariosConPerfil(areaId, mes, anio)),
+
+    insertArchivo: (userId, mime, datos) => queryOne(onixQueries.insertArchivo(userId, mime, datos)),
+    getArchivo: (id) => queryOne(onixQueries.archivo(id)),
+    deleteArchivo: (id) => query(onixQueries.deleteArchivo(id)),
+    listLogsDisponibles: (email, mes, anio) => query(onixQueries.logsDisponibles(email, mes, anio)),
+    getLogsPorIds: (ids) => query(onixQueries.logsPorIds(ids)),
+    insertRegistroLogs: (registroId, ids) => query(onixQueries.insertRegistroLogs(registroId, ids)),
+};
+
 module.exports = {
+    onix,
+    upsertHubArchivo, getHubArchivo,
     insertSicauNovedad,
     listSicauNovedades,
     findEnrollmentsByCodigoJourney,
