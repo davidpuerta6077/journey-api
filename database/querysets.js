@@ -986,6 +986,18 @@ const upsertSettingQuery = (categoria, clave, valor, updatedBy) => ({
     values: [categoria, clave, JSON.stringify(valor), updatedBy || null]
 });
 
+// Logo y favicon del hub (bytea), ver database/seeds/addHubArchivosTable.js
+const upsertHubArchivoQuery = (clave, mime, datos, updatedBy) => ({
+    text: `INSERT INTO ${schema}.hub_archivos (clave, mime, datos, updated_by) VALUES ($1, $2, $3, $4)
+           ON CONFLICT (clave) DO UPDATE SET mime = $2, datos = $3, updated_at = NOW(), updated_by = $4`,
+    values: [clave, mime, datos, updatedBy || null]
+});
+
+const selectHubArchivoQuery = (clave) => ({
+    text: `SELECT clave, mime, datos FROM ${schema}.hub_archivos WHERE clave = $1`,
+    values: [clave]
+});
+
 const deleteSettingQuery = (categoria, clave) => ({
     text: `DELETE FROM ${schema}.settings WHERE categoria = $1 AND clave = $2`,
     values: [categoria, clave]
@@ -1939,6 +1951,7 @@ const onixQueries = {
 
 module.exports = {
     onixQueries,
+    upsertHubArchivoQuery, selectHubArchivoQuery,
     insertSicauNovedadData,
     selectSicauNovedades,
     findEnrollmentsByCodigoJourneyQuery,

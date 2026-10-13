@@ -843,6 +843,25 @@ router.delete('/settings/:categoria/:clave', checkAuth, checkPermission('setting
 
 /**
  * @swagger
+ * /admin/branding/{clave}:
+ *   get: { summary: Logo o favicon del hub (público; clave = logo | favicon), tags: [Admin] }
+ */
+router.get('/branding/:clave', async (req, res, next) => {
+    try {
+        const { datos, mime } = await ctrl.getBrandingArchivo(req.params.clave);
+        res.setHeader('Content-Type', mime);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        // Un SVG subido no debe poder ejecutar scripts si se abre directo.
+        res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.send(datos);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
  * /admin/ia:
  *   get: { summary: Configuración de IA (sin la API key; solo si existe y sus últimos 4 caracteres), tags: [Admin] }
  *   put: { summary: Guardar configuración de IA (proveedor, modelo, ollama_url, anthropic_key opcional se cifra, quitar_key), tags: [Admin] }
@@ -902,26 +921,13 @@ router.post('/ia/probar', checkAuth, checkPermission('settings'), saveLog('setti
  */
 router.post('/settings/logo', checkAuth, checkPermission('settings'), saveLog('settings', {
     descripcion: () => `Actualizó el logo del hub`,
-}), (req, res, next) => {
-    if (!req.files || !req.files.logo) {
-        return response.error(req, res, 'No se recibió ningún archivo.', 400);
+}), async (req, res, next) => {
+    try {
+        const result = await ctrl.saveBrandingArchivo('logo', req.files?.logo || null, req.user?.email);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
     }
-    const file = req.files.logo;
-    const uploadDir = path.join(__dirname, '../../uploads/branding');
-    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-    const ext = path.extname(file.name) || '.png';
-    const fileName = `logo_${Date.now()}${ext}`;
-    const filePath = path.join(uploadDir, fileName);
-    file.mv(filePath, async (err) => {
-        if (err) return response.error(req, res, err.message, 500);
-        try {
-            const logoUrl = `/uploads/branding/${fileName}`;
-            const result = await ctrl.saveSetting({ categoria: 'apariencia', clave: 'logo_url', valor: logoUrl }, req.user?.email);
-            response.success(req, res, result, 200);
-        } catch (error) {
-            next(error);
-        }
-    });
 });
 
 /**
@@ -944,26 +950,13 @@ router.post('/settings/logo', checkAuth, checkPermission('settings'), saveLog('s
  */
 router.post('/settings/favicon', checkAuth, checkPermission('settings'), saveLog('settings', {
     descripcion: () => `Actualizó el favicon del hub`,
-}), (req, res, next) => {
-    if (!req.files || !req.files.favicon) {
-        return response.error(req, res, 'No se recibió ningún archivo.', 400);
+}), async (req, res, next) => {
+    try {
+        const result = await ctrl.saveBrandingArchivo('favicon', req.files?.favicon || null, req.user?.email);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
     }
-    const file = req.files.favicon;
-    const uploadDir = path.join(__dirname, '../../uploads/branding');
-    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-    const ext = path.extname(file.name) || '.png';
-    const fileName = `favicon_${Date.now()}${ext}`;
-    const filePath = path.join(uploadDir, fileName);
-    file.mv(filePath, async (err) => {
-        if (err) return response.error(req, res, err.message, 500);
-        try {
-            const faviconUrl = `/uploads/branding/${fileName}`;
-            const result = await ctrl.saveSetting({ categoria: 'apariencia', clave: 'favicon_url', valor: faviconUrl }, req.user?.email);
-            response.success(req, res, result, 200);
-        } catch (error) {
-            next(error);
-        }
-    });
 });
 
 /**

@@ -1,3 +1,4 @@
+const fs = require('fs');
 const { moodleRequest } = require('../../services/moodleService');
 const { assertMoodleOk } = require('../../services/moodleAssert');
 const iaConfig = require('../../services/ia/config');
@@ -319,6 +320,45 @@ module.exports = (injectedDB) => {
         return { ok: true, proveedor: r.proveedor, modelo: r.modelo, respuesta: r.texto.slice(0, 100) };
     }
 
+    // ─── LOGO Y FAVICON (Configuración > Apariencia) ──────────────────────────
+    // Se guardan en la BD (hub_archivos): el disco del contenedor (App Runner)
+    // no persiste entre despliegues. Se sirven públicos en /admin/branding/:clave.
+    const BRANDING_CLAVES = ['logo', 'favicon'];
+    const BRANDING_TIPOS = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/x-icon', 'image/vnd.microsoft.icon'];
+    const BRANDING_MAX = 2 * 1024 * 1024;
+
+    function brandingClave(clave) {
+        if (!BRANDING_CLAVES.includes(clave)) {
+            const err = new Error('No encontrado');
+            err.status = 404;
+            throw err;
+        }
+    }
+
+    async function saveBrandingArchivo(clave, file, email) {
+        brandingClave(clave);
+        const invalido = (msg) => { const err = new Error(msg); err.status = 400; return err; };
+        if (!file) throw invalido('No se recibió ningún archivo.');
+        if (!BRANDING_TIPOS.includes(file.mimetype)) throw invalido('Formato no permitido (usa PNG, JPG, WEBP, SVG o ICO)');
+        if (file.size > BRANDING_MAX) throw invalido('La imagen supera 2 MB');
+        const datos = file.tempFilePath ? await fs.promises.readFile(file.tempFilePath) : file.data;
+        if (file.tempFilePath) await fs.promises.unlink(file.tempFilePath).catch(() => {});
+        await data.upsertHubArchivo(clave, file.mimetype, datos, email);
+        // ?v= cambia en cada subida para que el navegador no muestre la imagen en caché.
+        return data.upsertSetting('apariencia', `${clave}_url`, `/admin/branding/${clave}?v=${Date.now()}`, email);
+    }
+
+    async function getBrandingArchivo(clave) {
+        brandingClave(clave);
+        const archivo = await data.getHubArchivo(clave);
+        if (!archivo) {
+            const err = new Error('No encontrado');
+            err.status = 404;
+            throw err;
+        }
+        return { datos: archivo.datos, mime: archivo.mime };
+    }
+
     // Cierre de semestre global (botón en Configuración > Académico): pasa a
     // Finalizado todas las matrículas activas del periodo_actual configurado,
     // sin importar el curso. Igual que el cierre por curso, no llama a
@@ -382,6 +422,7 @@ module.exports = (injectedDB) => {
         listLogs, listRecentNexoActivity,
         listSettings, saveSetting, removeSetting, finalizePeriodo,
         getIAConfig, saveIAConfig, probarIA,
+        saveBrandingArchivo, getBrandingArchivo,
         listMenuLinksAdmin, listActiveMenuLinks, createMenuLink, updateMenuLinkAdmin, deleteMenuLinkAdmin
     };
 };

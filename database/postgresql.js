@@ -26,7 +26,7 @@ const {
     healthCheck, checkPermissions,
     checkSubmodulePermissions,
     updateJourneyEnrollmentData,
-    selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData, onixQueries,
+    selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData, onixQueries, upsertHubArchivoQuery, selectHubArchivoQuery,
     updatePlatformUserData, updatePlatformUserEstadoData, updatePlatformUserPhotoData, updatePlatformUserUsernameData,
     updatePlatformUserLastLoginData,
     selectRoles, findRoleById, insertRoleData, updateRoleData,
@@ -960,6 +960,14 @@ function upsertSetting(categoria, clave, valor, updatedBy) {
     });
 }
 
+function upsertHubArchivo(clave, mime, datos, updatedBy) {
+    return query(upsertHubArchivoQuery(clave, mime, datos, updatedBy));
+}
+
+function getHubArchivo(clave) {
+    return query(selectHubArchivoQuery(clave)).then((rows) => rows[0] || null);
+}
+
 function deleteSetting(categoria, clave) {
     return new Promise((resolve, reject) => {
         pool.query(deleteSettingQuery(categoria, clave), (err, result) => {
@@ -1543,6 +1551,7 @@ const onix = {
 
 module.exports = {
     onix,
+    upsertHubArchivo, getHubArchivo,
     insertSicauNovedad,
     listSicauNovedades,
     findEnrollmentsByCodigoJourney,
