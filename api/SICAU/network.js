@@ -146,10 +146,23 @@ router.post('/search_user_sicau', async (req, res) => {
  *               users:
  *                 type: array
  *                 items:
- *                   allOf:
- *                     - $ref: '#/components/schemas/User'
- *                     - type: object
- *                       properties:
+ *                   type: object
+ *                   description: Igual a User pero sin id ni moodle_id (los asigna journey, SICAU no los manda)
+ *                   properties:
+ *                         username:              { type: string }
+ *                         firstname:             { type: string }
+ *                         lastname:              { type: string }
+ *                         email:                 { type: string }
+ *                         documento:             { type: string }
+ *                         correo_personal:       { type: string }
+ *                         telefono:              { type: string }
+ *                         celular:               { type: string }
+ *                         fecha_nacimiento:      { type: string, format: date }
+ *                         jornada:               { type: string }
+ *                         departamento_academico: { type: string }
+ *                         plan_estudios:         { type: string }
+ *                         city:                  { type: string }
+ *                         country:               { type: string }
  *                         usuario: { type: string, example: "jor.ramirez", description: "Usuario de SICAU que originó el envío, para el log de auditoría" }
  *                         estado:
  *                           type: string
