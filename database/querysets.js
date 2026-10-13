@@ -1832,8 +1832,39 @@ const onixQueries = {
     }),
 
     registros: (actividadId, mes, anio) => ({
-        text: `SELECT * FROM ${schema}.onix_registros WHERE actividad_id = $1 AND mes = $2 AND anio = $3 ORDER BY created_at, id`,
+        text: `SELECT r.*, (SELECT count(*)::int FROM ${schema}.onix_registro_logs rl WHERE rl.registro_id = r.id) AS logs
+               FROM ${schema}.onix_registros r
+               WHERE r.actividad_id = $1 AND r.mes = $2 AND r.anio = $3
+               ORDER BY r.created_at, r.id`,
         values: [actividadId, mes, anio],
+    }),
+
+    // Acciones propias del mes en Bravo Hub (logs) aún no asignadas a un
+    // registro. Sin consultas (GET) ni acciones del propio módulo Informes.
+    logsDisponibles: (email, mes, anio) => ({
+        text: `SELECT l.id, l.date, l.type, l.description, l.entity_type, m.name AS aplicacion, sm.name AS modulo
+               FROM ${schema}.logs l
+               LEFT JOIN ${schema}.submodules sm ON sm.code = l.entity_type
+               LEFT JOIN ${schema}.modules m ON m.id = sm.module_id
+               WHERE lower(l.username) = lower($1)
+                 AND l.type <> 'get'
+                 AND (l.entity_type IS NULL OR l.entity_type NOT LIKE 'onix_reports%')
+                 AND l.date >= make_date($3, $2, 1)
+                 AND l.date < make_date($3, $2, 1) + interval '1 month'
+                 AND NOT EXISTS (SELECT 1 FROM ${schema}.onix_registro_logs rl WHERE rl.log_id = l.id)
+               ORDER BY l.date`,
+        values: [email, mes, anio],
+    }),
+    logsPorIds: (ids) => ({
+        text: `SELECT l.id, l.date, l.username, l.description,
+                      EXISTS (SELECT 1 FROM ${schema}.onix_registro_logs rl WHERE rl.log_id = l.id) AS usado
+               FROM ${schema}.logs l
+               WHERE l.id = ANY($1::int[])`,
+        values: [ids],
+    }),
+    insertRegistroLogs: (registroId, ids) => ({
+        text: `INSERT INTO ${schema}.onix_registro_logs (registro_id, log_id) SELECT $1, unnest($2::int[])`,
+        values: [registroId, ids],
     }),
     registro: (id) => ({ text: `SELECT * FROM ${schema}.onix_registros WHERE id = $1`, values: [id] }),
     insertRegistro: (d) => ({

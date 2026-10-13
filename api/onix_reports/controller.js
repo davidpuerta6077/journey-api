@@ -254,6 +254,49 @@ module.exports = (injectedDB, deps = {}) => {
         return r;
     }
 
+    // ── Registros desde las acciones del usuario en Bravo Hub (tabla logs) ──
+    const dosDigitos = (n) => String(n).padStart(2, '0');
+    const fechaCorta = (d) => {
+        const f = new Date(d);
+        return `${dosDigitos(f.getDate())}/${dosDigitos(f.getMonth() + 1)}/${f.getFullYear()}`;
+    };
+
+    async function listLogsDisponibles(actor, query) {
+        const p = validarPeriodo(query.mes, query.anio);
+        return data.onix.listLogsDisponibles(actor.email, p.mes, p.anio);
+    }
+
+    // Junta las acciones elegidas en un solo registro (una línea por acción).
+    // Cada acción solo puede usarse una vez (índice único en onix_registro_logs).
+    async function registroDesdeLogs(actor, body) {
+        const act = await actividadPropia(actor, body.actividad_id);
+        const p = validarPeriodo(body.mes, body.anio);
+        const ids = [...new Set((Array.isArray(body.log_ids) ? body.log_ids : []).map(Number))];
+        if (!ids.length || ids.some((id) => !Number.isInteger(id) || id <= 0)) {
+            throw httpError('Selecciona al menos una acción', 400);
+        }
+        if (ids.length > 200) throw httpError('Selecciona como máximo 200 acciones a la vez', 400);
+
+        const logs = await data.onix.getLogsPorIds(ids);
+        const email = actor.email.toLowerCase();
+        if (logs.length !== ids.length || logs.some((l) => (l.username || '').toLowerCase() !== email)) throw noEncontrado();
+        if (logs.some((l) => l.usado)) throw httpError('Alguna de las acciones ya fue asignada a una actividad', 409);
+
+        const desarrollo = [...logs]
+            .sort((a, b) => new Date(a.date) - new Date(b.date))
+            .map((l) => `- ${fechaCorta(l.date)}: ${l.description}`)
+            .join('\n');
+        const r = await data.onix.insertRegistro({ actividad_id: act.id, user_id: actor.userId, ...p, desarrollo });
+        try {
+            await data.onix.insertRegistroLogs(r.id, ids);
+        } catch (e) {
+            await data.onix.deleteRegistro(r.id);
+            if (e.code === '23505') throw httpError('Alguna de las acciones ya fue asignada a una actividad', 409);
+            throw e;
+        }
+        return { ...r, actividad_nombre: act.nombre, evidencias: [], logs: ids.length };
+    }
+
     // ── Evidencias ──────────────────────────────────────────────────────────
     async function addEvidencia(actor, body, file) {
         const r = await registroPropio(actor, body.registro_id);
@@ -371,6 +414,7 @@ module.exports = (injectedDB, deps = {}) => {
         listAreas, createArea, updateArea, deleteArea,
         listActividades, createActividad, updateActividad, deleteActividad,
         listRegistros, createRegistro, updateRegistro, deleteRegistro,
+        listLogsDisponibles, registroDesdeLogs,
         addEvidencia, deleteEvidencia, getEvidenciaArchivo,
         listInformes, generarInforme, updateInforme, informeWord, evidenciasWord,
         listUsuariosArea,

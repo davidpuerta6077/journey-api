@@ -1532,6 +1532,10 @@ const onix = {
     updateInformeTexto: (id, desarrollo) => queryOne(onixQueries.updateInformeTexto(id, desarrollo)),
 
     listUsuariosConPerfil: (areaId, mes, anio) => query(onixQueries.usuariosConPerfil(areaId, mes, anio)),
+
+    listLogsDisponibles: (email, mes, anio) => query(onixQueries.logsDisponibles(email, mes, anio)),
+    getLogsPorIds: (ids) => query(onixQueries.logsPorIds(ids)),
+    insertRegistroLogs: (registroId, ids) => query(onixQueries.insertRegistroLogs(registroId, ids)),
 };
 
 module.exports = {

@@ -11,6 +11,12 @@ function fakeDB(seed = {}) {
         registros: { 1000: { id: 1000, actividad_id: 100, user_id: 1, mes: 10, anio: 2027, desarrollo: 'Atendí 30 tickets' } },
         evidencias: { 5000: { id: 5000, registro_id: 1000, tipo: 'imagen', contenido: '1/a.png', descripcion: 'Captura' }, 5001: { id: 5001, registro_id: 1000, tipo: 'link', contenido: 'https://x.co', descripcion: null } },
         informes: {},
+        logs: {
+            700: { id: 700, date: new Date('2027-10-05T15:00:00Z'), username: 'ana@x.co', type: 'post', entity_type: 'sync_users', description: 'Sincronizó 3 usuarios con Moodle' },
+            701: { id: 701, date: new Date('2027-10-02T15:00:00Z'), username: 'ANA@x.co', type: 'put', entity_type: 'course', description: 'Editó el curso "Programación Web"' },
+            702: { id: 702, date: new Date('2027-10-03T15:00:00Z'), username: 'beto@x.co', type: 'post', entity_type: 'sync_users', description: 'Acción de Beto' },
+        },
+        registroLogs: {}, // log_id -> registro_id
         seq: 9000,
         ...seed,
     };
@@ -53,6 +59,13 @@ function fakeDB(seed = {}) {
             },
             updateInformeTexto: async (id, desarrollo) => (st.informes[id] = { ...st.informes[id], desarrollo, editado_at: 'now' }),
             listUsuariosConPerfil: async (areaId) => Object.values(st.perfiles).filter((p) => areaId === null || p.area_id === areaId),
+            listLogsDisponibles: async (email, mes, anio) => Object.values(st.logs).filter((l) => l.username.toLowerCase() === email.toLowerCase()
+                && !st.registroLogs[l.id] && l.date.getUTCMonth() + 1 === mes && l.date.getUTCFullYear() === anio),
+            getLogsPorIds: async (ids) => ids.filter((id) => st.logs[id]).map((id) => ({ ...st.logs[id], usado: !!st.registroLogs[id] })),
+            insertRegistroLogs: async (registroId, ids) => {
+                if (ids.some((id) => st.registroLogs[id])) { const e = new Error('dup'); e.code = '23505'; throw e; }
+                ids.forEach((id) => { st.registroLogs[id] = registroId; });
+            },
         },
     };
     return db;

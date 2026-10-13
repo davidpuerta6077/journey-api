@@ -190,6 +190,30 @@ router.delete('/registros/:id', checkAuth, checkPermission(USE), saveLog(USE, {
 
 /**
  * @swagger
+ * /onix/logs:
+ *   get: { summary: Mis acciones del mes en Bravo Hub aún no asignadas a un registro (mes, anio), tags: [OnixReports] }
+ * /onix/registros/desde-logs:
+ *   post: { summary: Crear un registro que agrupa acciones propias de Bravo Hub (actividad_id, mes, anio, log_ids), tags: [OnixReports] }
+ */
+router.get('/logs', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
+    ok(req, res, await ctrl.listLogsDisponibles(actor, req.query));
+}));
+
+router.post('/registros/desde-logs', checkAuth, checkPermission(USE), saveLog(USE, {
+    descripcion: (req) => `Agregó un registro desde ${req._logCantidad || 0} acción(es) de Bravo Hub a "${req._logActividad || '—'}" (${periodo(req.body)})`,
+    entityId: (req) => req._logRegistroId,
+    detalle: (req) => (req._logIds ? { log_ids: req._logIds } : null),
+}), run(async (req, res, actor) => {
+    const r = await ctrl.registroDesdeLogs(actor, req.body || {});
+    req._logActividad = r.actividad_nombre;
+    req._logRegistroId = r.id;
+    req._logCantidad = r.logs;
+    req._logIds = req.body.log_ids;
+    ok(req, res, r);
+}));
+
+/**
+ * @swagger
  * /onix/evidencias:
  *   post: { summary: Agregar evidencia (texto, link o imagen en campo multipart "archivo"), tags: [OnixReports] }
  * /onix/evidencias/{id}:
