@@ -7,7 +7,24 @@
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-const SYSTEM_PROMPT = 'Eres un asistente que redacta informes institucionales formales en español colombiano para la Institución Universitaria Pascual Bravo. Responde únicamente en español. Devuelve solo el párrafo pedido, sin títulos, viñetas, comillas ni comentarios adicionales.';
+// Reglas de redacción institucionales (definidas por la Unidad para los
+// informes de contratistas).
+const SYSTEM_PROMPT = [
+    'Eres un experto en gestión documental y generación de informes para contratistas universitarios de la Institución Universitaria Pascual Bravo.',
+    'Tu tarea es redactar el desarrollo de una obligación contractual a partir de las actividades que el contratista registró en el mes.',
+    'Reglas de redacción:',
+    '- Redacta en tercera persona, con lenguaje técnico-profesional orientado a la educación virtual, los LMS y la innovación.',
+    '- El texto debe tener mínimo 35 palabras.',
+    '- No uses siglas de sistemas o dependencias internas (por ejemplo SICAU o UEAD); usa términos descriptivos generales, como "Sistema de Gestión Académica" o "Unidad de Apoyo Digital".',
+    '- Sé fiel a los registros: no inventes actividades, cifras ni resultados que no aparezcan en ellos.',
+    '- Responde únicamente en español colombiano.',
+    'Formato de salida: un solo párrafo en una sola línea continua, sin saltos de línea. Responde únicamente con el párrafo, sin saludos, explicaciones, títulos, viñetas, markdown, negrillas ni comentarios.',
+].join('\n');
+
+// La IA no siempre respeta el formato: se quitan bloques de código y saltos de línea.
+function limpiarTexto(t) {
+    return t.replace(/```[a-zA-Z]*/g, '').replace(/\s*[\r\n]+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+}
 
 function httpError(message, status) {
     const err = new Error(message);
@@ -40,7 +57,7 @@ function texto(v, campo, { requerido = true, max = 5000 } = {}) {
 
 function armarPrompt({ actividad, registros, mes, anio }) {
     const lista = registros.map((r) => `- ${r.desarrollo}`).join('\n');
-    return `Basándote en los siguientes registros de trabajo del mes de ${MESES[mes - 1]} de ${anio}, redacta el desarrollo de la actividad de forma profesional y formal, en un solo párrafo cohesionado, como en un informe oficial universitario. No uses viñetas ni listas.
+    return `Basándote en los siguientes registros de trabajo del mes de ${MESES[mes - 1]} de ${anio}, redacta el desarrollo de la obligación contractual en un solo párrafo cohesionado, como en un informe oficial universitario.
 
 Actividad: ${actividad.nombre}
 Descripción contractual: ${actividad.descripcion}
@@ -297,7 +314,7 @@ module.exports = (injectedDB, deps = {}) => {
         const r = await ia.generarTexto({ system: SYSTEM_PROMPT, prompt: armarPrompt({ actividad: act, registros, ...p }) });
         const informe = await data.onix.upsertInforme({
             user_id: actor.userId, actividad_id: act.id, ...p,
-            desarrollo: r.texto, proveedor: r.proveedor, modelo: r.modelo,
+            desarrollo: limpiarTexto(r.texto), proveedor: r.proveedor, modelo: r.modelo,
         });
         return { ...informe, actividad_nombre: act.nombre };
     }

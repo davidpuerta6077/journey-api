@@ -112,3 +112,24 @@ test('evidenciasWord: imagen ilegible no rompe el documento (imagen null)', asyn
     await ctrl.evidenciasWord(ana, '100', { mes: '10', anio: '2027' });
     assert.strictEqual(wordCalls[0][1].evidencias.find((e) => e.tipo === 'imagen').imagen, null);
 });
+
+test('el prompt aplica las reglas de redacción institucionales', async () => {
+    const { ctrl, iaCalls } = setup();
+    const ana = await ctrl.getActor('ana@x.co');
+    await ctrl.generarInforme(ana, { actividad_id: '100', mes: '10', anio: '2027' });
+    const { system } = iaCalls[0];
+    assert.match(system, /tercera persona/);
+    assert.match(system, /mínimo 35 palabras/);
+    assert.match(system, /SICAU/);
+    assert.match(system, /Sistema de Gestión Académica/);
+    assert.match(system, /una sola línea/);
+    assert.match(system, /sin saludos/);
+});
+
+test('la respuesta de la IA se limpia: sin saltos de línea ni bloques de código', async () => {
+    const { ctrl, ia } = setup();
+    ia.generarTexto = async () => ({ texto: '```\nEl contratista realizó\n\n  la revisión.\r\n```', proveedor: 'ollama', modelo: 'qwen2.5:7b' });
+    const ana = await ctrl.getActor('ana@x.co');
+    const inf = await ctrl.generarInforme(ana, { actividad_id: '100', mes: '10', anio: '2027' });
+    assert.strictEqual(inf.desarrollo, 'El contratista realizó la revisión.');
+});
