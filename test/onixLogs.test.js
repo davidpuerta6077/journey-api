@@ -65,3 +65,38 @@ test('registroDesdeLogs usa el título enviado', async () => {
     const r = await ctrl.registroDesdeLogs(ana, { actividad_id: '100', mes: '10', anio: '2027', log_ids: [700], titulo: ' Sincronizaciones ' });
     assert.strictEqual(r.titulo, 'Sincronizaciones');
 });
+
+test('registroDesdeLogs junta las acciones repetidas del mismo día en una línea con la cantidad', async () => {
+    const { ctrl } = setup({
+        logs: {
+            700: { id: 700, date: new Date('2027-10-05T15:00:00Z'), username: 'ana@x.co', type: 'post', entity_type: 'sync_users', description: 'Sincronizó usuarios' },
+            703: { id: 703, date: new Date('2027-10-05T18:00:00Z'), username: 'ana@x.co', type: 'post', entity_type: 'sync_users', description: 'Sincronizó usuarios' },
+            704: { id: 704, date: new Date('2027-10-06T15:00:00Z'), username: 'ana@x.co', type: 'post', entity_type: 'sync_users', description: 'Sincronizó usuarios' },
+        },
+    });
+    const ana = await ctrl.getActor('ana@x.co');
+    const r = await ctrl.registroDesdeLogs(ana, { actividad_id: '100', mes: '10', anio: '2027', log_ids: [700, 703, 704] });
+    assert.deepStrictEqual(r.desarrollo.split('\n'), ['- 05/10/2027: Sincronizó usuarios (2 veces)', '- 06/10/2027: Sincronizó usuarios']);
+    assert.strictEqual(r.logs, 3);
+});
+
+test('registroDesdeLogs con registro_id agrega las acciones a una subactividad existente', async () => {
+    const { ctrl, db } = setup();
+    const ana = await ctrl.getActor('ana@x.co');
+    const r = await ctrl.registroDesdeLogs(ana, { actividad_id: '100', mes: '10', anio: '2027', log_ids: [700], registro_id: '1000' });
+    assert.strictEqual(r.id, 1000);
+    assert.strictEqual(r.desarrollo, 'Atendí 30 tickets\n- 05/10/2027: Sincronizó 3 usuarios con Moodle');
+    assert.strictEqual(db.st.registroLogs[700], 1000);
+    assert.strictEqual(Object.keys(db.st.registros).length, 1);
+});
+
+test('registroDesdeLogs con registro_id de otra actividad, otro mes o ajeno → 404', async () => {
+    const { ctrl, db } = setup();
+    db.st.registros[1001] = { id: 1001, actividad_id: 100, user_id: 1, mes: 9, anio: 2027, desarrollo: 'x' };
+    db.st.registros[1002] = { id: 1002, actividad_id: 200, user_id: 2, mes: 10, anio: 2027, desarrollo: 'x' };
+    const ana = await ctrl.getActor('ana@x.co');
+    for (const registro_id of ['1001', '1002', '999']) {
+        await assert.rejects(ctrl.registroDesdeLogs(ana, { actividad_id: '100', mes: '10', anio: '2027', log_ids: [700], registro_id }), no(404));
+    }
+    assert.strictEqual(db.st.registroLogs[700], undefined);
+});

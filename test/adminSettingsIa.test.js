@@ -7,6 +7,7 @@ function fakeDB() {
         { categoria: 'apariencia', clave: 'logo_url', valor: '/x.png' },
         { categoria: 'ia', clave: 'proveedor', valor: 'claude' },
         { categoria: 'ia', clave: 'anthropic_key', valor: { iv: 'a', tag: 'b', data: 'c', ultimos: '1234' } },
+        { categoria: 'ia', clave: 'gemini_key', valor: { iv: 'a', tag: 'b', data: 'c', ultimos: '5678' } },
     ];
     return {
         upserts: [],
@@ -28,7 +29,7 @@ test('listSettings nunca devuelve la key cifrada, con o sin categoría', async (
     const ctrl = createAdmin(fakeDB());
     for (const cat of [undefined, 'ia']) {
         const rows = await ctrl.listSettings(cat);
-        assert.ok(!rows.some((r) => r.clave === 'anthropic_key'), `filtró key con categoria=${cat}`);
+        assert.ok(!rows.some((r) => r.clave.endsWith('_key')), `filtró keys con categoria=${cat}`);
     }
     assert.strictEqual((await ctrl.listSettings()).length, 2);
 });
@@ -37,6 +38,13 @@ test('getIAConfig devuelve la vista sin key', async () => {
     const ctrl = createAdmin(fakeDB());
     const v = await ctrl.getIAConfig();
     assert.strictEqual(v.proveedor, 'claude');
-    assert.deepStrictEqual(v.key, { configurada: true, origen: 'hub', ultimos: '1234' });
+    assert.deepStrictEqual(v.keys.claude, { configurada: true, origen: 'hub', ultimos: '1234' });
     assert.ok(!JSON.stringify(v).includes('"data"'));
+});
+
+test('la categoría google tampoco se edita ni lista su secreto por la ruta genérica', async () => {
+    const db = fakeDB();
+    const ctrl = createAdmin(db);
+    await assert.rejects(ctrl.saveSetting({ categoria: 'google', clave: 'client_secret', valor: 'x' }, 'a@x.co'), (e) => e.status === 400);
+    await assert.rejects(ctrl.removeSetting('google', 'client_id'), (e) => e.status === 400);
 });

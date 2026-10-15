@@ -2,6 +2,7 @@ const fs = require('fs');
 const { moodleRequest } = require('../../services/moodleService');
 const { assertMoodleOk } = require('../../services/moodleAssert');
 const iaConfig = require('../../services/ia/config');
+const googleConfig = require('../../services/onix/googleConfig');
 const { esSecreto } = require('../../services/settingsSecretos');
 const { createIAConfigurada } = require('../../services/ia');
 
@@ -270,11 +271,12 @@ module.exports = (injectedDB) => {
 
     // ─── SETTINGS (apartado Configuración) ───────────────────────────────────────
 
-    // La categoría 'ia' (incluida la API key cifrada) solo se maneja por
-    // /admin/ia: así la key nunca se lista ni queda en claro en los logs.
+    // Las categorías 'ia' y 'google' (con keys/secretos cifrados) solo se manejan
+    // por /admin/ia y /admin/google: así nunca se listan ni quedan en claro en los logs.
     function rechazarCategoriaIA(categoria) {
-        if (categoria === iaConfig.CATEGORIA) {
-            const err = new Error('La configuración de IA se edita en Configuración > Inteligencia artificial');
+        const pestana = { [iaConfig.CATEGORIA]: 'Inteligencia artificial', [googleConfig.CATEGORIA]: 'Google' }[categoria];
+        if (pestana) {
+            const err = new Error(`Esta configuración se edita en Configuración > ${pestana}`);
             err.status = 400;
             throw err;
         }
@@ -283,7 +285,8 @@ module.exports = (injectedDB) => {
     async function listSettings(categoria) {
         const rows = await data.getSettings(categoria);
         return rows
-            .filter((r) => !(r.categoria === iaConfig.CATEGORIA && r.clave === 'anthropic_key'))
+            .filter((r) => !(r.categoria === iaConfig.CATEGORIA && r.clave.endsWith('_key')))
+            .filter((r) => !(r.categoria === googleConfig.CATEGORIA && r.clave === 'client_secret'))
             .map((r) => (esSecreto(r.categoria, r.clave)
                 ? { ...r, valor: '', secreto: { configurado: !!r.valor, ultimos: String(r.valor || '').slice(-4) } }
                 : r));
@@ -319,6 +322,16 @@ module.exports = (injectedDB) => {
 
     async function saveIAConfig(body, email) {
         return iaConfig.guardarConfig({ db: data, body: body || {}, email });
+    }
+
+    // ─── Google (Configuración > Google): credencial OAuth de Google Calendar ──
+
+    async function getGoogleConfig() {
+        return googleConfig.verConfig({ db: data });
+    }
+
+    async function saveGoogleConfig(body, email) {
+        return googleConfig.guardarConfig({ db: data, body: body || {}, email });
     }
 
     // Generación mínima con la configuración guardada, para el botón "Probar conexión".
@@ -432,6 +445,7 @@ module.exports = (injectedDB) => {
         listLogs, listRecentNexoActivity,
         listSettings, saveSetting, removeSetting, finalizePeriodo,
         getIAConfig, saveIAConfig, probarIA,
+        getGoogleConfig, saveGoogleConfig,
         saveBrandingArchivo, getBrandingArchivo,
         listMenuLinksAdmin, listActiveMenuLinks, createMenuLink, updateMenuLinkAdmin, deleteMenuLinkAdmin
     };

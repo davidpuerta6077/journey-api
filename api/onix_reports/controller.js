@@ -126,6 +126,12 @@ module.exports = (injectedDB, deps = {}) => {
     const ia = deps.ia || require('../../services/ia').createIAConfigurada(data);
     const storage = deps.storage || require('../../services/onix/storage');
     const word = deps.word || require('../../services/onix/word');
+    // La credencial de Google se lee en cada uso (Configuración > Google, sin reiniciar).
+    const googleConfig = require('../../services/onix/googleConfig');
+    const servicioGoogle = deps.google
+        ? async () => deps.google
+        : async () => require('../../services/onix/google')({ env: await googleConfig.leerEnvEfectivo({ db: data }) });
+    const { cifrar, descifrar } = deps.secreto || require('../../services/ia/secreto');
 
     async function tienePermiso(email, code) {
         const r = await data.checkSubmodulesPermissionsData(email, code);
@@ -347,20 +353,139 @@ module.exports = (injectedDB, deps = {}) => {
         if (logs.length !== ids.length || logs.some((l) => (l.username || '').toLowerCase() !== email)) throw noEncontrado();
         if (logs.some((l) => l.usado)) throw httpError('Alguna de las acciones ya fue asignada a una actividad', 409);
 
-        const desarrollo = [...logs]
-            .sort((a, b) => new Date(a.date) - new Date(b.date))
-            .map((l) => `- ${fechaCorta(l.date)}: ${l.description}`)
-            .join('\n');
-        const titulo = texto(body.titulo, 'El título', { requerido: false, max: 200 }) || 'Acciones en Bravo Hub';
+        // Una línea por acción; las repetidas el mismo día van juntas con la cantidad.
+        const lineas = new Map();
+        [...logs].sort((a, b) => new Date(a.date) - new Date(b.date)).forEach((l) => {
+            const linea = `- ${fechaCorta(l.date)}: ${l.description}`;
+            lineas.set(linea, (lineas.get(linea) || 0) + 1);
+        });
+        const desarrollo = [...lineas].map(([linea, n]) => (n > 1 ? `${linea} (${n} veces)` : linea)).join('\n');
+
+        const r = await guardarImportado({
+            actor, act, p, body, desarrollo, tituloDefecto: 'Acciones en Bravo Hub',
+            enlazar: (registroId) => data.onix.insertRegistroLogs(registroId, ids),
+            usado: 'Alguna de las acciones ya fue asignada a una actividad',
+        });
+        return { ...r, logs: ids.length };
+    }
+
+    // Lo traído (acciones o eventos) va a una subactividad existente de la misma
+    // actividad y mes (registro_id) o a una nueva. `enlazar` marca lo usado; si
+    // choca con el índice único (otra pestaña lo usó) responde 409.
+    async function guardarImportado({ actor, act, p, body, desarrollo, tituloDefecto, enlazar, usado }) {
+        const conflicto = (e) => (e.code === '23505' ? httpError(usado, 409) : e);
+        if (body.registro_id != null) {
+            const existente = await data.onix.getRegistro(idValido(body.registro_id));
+            if (!existente || existente.user_id !== actor.userId || existente.actividad_id !== act.id
+                || existente.mes !== p.mes || existente.anio !== p.anio) throw noEncontrado();
+            try {
+                await enlazar(existente.id);
+            } catch (e) {
+                throw conflicto(e);
+            }
+            const r = await data.onix.updateRegistro(existente.id, { desarrollo: `${existente.desarrollo}\n${desarrollo}` });
+            return { ...r, actividad_nombre: act.nombre };
+        }
+
+        const titulo = texto(body.titulo, 'El título', { requerido: false, max: 200 }) || tituloDefecto;
         const r = await data.onix.insertRegistro({ actividad_id: act.id, user_id: actor.userId, ...p, titulo, desarrollo });
         try {
-            await data.onix.insertRegistroLogs(r.id, ids);
+            await enlazar(r.id);
         } catch (e) {
             await data.onix.deleteRegistro(r.id);
-            if (e.code === '23505') throw httpError('Alguna de las acciones ya fue asignada a una actividad', 409);
-            throw e;
+            throw conflicto(e);
         }
-        return { ...r, actividad_nombre: act.nombre, evidencias: [], logs: ids.length };
+        return { ...r, actividad_nombre: act.nombre, evidencias: [] };
+    }
+
+    // ── Google Calendar (solo lectura, por usuario) ─────────────────────────
+    async function googleEstado(actor) {
+        const g = await data.onix.getGoogle(actor.userId);
+        return { configurado: (await servicioGoogle()).configurado(), conectado: !!g, email: g?.email || null };
+    }
+
+    async function googleUrl(actor) {
+        return { url: (await servicioGoogle()).urlAutorizacion(actor.userId) };
+    }
+
+    // A dónde vuelve el navegador tras conectar con Google.
+    async function googleFront() {
+        const { FRONT_URL } = deps.google ? {} : await googleConfig.leerEnvEfectivo({ db: data });
+        return `${(FRONT_URL || 'http://localhost:5173').replace(/\/$/, '')}/informes`;
+    }
+
+    // Callback de Google (sin token de Bravo Hub): el state firmado trae el usuario.
+    async function googleCallback(query) {
+        if (query.error) throw httpError(query.error === 'access_denied' ? 'No se dio permiso a Bravo Hub' : `Google respondió: ${query.error}`, 400);
+        const google = await servicioGoogle();
+        const userId = google.leerEstado(query.state);
+        if (!userId) throw httpError('El enlace de conexión venció o no es válido. Vuelve a intentarlo', 400);
+        const { refreshToken, email } = await google.canjearCodigo(String(query.code || ''));
+        await data.onix.upsertGoogle(userId, email, cifrar(refreshToken));
+        return { userId, email };
+    }
+
+    async function googleDesconectar(actor) {
+        const g = await data.onix.deleteGoogle(actor.userId);
+        if (!g) throw noEncontrado();
+        await (await servicioGoogle()).revocar(descifrar(g.refresh_token));
+        return { conectado: false, email: g.email };
+    }
+
+    // Rango del mes en hora de Colombia (UTC-5, sin horario de verano).
+    const rangoMes = ({ mes, anio }) => {
+        const dos = (n) => String(n).padStart(2, '0');
+        const sig = mes === 12 ? { mes: 1, anio: anio + 1 } : { mes: mes + 1, anio };
+        return [`${anio}-${dos(mes)}-01T00:00:00-05:00`, `${sig.anio}-${dos(sig.mes)}-01T00:00:00-05:00`];
+    };
+
+    async function eventosDelMes(actor, p) {
+        const g = await data.onix.getGoogle(actor.userId);
+        if (!g) throw httpError('Conecta primero tu cuenta de Google en Configuración', 409);
+        const [desde, hasta] = rangoMes(p);
+        return (await servicioGoogle()).eventos(descifrar(g.refresh_token), desde, hasta);
+    }
+
+    async function listEventosGoogle(actor, query) {
+        const p = validarPeriodo(query.mes, query.anio);
+        const usados = new Set(await data.onix.listEventosUsados(actor.userId));
+        return (await eventosDelMes(actor, p)).filter((e) => !usados.has(e.id));
+    }
+
+    const duracion = (min) => {
+        if (!min) return '';
+        const h = Math.floor(min / 60);
+        const m = min % 60;
+        return [h && `${h} h`, m && `${m} min`].filter(Boolean).join(' ');
+    };
+
+    async function registroDesdeGoogle(actor, body) {
+        const act = await actividadPropia(actor, body.actividad_id);
+        const p = validarPeriodo(body.mes, body.anio);
+        const ids = [...new Set((Array.isArray(body.evento_ids) ? body.evento_ids : []).map(String))].filter((id) => id && id.length <= 1024);
+        if (!ids.length) throw httpError('Selecciona al menos un evento', 400);
+        if (ids.length > 200) throw httpError('Selecciona como máximo 200 eventos a la vez', 400);
+
+        // Se vuelven a leer de Google: solo se aceptan eventos reales del mes.
+        const porId = new Map((await eventosDelMes(actor, p)).map((e) => [e.id, e]));
+        const eventos = ids.map((id) => porId.get(id));
+        if (eventos.some((e) => !e)) throw noEncontrado();
+        const usados = new Set(await data.onix.listEventosUsados(actor.userId));
+        if (ids.some((id) => usados.has(id))) throw httpError('Algún evento ya fue asignado a una actividad', 409);
+
+        const desarrollo = eventos
+            .sort((a, b) => new Date(a.inicio) - new Date(b.inicio))
+            .map((e) => {
+                const extra = [duracion(e.duracionMin), e.asistentes > 1 && `${e.asistentes} asistentes`].filter(Boolean).join(', ');
+                return `- ${fechaCorta(e.todoElDia ? `${e.inicio}T12:00:00` : e.inicio)}: ${e.titulo}${extra ? ` (${extra})` : ''}`;
+            })
+            .join('\n');
+        const r = await guardarImportado({
+            actor, act, p, body, desarrollo, tituloDefecto: eventos.length === 1 ? eventos[0].titulo.slice(0, 200) : 'Reuniones y eventos del mes',
+            enlazar: (registroId) => data.onix.insertRegistroEventos(registroId, actor.userId, ids),
+            usado: 'Algún evento ya fue asignado a una actividad',
+        });
+        return { ...r, eventos: ids.length };
     }
 
     // ── Evidencias ──────────────────────────────────────────────────────────
@@ -516,6 +641,7 @@ module.exports = (injectedDB, deps = {}) => {
         listActividades, createActividad, updateActividad, deleteActividad,
         listRegistros, createRegistro, updateRegistro, deleteRegistro,
         listLogsDisponibles, registroDesdeLogs,
+        googleEstado, googleUrl, googleFront, googleCallback, googleDesconectar, listEventosGoogle, registroDesdeGoogle,
         addEvidencia, updateEvidencia, deleteEvidencia, getEvidenciaArchivo,
         generarSubactividad, subactividadWord, documentoActividadWord, zipMes,
         listUsuariosArea,

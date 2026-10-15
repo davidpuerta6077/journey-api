@@ -1892,6 +1892,22 @@ const onixQueries = {
         text: `INSERT INTO ${schema}.onix_registro_logs (registro_id, log_id) SELECT $1, unnest($2::int[])`,
         values: [registroId, ids],
     }),
+    google: (userId) => ({ text: `SELECT * FROM ${schema}.onix_google WHERE user_id = $1`, values: [userId] }),
+    upsertGoogle: (userId, email, refreshToken) => ({
+        text: `INSERT INTO ${schema}.onix_google (user_id, email, refresh_token) VALUES ($1, $2, $3)
+               ON CONFLICT (user_id) DO UPDATE SET email = EXCLUDED.email, refresh_token = EXCLUDED.refresh_token, connected_at = now()
+               RETURNING user_id, email, connected_at`,
+        values: [userId, email, refreshToken],
+    }),
+    deleteGoogle: (userId) => ({ text: `DELETE FROM ${schema}.onix_google WHERE user_id = $1 RETURNING *`, values: [userId] }),
+    eventosUsados: (userId) => ({
+        text: `SELECT evento_id FROM ${schema}.onix_registro_eventos WHERE user_id = $1`,
+        values: [userId],
+    }),
+    insertRegistroEventos: (registroId, userId, ids) => ({
+        text: `INSERT INTO ${schema}.onix_registro_eventos (registro_id, user_id, evento_id) SELECT $1, $2, unnest($3::text[])`,
+        values: [registroId, userId, ids],
+    }),
     registro: (id) => ({ text: `SELECT * FROM ${schema}.onix_registros WHERE id = $1`, values: [id] }),
     insertRegistro: (d) => ({
         text: `INSERT INTO ${schema}.onix_registros (actividad_id, user_id, mes, anio, titulo, desarrollo) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,

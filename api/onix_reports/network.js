@@ -232,14 +232,14 @@ router.delete('/registros/:id', checkAuth, checkPermission(USE), saveLog(USE, {
  * /onix/logs:
  *   get: { summary: Mis acciones del mes en Bravo Hub aún no asignadas a un registro (mes, anio), tags: [OnixReports] }
  * /onix/registros/desde-logs:
- *   post: { summary: Crear un registro que agrupa acciones propias de Bravo Hub (actividad_id, mes, anio, log_ids), tags: [OnixReports] }
+ *   post: { summary: Crear un registro que agrupa acciones propias de Bravo Hub (actividad_id, mes, anio, log_ids, titulo; registro_id opcional para agregar a uno existente), tags: [OnixReports] }
  */
 router.get('/logs', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
     ok(req, res, await ctrl.listLogsDisponibles(actor, req.query));
 }));
 
 router.post('/registros/desde-logs', checkAuth, checkPermission(USE), saveLog(USE, {
-    descripcion: (req) => `Agregó un registro desde ${req._logCantidad || 0} acción(es) de Bravo Hub a "${req._logActividad || '—'}" (${periodo(req.body)})`,
+    descripcion: (req) => `${req.body?.registro_id ? 'Agregó a una subactividad' : 'Agregó un registro desde'} ${req._logCantidad || 0} acción(es) de Bravo Hub en "${req._logActividad || '—'}" (${periodo(req.body)})`,
     entityId: (req) => req._logRegistroId,
     detalle: (req) => (req._logIds ? { log_ids: req._logIds } : null),
 }), run(async (req, res, actor) => {
@@ -248,6 +248,62 @@ router.post('/registros/desde-logs', checkAuth, checkPermission(USE), saveLog(US
     req._logRegistroId = r.id;
     req._logCantidad = r.logs;
     req._logIds = req.body.log_ids;
+    ok(req, res, r);
+}));
+
+/**
+ * @swagger
+ * /onix/google:
+ *   get: { summary: Estado de mi conexión con Google Calendar (configurado, conectado, email), tags: [OnixReports] }
+ *   delete: { summary: Desconectar mi cuenta de Google (revoca el permiso), tags: [OnixReports] }
+ * /onix/google/url:
+ *   get: { summary: URL de Google para autorizar la lectura de mi calendario, tags: [OnixReports] }
+ * /onix/google/callback:
+ *   get: { summary: Retorno de Google (sin token; el state firmado identifica al usuario). Redirige al front, tags: [OnixReports] }
+ * /onix/google/eventos:
+ *   get: { summary: Mis eventos de Google Calendar del mes aún no asignados (mes, anio), tags: [OnixReports] }
+ * /onix/registros/desde-google:
+ *   post: { summary: Agregar eventos de Google Calendar como subactividad (actividad_id, mes, anio, evento_ids, titulo; registro_id opcional), tags: [OnixReports] }
+ */
+router.get('/google', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
+    ok(req, res, await ctrl.googleEstado(actor));
+}));
+
+router.get('/google/url', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
+    ok(req, res, await ctrl.googleUrl(actor));
+}));
+
+// Google redirige aquí el navegador: no hay token de Bravo Hub ni respuesta
+// JSON; siempre se vuelve al front con ?google=ok|error.
+router.get('/google/callback', async (req, res) => {
+    let front = 'http://localhost:5173/informes';
+    try {
+        front = await ctrl.googleFront();
+        await ctrl.googleCallback(req.query);
+        res.redirect(`${front}?google=ok`);
+    } catch (e) {
+        res.redirect(`${front}?google=error&mensaje=${encodeURIComponent(e.status ? e.message : 'No se pudo conectar con Google')}`);
+    }
+});
+
+router.delete('/google', checkAuth, checkPermission(USE), saveLog(USE, {
+    descripcion: () => 'Desconectó su cuenta de Google de Informes',
+}), run(async (req, res, actor) => {
+    ok(req, res, await ctrl.googleDesconectar(actor));
+}));
+
+router.get('/google/eventos', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
+    ok(req, res, await ctrl.listEventosGoogle(actor, req.query));
+}));
+
+router.post('/registros/desde-google', checkAuth, checkPermission(USE), saveLog(USE, {
+    descripcion: (req) => `${req.body?.registro_id ? 'Agregó a una subactividad' : 'Agregó un registro desde'} ${req._logCantidad || 0} evento(s) de Google Calendar en "${req._logActividad || '—'}" (${periodo(req.body)})`,
+    entityId: (req) => req._logRegistroId,
+}), run(async (req, res, actor) => {
+    const r = await ctrl.registroDesdeGoogle(actor, req.body || {});
+    req._logActividad = r.actividad_nombre;
+    req._logRegistroId = r.id;
+    req._logCantidad = r.eventos;
     ok(req, res, r);
 }));
 

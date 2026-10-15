@@ -1546,6 +1546,11 @@ const onix = {
     listLogsDisponibles: (email, mes, anio) => query(onixQueries.logsDisponibles(email, mes, anio)),
     getLogsPorIds: (ids) => query(onixQueries.logsPorIds(ids)),
     insertRegistroLogs: (registroId, ids) => query(onixQueries.insertRegistroLogs(registroId, ids)),
+    getGoogle: (userId) => queryOne(onixQueries.google(userId)),
+    upsertGoogle: (userId, email, refreshToken) => queryOne(onixQueries.upsertGoogle(userId, email, refreshToken)),
+    deleteGoogle: (userId) => queryOne(onixQueries.deleteGoogle(userId)),
+    listEventosUsados: async (userId) => (await query(onixQueries.eventosUsados(userId))).map((r) => r.evento_id),
+    insertRegistroEventos: (registroId, userId, ids) => query(onixQueries.insertRegistroEventos(registroId, userId, ids)),
 };
 
 module.exports = {

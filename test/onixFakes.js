@@ -16,6 +16,8 @@ function fakeDB(seed = {}) {
             702: { id: 702, date: new Date('2027-10-03T15:00:00Z'), username: 'beto@x.co', type: 'post', entity_type: 'sync_users', description: 'Acción de Beto' },
         },
         registroLogs: {}, // log_id -> registro_id
+        google: {}, // user_id -> { email, refresh_token }
+        eventosUsados: {}, // evento_id -> { uid, registroId }
         seq: 9000,
         ...seed,
     };
@@ -63,6 +65,14 @@ function fakeDB(seed = {}) {
                 if (ids.some((id) => st.registroLogs[id])) { const e = new Error('dup'); e.code = '23505'; throw e; }
                 ids.forEach((id) => { st.registroLogs[id] = registroId; });
             },
+            getGoogle: async (uid) => st.google[uid] || null,
+            upsertGoogle: async (uid, email, refresh_token) => (st.google[uid] = { user_id: uid, email, refresh_token }),
+            deleteGoogle: async (uid) => { const g = st.google[uid]; delete st.google[uid]; return g || null; },
+            listEventosUsados: async (uid) => Object.keys(st.eventosUsados).filter((k) => st.eventosUsados[k].uid === uid),
+            insertRegistroEventos: async (registroId, uid, ids) => {
+                if (ids.some((id) => st.eventosUsados[id])) { const e = new Error('dup'); e.code = '23505'; throw e; }
+                ids.forEach((id) => { st.eventosUsados[id] = { uid, registroId }; });
+            },
         },
     };
     return db;
@@ -77,6 +87,11 @@ function fakeStorage() {
         leer: async (rel) => ({ datos: Buffer.from('img'), mime: rel.endsWith('.png') ? 'image/png' : 'image/jpeg' }),
     };
 }
+
+const eventosGoogle = [
+    { id: 'ev1', titulo: 'Reunión de área', inicio: '2027-10-04T09:00:00-05:00', fin: '2027-10-04T10:30:00-05:00', todoElDia: false, duracionMin: 90, asistentes: 5 },
+    { id: 'ev2', titulo: 'Capacitación Moodle', inicio: '2027-10-01', fin: '2027-10-02', todoElDia: true, duracionMin: null, asistentes: 0 },
+];
 
 function setup(seed) {
     const db = fakeDB(seed);
@@ -94,8 +109,19 @@ function setup(seed) {
         documentoActividad: async (a) => { wordCalls.push(['actividad', a]); return Buffer.from('docx-actividad'); },
         documentoSubactividad: async (a) => { wordCalls.push(['subactividad', a]); return Buffer.from('docx-sub'); },
     };
-    const ctrl = createController(db, { ia, storage, word });
-    return { db, storage, ia, iaCalls, word, wordCalls, ctrl };
+    // Google y el cifrado falsos: el "cifrado" solo envuelve el texto.
+    const googleCalls = [];
+    const google = {
+        configurado: () => true,
+        urlAutorizacion: (uid) => `https://google/auth?state=${uid}`,
+        leerEstado: (state) => (state === 'valido-1' ? 1 : null),
+        canjearCodigo: async (code) => { googleCalls.push(['canjear', code]); return { refreshToken: 'rt-1', email: 'ana@gmail.com' }; },
+        eventos: async (rt, desde, hasta) => { googleCalls.push(['eventos', rt, desde, hasta]); return eventosGoogle; },
+        revocar: async (rt) => { googleCalls.push(['revocar', rt]); },
+    };
+    const secreto = { cifrar: (t) => ({ c: t }), descifrar: (o) => o.c };
+    const ctrl = createController(db, { ia, storage, word, google, secreto });
+    return { db, storage, ia, iaCalls, word, wordCalls, google, googleCalls, ctrl };
 }
 
 const no = (status) => (e) => e.status === status;
