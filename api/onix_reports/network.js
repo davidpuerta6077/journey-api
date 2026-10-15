@@ -11,15 +11,15 @@ const { nombreMes } = require('../../services/onix/word');
 const USE = 'onix_reports_use';
 const ADMIN = 'onix_reports_admin';
 
-// La IA cuesta (Claude) o carga un servidor compartido (Ollama): máximo 20
-// generaciones por usuario por hora.
+// La IA cuesta (Claude) o carga un servidor compartido (Ollama): máximo 60
+// generaciones (una por subactividad) por usuario por hora.
 const generarLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
-    max: 20,
+    max: 60,
     keyGenerator: (req) => req.user.email,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: true, status: 429, body: 'Alcanzaste el límite de 20 generaciones por hora, intenta más tarde' },
+    message: { error: true, status: 429, body: 'Alcanzaste el límite de 60 generaciones por hora, intenta más tarde' },
 });
 
 // Resuelve el actor (usuario de Bravo Hub + permisos) y ejecuta el handler;

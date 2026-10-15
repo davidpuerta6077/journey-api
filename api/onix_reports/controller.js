@@ -446,7 +446,7 @@ module.exports = (injectedDB, deps = {}) => {
         return word.documentoSubactividad({ registro: r, evidencias: conEv.evidencias, imagenes: await leerImagenes(conEv.evidencias) });
     }
 
-    const errorPendientes = (lista) => httpError(`Genera primero con IA: ${lista.map((r) => `"${tituloDe(r)}"`).join(', ')}`, 400);
+    const errorPendientes = (lista) => httpError(`Genera primero con IA: ${lista.slice(0, 3).map((r) => `"${tituloDe(r)}"`).join(', ')}${lista.length > 3 ? ` y ${lista.length - 3} más` : ''}`, 400);
 
     async function subactividadWord(actor, id) {
         const r = await registroVisible(actor, id);
