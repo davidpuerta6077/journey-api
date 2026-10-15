@@ -1850,6 +1850,13 @@ const onixQueries = {
                ORDER BY r.created_at, r.id`,
         values: [actividadId, mes, anio],
     }),
+    registrosMes: (userId, mes, anio) => ({
+        text: `SELECT r.*, (SELECT count(*)::int FROM ${schema}.onix_registro_logs rl WHERE rl.registro_id = r.id) AS logs
+               FROM ${schema}.onix_registros r
+               WHERE r.user_id = $1 AND r.mes = $2 AND r.anio = $3
+               ORDER BY r.created_at, r.id`,
+        values: [userId, mes, anio],
+    }),
 
     // Acciones propias del mes en Bravo Hub (logs) aún no asignadas a un
     // registro. Sin consultas (GET) ni acciones del propio módulo Informes.
@@ -1887,12 +1894,21 @@ const onixQueries = {
     }),
     registro: (id) => ({ text: `SELECT * FROM ${schema}.onix_registros WHERE id = $1`, values: [id] }),
     insertRegistro: (d) => ({
-        text: `INSERT INTO ${schema}.onix_registros (actividad_id, user_id, mes, anio, desarrollo) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        values: [d.actividad_id, d.user_id, d.mes, d.anio, d.desarrollo],
+        text: `INSERT INTO ${schema}.onix_registros (actividad_id, user_id, mes, anio, titulo, desarrollo) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        values: [d.actividad_id, d.user_id, d.mes, d.anio, d.titulo, d.desarrollo],
     }),
-    updateRegistro: (id, desarrollo) => ({
-        text: `UPDATE ${schema}.onix_registros SET desarrollo = $2 WHERE id = $1 RETURNING *`,
-        values: [id, desarrollo],
+    // titulo/parrafo en NULL = no cambian.
+    updateRegistro: (id, d) => ({
+        text: `UPDATE ${schema}.onix_registros
+               SET desarrollo = $2, titulo = COALESCE($3, titulo), parrafo = COALESCE($4, parrafo)
+               WHERE id = $1 RETURNING *`,
+        values: [id, d.desarrollo, d.titulo, d.parrafo],
+    }),
+    guardarGeneracion: (id, d) => ({
+        text: `UPDATE ${schema}.onix_registros
+               SET parrafo = $2, documento = $3, proveedor = $4, modelo = $5, generado_at = now()
+               WHERE id = $1 RETURNING *`,
+        values: [id, d.parrafo, JSON.stringify(d.documento), d.proveedor, d.modelo],
     }),
     deleteRegistro: (id) => ({ text: `DELETE FROM ${schema}.onix_registros WHERE id = $1 RETURNING *`, values: [id] }),
 
@@ -1912,34 +1928,15 @@ const onixQueries = {
         values: [d.registro_id, d.tipo, d.contenido, d.descripcion],
     }),
     deleteEvidencia: (id) => ({ text: `DELETE FROM ${schema}.onix_evidencias WHERE id = $1 RETURNING *`, values: [id] }),
-
-    informes: (userId, mes, anio) => ({
-        text: `SELECT i.*, a.nombre AS actividad_nombre
-               FROM ${schema}.onix_informes i
-               JOIN ${schema}.onix_actividades a ON a.id = i.actividad_id
-               WHERE i.user_id = $1 AND i.mes = $2 AND i.anio = $3
-               ORDER BY a.orden, a.id`,
-        values: [userId, mes, anio],
-    }),
-    informe: (id) => ({ text: `SELECT * FROM ${schema}.onix_informes WHERE id = $1`, values: [id] }),
-    upsertInforme: (d) => ({
-        text: `INSERT INTO ${schema}.onix_informes (user_id, actividad_id, mes, anio, desarrollo, proveedor, modelo, generado_at, editado_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, now(), NULL)
-               ON CONFLICT (actividad_id, mes, anio) DO UPDATE SET
-                   desarrollo = EXCLUDED.desarrollo, proveedor = EXCLUDED.proveedor, modelo = EXCLUDED.modelo,
-                   generado_at = now(), editado_at = NULL
-               RETURNING *`,
-        values: [d.user_id, d.actividad_id, d.mes, d.anio, d.desarrollo, d.proveedor, d.modelo],
-    }),
-    updateInformeTexto: (id, desarrollo) => ({
-        text: `UPDATE ${schema}.onix_informes SET desarrollo = $2, editado_at = now() WHERE id = $1 RETURNING *`,
-        values: [id, desarrollo],
+    updateEvidenciaDescripcion: (id, descripcion) => ({
+        text: `UPDATE ${schema}.onix_evidencias SET descripcion = $2 WHERE id = $1 RETURNING *`,
+        values: [id, descripcion],
     }),
 
     usuariosConPerfil: (areaId, mes, anio) => ({
         text: `SELECT p.user_id, p.nombre, p.identificacion, p.area_id, a.nombre AS area_nombre, pu.email,
                       (SELECT count(*)::int FROM ${schema}.onix_registros r WHERE r.user_id = p.user_id AND r.mes = $2 AND r.anio = $3) AS registros,
-                      (SELECT count(*)::int FROM ${schema}.onix_informes i WHERE i.user_id = p.user_id AND i.mes = $2 AND i.anio = $3) AS informes
+                      (SELECT count(*)::int FROM ${schema}.onix_registros r WHERE r.user_id = p.user_id AND r.mes = $2 AND r.anio = $3 AND r.parrafo IS NOT NULL) AS generados
                FROM ${schema}.onix_perfiles p
                JOIN ${schema}.platform_users pu ON pu.id = p.user_id
                LEFT JOIN ${schema}.onix_areas a ON a.id = p.area_id

@@ -10,7 +10,6 @@ function fakeDB(seed = {}) {
         actividades: { 100: { id: 100, user_id: 1, nombre: 'Soporte', descripcion: 'Atender tickets', orden: 0 }, 200: { id: 200, user_id: 2, nombre: 'Clases', descripcion: 'Dictar', orden: 0 } },
         registros: { 1000: { id: 1000, actividad_id: 100, user_id: 1, mes: 10, anio: 2027, desarrollo: 'Atendí 30 tickets' } },
         evidencias: { 5000: { id: 5000, registro_id: 1000, tipo: 'imagen', contenido: '1/a.png', descripcion: 'Captura' }, 5001: { id: 5001, registro_id: 1000, tipo: 'link', contenido: 'https://x.co', descripcion: null } },
-        informes: {},
         logs: {
             700: { id: 700, date: new Date('2027-10-05T15:00:00Z'), username: 'ana@x.co', type: 'post', entity_type: 'sync_users', description: 'Sincronizó 3 usuarios con Moodle' },
             701: { id: 701, date: new Date('2027-10-02T15:00:00Z'), username: 'ANA@x.co', type: 'put', entity_type: 'course', description: 'Editó el curso "Programación Web"' },
@@ -44,20 +43,18 @@ function fakeDB(seed = {}) {
             listRegistros: async (aid, mes, anio) => Object.values(st.registros).filter((r) => r.actividad_id === aid && r.mes === mes && r.anio === anio),
             getRegistro: async (id) => st.registros[id] || null,
             insertRegistro: async (d) => { const id = next(); return (st.registros[id] = { id, ...d }); },
-            updateRegistro: async (id, desarrollo) => (st.registros[id] = { ...st.registros[id], desarrollo }),
+            listRegistrosMes: async (uid, mes, anio) => Object.values(st.registros).filter((r) => r.user_id === uid && r.mes === mes && r.anio === anio),
+            updateRegistro: async (id, d) => (st.registros[id] = {
+                ...st.registros[id], desarrollo: d.desarrollo,
+                titulo: d.titulo ?? st.registros[id].titulo, parrafo: d.parrafo ?? st.registros[id].parrafo,
+            }),
+            guardarGeneracion: async (id, d) => (st.registros[id] = { ...st.registros[id], ...d, generado_at: 'now' }),
             deleteRegistro: async (id) => { const r = st.registros[id]; delete st.registros[id]; return r; },
             listEvidenciasDeRegistros: async (ids) => Object.values(st.evidencias).filter((e) => ids.includes(e.registro_id)),
             getEvidencia: async (id) => (st.evidencias[id] ? { ...st.evidencias[id], user_id: st.registros[st.evidencias[id].registro_id]?.user_id } : null),
             insertEvidencia: async (d) => { const id = next(); return (st.evidencias[id] = { id, ...d }); },
             deleteEvidencia: async (id) => { const e = st.evidencias[id]; delete st.evidencias[id]; return e; },
-            listInformes: async (uid, mes, anio) => Object.values(st.informes).filter((i) => i.user_id === uid && i.mes === mes && i.anio === anio),
-            getInforme: async (id) => st.informes[id] || null,
-            upsertInforme: async (d) => {
-                const prev = Object.values(st.informes).find((i) => i.actividad_id === d.actividad_id && i.mes === d.mes && i.anio === d.anio);
-                const id = prev ? prev.id : next();
-                return (st.informes[id] = { id, ...d, editado_at: null });
-            },
-            updateInformeTexto: async (id, desarrollo) => (st.informes[id] = { ...st.informes[id], desarrollo, editado_at: 'now' }),
+            updateEvidenciaDescripcion: async (id, descripcion) => (st.evidencias[id] = { ...st.evidencias[id], descripcion }),
             listUsuariosConPerfil: async (areaId) => Object.values(st.perfiles).filter((p) => areaId === null || p.area_id === areaId),
             listLogsDisponibles: async (email, mes, anio) => Object.values(st.logs).filter((l) => l.username.toLowerCase() === email.toLowerCase()
                 && !st.registroLogs[l.id] && l.date.getUTCMonth() + 1 === mes && l.date.getUTCFullYear() === anio),
@@ -85,12 +82,17 @@ function setup(seed) {
     const db = fakeDB(seed);
     const storage = fakeStorage();
     const iaCalls = [];
-    const ia = { generarTexto: async (p) => { iaCalls.push(p); return { texto: 'Párrafo IA', proveedor: 'ollama', modelo: 'qwen2.5:7b' }; } };
+    const respuestaIA = JSON.stringify({
+        parrafo: 'Durante este periodo se atendieron los tickets de soporte de la plataforma.',
+        titulo: 'Informe — Soporte',
+        secciones: [{ titulo: 'Atención de tickets', texto: 'Se atendieron 30 tickets.', imagenes: [1] }],
+    });
+    const ia = { generarTexto: async (p) => { iaCalls.push(p); return { texto: respuestaIA, proveedor: 'ollama', modelo: 'qwen2.5:7b' }; } };
     const wordCalls = [];
     const word = {
         nombreMes: (m) => ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'][m - 1],
-        informeActividad: async (a) => { wordCalls.push(['informe', a]); return Buffer.from('docx'); },
-        evidenciasActividad: async (a) => { wordCalls.push(['evidencias', a]); return Buffer.from('docx'); },
+        documentoActividad: async (a) => { wordCalls.push(['actividad', a]); return Buffer.from('docx-actividad'); },
+        documentoSubactividad: async (a) => { wordCalls.push(['subactividad', a]); return Buffer.from('docx-sub'); },
     };
     const ctrl = createController(db, { ia, storage, word });
     return { db, storage, ia, iaCalls, word, wordCalls, ctrl };

@@ -1526,18 +1526,17 @@ const onix = {
     listRegistros: (actividadId, mes, anio) => query(onixQueries.registros(actividadId, mes, anio)),
     getRegistro: (id) => queryOne(onixQueries.registro(id)),
     insertRegistro: (d) => queryOne(onixQueries.insertRegistro(d)),
-    updateRegistro: (id, desarrollo) => queryOne(onixQueries.updateRegistro(id, desarrollo)),
+    listRegistrosMes: (userId, mes, anio) => query(onixQueries.registrosMes(userId, mes, anio)),
+    updateRegistro: (id, d) => queryOne(onixQueries.updateRegistro(id, d)),
+    guardarGeneracion: (id, d) => queryOne(onixQueries.guardarGeneracion(id, d)),
     deleteRegistro: (id) => queryOne(onixQueries.deleteRegistro(id)),
 
     listEvidenciasDeRegistros: (ids) => query(onixQueries.evidenciasDeRegistros(ids)),
     getEvidencia: (id) => queryOne(onixQueries.evidencia(id)),
     insertEvidencia: (d) => queryOne(onixQueries.insertEvidencia(d)),
     deleteEvidencia: (id) => queryOne(onixQueries.deleteEvidencia(id)),
+    updateEvidenciaDescripcion: (id, descripcion) => queryOne(onixQueries.updateEvidenciaDescripcion(id, descripcion)),
 
-    listInformes: (userId, mes, anio) => query(onixQueries.informes(userId, mes, anio)),
-    getInforme: (id) => queryOne(onixQueries.informe(id)),
-    upsertInforme: (d) => queryOne(onixQueries.upsertInforme(d)),
-    updateInformeTexto: (id, desarrollo) => queryOne(onixQueries.updateInformeTexto(id, desarrollo)),
 
     listUsuariosConPerfil: (areaId, mes, anio) => query(onixQueries.usuariosConPerfil(areaId, mes, anio)),
 

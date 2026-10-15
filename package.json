@@ -9,7 +9,7 @@
     "BD": "nodemon run postgresql/index.js",
     "PM2_API_USERS": "pm2 start api/index.js --name api-users",
     "PM2_BD": "pm2 start postgresql/index.js --name bbdd",
-    "migrar:hub": "node database/seeds/addOnixReportsTables.js && node database/seeds/seedOnixReportsModule.js && node database/seeds/addOnixRegistroLogsTable.js && node database/seeds/addOnixArchivosTable.js && node database/seeds/addHubArchivosTable.js"
+    "migrar:hub": "node database/seeds/addOnixReportsTables.js && node database/seeds/seedOnixReportsModule.js && node database/seeds/addOnixRegistroLogsTable.js && node database/seeds/addOnixArchivosTable.js && node database/seeds/addHubArchivosTable.js && node database/seeds/addOnixSubactividades.js"
   },
   "author": "David Santiago Puerta B.",
   "license": "ISC",
@@ -28,6 +28,7 @@
     "express-fileupload": "^1.5.2",
     "express-rate-limit": "^8.7.0",
     "jsonwebtoken": "^9.0.0",
+    "jszip": "^3.10.1",
     "multer": "^2.1.1",
     "mysql2": "^3.22.3",
     "node-fetch": "^3.3.0",

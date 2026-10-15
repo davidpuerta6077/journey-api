@@ -21,6 +21,7 @@ test('registroDesdeLogs junta las acciones en un registro, en orden de fecha, y 
     assert.match(lineas[1], /^- 05\/10\/2027: Sincronizó 3 usuarios con Moodle$/);
     assert.strictEqual(r.actividad_nombre, 'Soporte');
     assert.strictEqual(r.logs, 2);
+    assert.strictEqual(r.titulo, 'Acciones en Bravo Hub');
     assert.strictEqual(db.st.registroLogs[700], r.id);
     assert.deepStrictEqual(await ctrl.listLogsDisponibles(ana, { mes: '10', anio: '2027' }), []);
 });
@@ -56,4 +57,11 @@ test('si falla el enlace por carrera (otra pestaña lo usó), se borra el regist
     const antes = Object.keys(db.st.registros).length;
     await assert.rejects(ctrl.registroDesdeLogs(ana, { actividad_id: '100', mes: '10', anio: '2027', log_ids: [700] }), no(409));
     assert.strictEqual(Object.keys(db.st.registros).length, antes);
+});
+
+test('registroDesdeLogs usa el título enviado', async () => {
+    const { ctrl } = setup();
+    const ana = await ctrl.getActor('ana@x.co');
+    const r = await ctrl.registroDesdeLogs(ana, { actividad_id: '100', mes: '10', anio: '2027', log_ids: [700], titulo: ' Sincronizaciones ' });
+    assert.strictEqual(r.titulo, 'Sincronizaciones');
 });
