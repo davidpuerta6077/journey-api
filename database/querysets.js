@@ -1561,9 +1561,10 @@ const markAllNotificationsReadQuery = (platformUserId) => ({
 // restringida al módulo dado (JOIN en vez de LEFT JOIN -- un log sin
 // entity_type o con un código que ya no existe como submódulo no puede
 // pertenecer a ningún módulo, así que se excluye en vez de salir con
-// aplicacion/modulo en null). Pensada para exponerse con un permiso de
-// acceso general (nexo_home), no con admin_logs.
-const selectRecentModuleLogs = (moduleCode, limit) => ({
+// aplicacion/modulo en null) y al propio usuario (cada quien ve solo lo que
+// él hizo, no la actividad de todo el equipo). Pensada para exponerse con un
+// permiso de acceso general (nexo_home), no con admin_logs.
+const selectRecentModuleLogs = (moduleCode, username, limit) => ({
     text: `
         SELECT l.id,
                l.date,
@@ -1575,11 +1576,11 @@ const selectRecentModuleLogs = (moduleCode, limit) => ({
         FROM ${schema}.logs l
         JOIN ${schema}.submodules sm ON sm.code = l.entity_type
         JOIN ${schema}.modules m ON m.id = sm.module_id
-        WHERE m.code = $1
+        WHERE m.code = $1 AND l.username = $2
         ORDER BY l.date DESC
-        LIMIT $2
+        LIMIT $3
     `,
-    values: [moduleCode, limit]
+    values: [moduleCode, username, limit]
 });
 
 const selectLogsData = (limit) => ({

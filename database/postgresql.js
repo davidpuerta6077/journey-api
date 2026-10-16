@@ -488,9 +488,9 @@ function listLogs(limit) {
     });
 }
 
-function listRecentLogsByModule(moduleCode, limit) {
+function listRecentLogsByModule(moduleCode, username, limit) {
     return new Promise((resolve, reject) => {
-        pool.query(selectRecentModuleLogs(moduleCode, limit), (err, result) => {
+        pool.query(selectRecentModuleLogs(moduleCode, username, limit), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });

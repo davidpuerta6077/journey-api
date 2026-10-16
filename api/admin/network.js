@@ -748,7 +748,7 @@ router.get('/logs', checkAuth, checkPermission('admin_logs'), async (req, res, n
 router.get('/logs/recent-nexo', checkAuth, checkPermission('nexo_home'), async (req, res, next) => {
     try {
         const limit = Math.min(Number(req.query.limit) || 8, 20);
-        const result = await ctrl.listRecentNexoActivity(limit);
+        const result = await ctrl.listRecentNexoActivity(req.user.email, limit);
         response.success(req, res, result, 200);
     } catch (error) {
         next(error);

@@ -264,9 +264,10 @@ module.exports = (injectedDB) => {
     }
 
     // "Actividad reciente" del Home de Nexo: a diferencia de listLogs (admin_logs),
-    // se expone con el permiso nexo_home -- cualquiera que vea esa página ve esto.
-    async function listRecentNexoActivity(limit = 8) {
-        return data.listRecentLogsByModule('nexo_sync', limit);
+    // se expone con el permiso nexo_home -- cualquiera que vea esa página ve esto,
+    // pero cada quien ve solo lo que él mismo hizo (filtrado por su email).
+    async function listRecentNexoActivity(email, limit = 8) {
+        return data.listRecentLogsByModule('nexo_sync', email, limit);
     }
 
     // ─── SETTINGS (apartado Configuración) ───────────────────────────────────────
