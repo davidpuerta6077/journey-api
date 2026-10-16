@@ -75,3 +75,40 @@ test('Ollama caído o con error HTTP → 503; respuesta vacía → 503', async (
     const vacia = async () => ({ ok: true, json: async () => ({ response: '  ' }) });
     await assert.rejects(createIA({ env: {}, fetchFn: vacia }).generarTexto({ system: 'S', prompt: 'P' }), (e) => e.status === 503 && e.message.includes('vacía'));
 });
+
+test('IA_PROVIDER=gemini llama a la API de Google con la key en header y junta las partes de texto', async () => {
+    const calls = [];
+    const fetchFn = async (url, opts) => {
+        calls.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
+        return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Hola ' }, { text: 'Gemini.' }] } }] }) };
+    };
+    const r = await createIA({ env: { IA_PROVIDER: 'gemini', GEMINI_API_KEY: 'g-key', IA_MODEL: 'gemini-x' }, fetchFn }).generarTexto({ system: 'S', prompt: 'P' });
+    assert.deepStrictEqual(r, { texto: 'Hola Gemini.', proveedor: 'gemini', modelo: 'gemini-x' });
+    assert.strictEqual(calls[0].url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-x:generateContent');
+    assert.strictEqual(calls[0].headers['x-goog-api-key'], 'g-key');
+    assert.deepStrictEqual(calls[0].body.systemInstruction, { parts: [{ text: 'S' }] });
+    assert.deepStrictEqual(calls[0].body.contents, [{ role: 'user', parts: [{ text: 'P' }] }]);
+});
+
+test('IA_PROVIDER=openai usa /chat/completions de la URL configurada con Bearer', async () => {
+    const calls = [];
+    const fetchFn = async (url, opts) => {
+        calls.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
+        return { ok: true, json: async () => ({ model: 'llama-3', choices: [{ message: { content: ' Hola. ' } }] }) };
+    };
+    const env = { IA_PROVIDER: 'openai', OPENAI_API_KEY: 'o-key', OPENAI_URL: 'https://api.groq.com/openai/v1/', IA_MODEL: 'llama-3' };
+    const r = await createIA({ env, fetchFn }).generarTexto({ system: 'S', prompt: 'P' });
+    assert.deepStrictEqual(r, { texto: 'Hola.', proveedor: 'openai', modelo: 'llama-3' });
+    assert.strictEqual(calls[0].url, 'https://api.groq.com/openai/v1/chat/completions');
+    assert.strictEqual(calls[0].headers.Authorization, 'Bearer o-key');
+    assert.deepStrictEqual(calls[0].body.messages, [{ role: 'system', content: 'S' }, { role: 'user', content: 'P' }]);
+});
+
+test('gemini/openai sin key o sin modelo → 503; error HTTP 401 → 503 key inválida', async () => {
+    const fetchFn = async () => ({ ok: false, status: 401, json: async () => ({}) });
+    const gen = (env) => createIA({ env, fetchFn }).generarTexto({ system: 'S', prompt: 'P' });
+    await assert.rejects(gen({ IA_PROVIDER: 'gemini', IA_MODEL: 'm' }), (e) => e.status === 503 && /API key/.test(e.message));
+    await assert.rejects(gen({ IA_PROVIDER: 'openai', OPENAI_API_KEY: 'k' }), (e) => e.status === 503 && /modelo/.test(e.message));
+    await assert.rejects(gen({ IA_PROVIDER: 'gemini', GEMINI_API_KEY: 'k', IA_MODEL: 'm' }), (e) => e.status === 503 && /no es válida/.test(e.message));
+    await assert.rejects(gen({ IA_PROVIDER: 'openai', OPENAI_API_KEY: 'k', IA_MODEL: 'm' }), (e) => e.status === 503 && /no es válida/.test(e.message));
+});

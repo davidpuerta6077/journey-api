@@ -11,15 +11,15 @@ const { nombreMes } = require('../../services/onix/word');
 const USE = 'onix_reports_use';
 const ADMIN = 'onix_reports_admin';
 
-// La IA cuesta (Claude) o carga un servidor compartido (Ollama): máximo 20
-// generaciones por usuario por hora.
+// La IA cuesta (Claude) o carga un servidor compartido (Ollama): máximo 60
+// generaciones (una por subactividad) por usuario por hora.
 const generarLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
-    max: 20,
+    max: 60,
     keyGenerator: (req) => req.user.email,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: true, status: 429, body: 'Alcanzaste el límite de 20 generaciones por hora, intenta más tarde' },
+    message: { error: true, status: 429, body: 'Alcanzaste el límite de 60 generaciones por hora, intenta más tarde' },
 });
 
 // Resuelve el actor (usuario de Bravo Hub + permisos) y ejecuta el handler;
@@ -35,9 +35,15 @@ const run = (fn) => async (req, res, next) => {
 
 const ok = (req, res, body) => response.success(req, res, body, 200);
 
+// Los títulos llevan tildes y guiones largos: filename ASCII de respaldo y
+// filename* (RFC 5987) con el nombre real.
 function enviarArchivo(res, { buffer, filename }) {
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    const ascii = filename.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '');
+    res.setHeader('Content-Type', filename.endsWith('.zip')
+        ? 'application/zip'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
     res.send(buffer);
 }
 
@@ -143,28 +149,61 @@ router.delete('/actividades/:id', checkAuth, checkPermission(USE), saveLog(USE, 
     ok(req, res, act);
 }));
 
-router.get('/actividades/:id/evidencias-word', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
-    enviarArchivo(res, await ctrl.evidenciasWord(actor, req.params.id, req.query));
+/**
+ * @swagger
+ * /onix/actividades/{id}/documento-word:
+ *   get: { summary: Documento de la actividad del mes (Evidencia_<Mes>_actividad_<N>.docx; mes, anio), tags: [OnixReports] }
+ * /onix/zip:
+ *   get: { summary: Zip del mes con la estructura de Drive (mes, anio, user_id opcional), tags: [OnixReports] }
+ */
+router.get('/actividades/:id/documento-word', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
+    enviarArchivo(res, await ctrl.documentoActividadWord(actor, req.params.id, req.query));
+}));
+
+router.get('/zip', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
+    enviarArchivo(res, await ctrl.zipMes(actor, req.query));
 }));
 
 /**
  * @swagger
  * /onix/registros:
- *   get: { summary: Registros de una actividad en un mes (actividad_id, mes, anio) con evidencias, tags: [OnixReports] }
- *   post: { summary: Crear registro, tags: [OnixReports] }
+ *   get: { summary: Subactividades del mes con evidencias (mes, anio; actividad_id o user_id opcionales), tags: [OnixReports] }
+ *   post: { summary: Crear subactividad (actividad_id, mes, anio, titulo, desarrollo), tags: [OnixReports] }
  * /onix/registros/{id}:
- *   put: { summary: Editar registro propio, tags: [OnixReports] }
- *   delete: { summary: Eliminar registro propio con sus evidencias, tags: [OnixReports] }
+ *   put: { summary: Editar subactividad propia (desarrollo; titulo y parrafo opcionales), tags: [OnixReports] }
+ *   delete: { summary: Eliminar subactividad propia con sus evidencias, tags: [OnixReports] }
+ * /onix/registros/{id}/generar:
+ *   post: { summary: Generar con IA el párrafo y el documento de evidencia de una subactividad, tags: [OnixReports] }
+ * /onix/registros/{id}/word:
+ *   get: { summary: Documento de evidencia de una subactividad, tags: [OnixReports] }
  */
 router.get('/registros', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
     ok(req, res, await ctrl.listRegistros(actor, req.query));
 }));
 
+router.post('/registros/:id/generar', checkAuth, checkPermission(USE), generarLimiter, saveLog(USE, {
+    descripcion: (req) => `Generó con IA la subactividad "${req._logTitulo || '—'}" de "${req._logActividad || '—'}"`,
+    entityId: (req) => req.params.id,
+    detalle: (req) => (req._logProveedor ? { proveedor: req._logProveedor, modelo: req._logModelo } : null),
+}), run(async (req, res, actor) => {
+    const r = await ctrl.generarSubactividad(actor, req.params.id);
+    req._logTitulo = r.titulo;
+    req._logActividad = r.actividad_nombre;
+    req._logProveedor = r.proveedor;
+    req._logModelo = r.modelo;
+    ok(req, res, r);
+}));
+
+router.get('/registros/:id/word', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
+    enviarArchivo(res, await ctrl.subactividadWord(actor, req.params.id));
+}));
+
 router.post('/registros', checkAuth, checkPermission(USE), saveLog(USE, {
-    descripcion: (req) => `Agregó un registro a "${req._logActividad || '—'}" (${periodo(req.body)})`,
+    descripcion: (req) => `Agregó la subactividad "${req._logTitulo || '—'}" a "${req._logActividad || '—'}" (${periodo(req.body)})`,
     entityId: (req) => req._logRegistroId,
 }), run(async (req, res, actor) => {
     const r = await ctrl.createRegistro(actor, req.body || {});
+    req._logTitulo = r.titulo;
     req._logActividad = r.actividad_nombre;
     req._logRegistroId = r.id;
     ok(req, res, r);
@@ -193,14 +232,14 @@ router.delete('/registros/:id', checkAuth, checkPermission(USE), saveLog(USE, {
  * /onix/logs:
  *   get: { summary: Mis acciones del mes en Bravo Hub aún no asignadas a un registro (mes, anio), tags: [OnixReports] }
  * /onix/registros/desde-logs:
- *   post: { summary: Crear un registro que agrupa acciones propias de Bravo Hub (actividad_id, mes, anio, log_ids), tags: [OnixReports] }
+ *   post: { summary: Crear un registro que agrupa acciones propias de Bravo Hub (actividad_id, mes, anio, log_ids, titulo; registro_id opcional para agregar a uno existente), tags: [OnixReports] }
  */
 router.get('/logs', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
     ok(req, res, await ctrl.listLogsDisponibles(actor, req.query));
 }));
 
 router.post('/registros/desde-logs', checkAuth, checkPermission(USE), saveLog(USE, {
-    descripcion: (req) => `Agregó un registro desde ${req._logCantidad || 0} acción(es) de Bravo Hub a "${req._logActividad || '—'}" (${periodo(req.body)})`,
+    descripcion: (req) => `${req.body?.registro_id ? 'Agregó a una subactividad' : 'Agregó un registro desde'} ${req._logCantidad || 0} acción(es) de Bravo Hub en "${req._logActividad || '—'}" (${periodo(req.body)})`,
     entityId: (req) => req._logRegistroId,
     detalle: (req) => (req._logIds ? { log_ids: req._logIds } : null),
 }), run(async (req, res, actor) => {
@@ -214,9 +253,66 @@ router.post('/registros/desde-logs', checkAuth, checkPermission(USE), saveLog(US
 
 /**
  * @swagger
+ * /onix/google:
+ *   get: { summary: Estado de mi conexión con Google Calendar (configurado, conectado, email), tags: [OnixReports] }
+ *   delete: { summary: Desconectar mi cuenta de Google (revoca el permiso), tags: [OnixReports] }
+ * /onix/google/url:
+ *   get: { summary: URL de Google para autorizar la lectura de mi calendario, tags: [OnixReports] }
+ * /onix/google/callback:
+ *   get: { summary: Retorno de Google (sin token; el state firmado identifica al usuario). Redirige al front, tags: [OnixReports] }
+ * /onix/google/eventos:
+ *   get: { summary: Mis eventos de Google Calendar del mes aún no asignados (mes, anio), tags: [OnixReports] }
+ * /onix/registros/desde-google:
+ *   post: { summary: Agregar eventos de Google Calendar como subactividad (actividad_id, mes, anio, evento_ids, titulo; registro_id opcional), tags: [OnixReports] }
+ */
+router.get('/google', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
+    ok(req, res, await ctrl.googleEstado(actor));
+}));
+
+router.get('/google/url', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
+    ok(req, res, await ctrl.googleUrl(actor));
+}));
+
+// Google redirige aquí el navegador: no hay token de Bravo Hub ni respuesta
+// JSON; siempre se vuelve al front con ?google=ok|error.
+router.get('/google/callback', async (req, res) => {
+    let front = 'http://localhost:5173/informes';
+    try {
+        front = await ctrl.googleFront();
+        await ctrl.googleCallback(req.query);
+        res.redirect(`${front}?google=ok`);
+    } catch (e) {
+        res.redirect(`${front}?google=error&mensaje=${encodeURIComponent(e.status ? e.message : 'No se pudo conectar con Google')}`);
+    }
+});
+
+router.delete('/google', checkAuth, checkPermission(USE), saveLog(USE, {
+    descripcion: () => 'Desconectó su cuenta de Google de Informes',
+}), run(async (req, res, actor) => {
+    ok(req, res, await ctrl.googleDesconectar(actor));
+}));
+
+router.get('/google/eventos', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
+    ok(req, res, await ctrl.listEventosGoogle(actor, req.query));
+}));
+
+router.post('/registros/desde-google', checkAuth, checkPermission(USE), saveLog(USE, {
+    descripcion: (req) => `${req.body?.registro_id ? 'Agregó a una subactividad' : 'Agregó un registro desde'} ${req._logCantidad || 0} evento(s) de Google Calendar en "${req._logActividad || '—'}" (${periodo(req.body)})`,
+    entityId: (req) => req._logRegistroId,
+}), run(async (req, res, actor) => {
+    const r = await ctrl.registroDesdeGoogle(actor, req.body || {});
+    req._logActividad = r.actividad_nombre;
+    req._logRegistroId = r.id;
+    req._logCantidad = r.eventos;
+    ok(req, res, r);
+}));
+
+/**
+ * @swagger
  * /onix/evidencias:
  *   post: { summary: Agregar evidencia (texto, link o imagen en campo multipart "archivo"), tags: [OnixReports] }
  * /onix/evidencias/{id}:
+ *   put: { summary: Editar la descripción (pie) de una evidencia propia, tags: [OnixReports] }
  *   delete: { summary: Eliminar evidencia propia, tags: [OnixReports] }
  * /onix/evidencias/{id}/archivo:
  *   get: { summary: Ver la imagen de una evidencia (con control de acceso), tags: [OnixReports] }
@@ -229,6 +325,13 @@ router.post('/evidencias', checkAuth, checkPermission(USE), saveLog(USE, {
     req._logTipo = ev.tipo;
     req._logEvidenciaId = ev.id;
     ok(req, res, ev);
+}));
+
+router.put('/evidencias/:id', checkAuth, checkPermission(USE), saveLog(USE, {
+    descripcion: () => 'Editó la descripción de una evidencia',
+    entityId: (req) => req.params.id,
+}), run(async (req, res, actor) => {
+    ok(req, res, await ctrl.updateEvidencia(actor, req.params.id, req.body || {}));
 }));
 
 router.delete('/evidencias/:id', checkAuth, checkPermission(USE), saveLog(USE, {
@@ -249,47 +352,9 @@ router.get('/evidencias/:id/archivo', checkAuth, checkPermission(USE), run(async
 
 /**
  * @swagger
- * /onix/informes:
- *   get: { summary: Informes del mes (mes, anio, user_id opcional), tags: [OnixReports] }
- * /onix/informes/generar:
- *   post: { summary: Redactar con IA el desarrollo de una actividad del mes, tags: [OnixReports] }
- * /onix/informes/{id}:
- *   put: { summary: Editar el texto de un informe propio, tags: [OnixReports] }
- * /onix/informes/{id}/word:
- *   get: { summary: Descargar el informe en Word, tags: [OnixReports] }
  * /onix/area/usuarios:
- *   get: { summary: Usuarios de mi área (o todos si admin) con conteos del mes, tags: [OnixReports] }
+ *   get: { summary: Usuarios de mi área (o todos si admin) con subactividades y generadas del mes, tags: [OnixReports] }
  */
-router.get('/informes', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
-    ok(req, res, await ctrl.listInformes(actor, req.query));
-}));
-
-router.post('/informes/generar', checkAuth, checkPermission(USE), generarLimiter, saveLog(USE, {
-    descripcion: (req) => `Generó con IA el informe de "${req._logActividad || '—'}" (${periodo(req.body)})`,
-    entityId: (req) => req._logInformeId,
-    detalle: (req) => (req._logProveedor ? { proveedor: req._logProveedor, modelo: req._logModelo } : null),
-}), run(async (req, res, actor) => {
-    const inf = await ctrl.generarInforme(actor, req.body || {});
-    req._logActividad = inf.actividad_nombre;
-    req._logInformeId = inf.id;
-    req._logProveedor = inf.proveedor;
-    req._logModelo = inf.modelo;
-    ok(req, res, inf);
-}));
-
-router.put('/informes/:id', checkAuth, checkPermission(USE), saveLog(USE, {
-    descripcion: (req) => `Editó el informe de "${req._logActividad || '—'}"`,
-    entityId: (req) => req.params.id,
-}), run(async (req, res, actor) => {
-    const inf = await ctrl.updateInforme(actor, req.params.id, req.body || {});
-    req._logActividad = inf.actividad_nombre;
-    ok(req, res, inf);
-}));
-
-router.get('/informes/:id/word', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
-    enviarArchivo(res, await ctrl.informeWord(actor, req.params.id));
-}));
-
 router.get('/area/usuarios', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
     ok(req, res, await ctrl.listUsuariosArea(actor, req.query));
 }));

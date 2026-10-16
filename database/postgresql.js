@@ -13,7 +13,7 @@ const {
     updateUserSyncStatusQuery, updateUserUnsyncQuery,selectEnrollmentsByUserId,
     updateUserPassword,
     selectAllCourses, selectCoursesForSync, selectDistinctAsignaturas, insertCourseData, updateCourseData,
-    updateCourseMoodleId, findCourseByIdnumber,
+    updateCourseMoodleId, findCourseByIdnumber, findCourseByAsignaturaDocumento, findCourseByAsignaturaNombreProfesor,
     updateCourseSyncStatusQuery, updateCourseSyncingQuery, updateCourseSyncErrorQuery,
     updateCourseFromSicauQuery,
     selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
@@ -68,6 +68,8 @@ const {
     reportEnrollmentsOfCourse: qReportEnrollmentsOfCourse,
     selectSettings, upsertSettingQuery, deleteSettingQuery,
     selectMenuLinks, selectAllMenuLinks, insertMenuLinkQuery, updateMenuLinkQuery, deleteMenuLinkQuery,
+    selectRoleIdsByNames, selectPlatformUserIdsByRoles, insertNotificationData, insertNotificationRecipientData,
+    selectNotificationsForUser, countUnreadNotificationsQuery, markNotificationReadQuery, markAllNotificationsReadQuery,
 } = require('./querysets');
  
 const pool = new Pool({
@@ -356,6 +358,24 @@ function findCourseSicau(idnumber) {
     });
 }
 
+function findCourseByDocente(codigoAsignatura, periodo, documento, grupoExcluir) {
+    return new Promise((resolve, reject) => {
+        pool.query(findCourseByAsignaturaDocumento(codigoAsignatura, periodo, documento, grupoExcluir), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function findCourseByNombreProfesor(codigoAsignatura, periodo, nombreProfesor, grupoExcluir) {
+    return new Promise((resolve, reject) => {
+        pool.query(findCourseByAsignaturaNombreProfesor(codigoAsignatura, periodo, nombreProfesor, grupoExcluir), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
 function updateCourseSyncStatus(id, statusValue) {
     return new Promise((resolve, reject) => {
         pool.query(updateCourseSyncStatusQuery(id, statusValue), (err, result) => {
@@ -468,9 +488,9 @@ function listLogs(limit) {
     });
 }
 
-function listRecentLogsByModule(moduleCode, limit) {
+function listRecentLogsByModule(moduleCode, username, limit) {
     return new Promise((resolve, reject) => {
-        pool.query(selectRecentModuleLogs(moduleCode, limit), (err, result) => {
+        pool.query(selectRecentModuleLogs(moduleCode, username, limit), (err, result) => {
             if (err) return reject(err);
             resolve(result.rows);
         });
@@ -1024,6 +1044,80 @@ function deleteMenuLink(id) {
     });
 }
 
+// ─── NOTIFICATIONS ──────────────────────────────────────────────────────────
+
+function getRoleIdsByNames(names) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectRoleIdsByNames(names), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows.map((r) => r.id));
+        });
+    });
+}
+
+function getPlatformUserIdsByRoles(roleIds) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectPlatformUserIdsByRoles(roleIds), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows.map((r) => r.id));
+        });
+    });
+}
+
+function insertNotification(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertNotificationData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function addNotificationRecipient(notificationId, platformUserId) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertNotificationRecipientData(notificationId, platformUserId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function listNotificationsForUser(platformUserId, limit) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectNotificationsForUser(platformUserId, limit), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function countUnreadNotifications(platformUserId) {
+    return new Promise((resolve, reject) => {
+        pool.query(countUnreadNotificationsQuery(platformUserId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0].count);
+        });
+    });
+}
+
+function markNotificationRead(notificationId, platformUserId) {
+    return new Promise((resolve, reject) => {
+        pool.query(markNotificationReadQuery(notificationId, platformUserId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function markAllNotificationsRead(platformUserId) {
+    return new Promise((resolve, reject) => {
+        pool.query(markAllNotificationsReadQuery(platformUserId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 function checkPermissionsData(email) {
     return new Promise((resolve, reject) => {
         pool.query(checkPermissions(email), (err, result) => {
@@ -1526,18 +1620,17 @@ const onix = {
     listRegistros: (actividadId, mes, anio) => query(onixQueries.registros(actividadId, mes, anio)),
     getRegistro: (id) => queryOne(onixQueries.registro(id)),
     insertRegistro: (d) => queryOne(onixQueries.insertRegistro(d)),
-    updateRegistro: (id, desarrollo) => queryOne(onixQueries.updateRegistro(id, desarrollo)),
+    listRegistrosMes: (userId, mes, anio) => query(onixQueries.registrosMes(userId, mes, anio)),
+    updateRegistro: (id, d) => queryOne(onixQueries.updateRegistro(id, d)),
+    guardarGeneracion: (id, d) => queryOne(onixQueries.guardarGeneracion(id, d)),
     deleteRegistro: (id) => queryOne(onixQueries.deleteRegistro(id)),
 
     listEvidenciasDeRegistros: (ids) => query(onixQueries.evidenciasDeRegistros(ids)),
     getEvidencia: (id) => queryOne(onixQueries.evidencia(id)),
     insertEvidencia: (d) => queryOne(onixQueries.insertEvidencia(d)),
     deleteEvidencia: (id) => queryOne(onixQueries.deleteEvidencia(id)),
+    updateEvidenciaDescripcion: (id, descripcion) => queryOne(onixQueries.updateEvidenciaDescripcion(id, descripcion)),
 
-    listInformes: (userId, mes, anio) => query(onixQueries.informes(userId, mes, anio)),
-    getInforme: (id) => queryOne(onixQueries.informe(id)),
-    upsertInforme: (d) => queryOne(onixQueries.upsertInforme(d)),
-    updateInformeTexto: (id, desarrollo) => queryOne(onixQueries.updateInformeTexto(id, desarrollo)),
 
     listUsuariosConPerfil: (areaId, mes, anio) => query(onixQueries.usuariosConPerfil(areaId, mes, anio)),
 
@@ -1547,6 +1640,11 @@ const onix = {
     listLogsDisponibles: (email, mes, anio) => query(onixQueries.logsDisponibles(email, mes, anio)),
     getLogsPorIds: (ids) => query(onixQueries.logsPorIds(ids)),
     insertRegistroLogs: (registroId, ids) => query(onixQueries.insertRegistroLogs(registroId, ids)),
+    getGoogle: (userId) => queryOne(onixQueries.google(userId)),
+    upsertGoogle: (userId, email, refreshToken) => queryOne(onixQueries.upsertGoogle(userId, email, refreshToken)),
+    deleteGoogle: (userId) => queryOne(onixQueries.deleteGoogle(userId)),
+    listEventosUsados: async (userId) => (await query(onixQueries.eventosUsados(userId))).map((r) => r.evento_id),
+    insertRegistroEventos: (registroId, userId, ids) => query(onixQueries.insertRegistroEventos(registroId, userId, ids)),
 };
 
 module.exports = {
@@ -1582,6 +1680,8 @@ module.exports = {
     getDistinctAsignaturas,
     setCourseMoodleId,
     findCourseSicau,
+    findCourseByDocente,
+    findCourseByNombreProfesor,
     updateCourseSyncStatus,
     markCourseSyncing,
     markCourseSyncError,
@@ -1710,4 +1810,13 @@ module.exports = {
     reportPlatformUsersDetail,
     reportAuditDetail,
     reportEnrollmentsOfCourse,
+    // notifications
+    getRoleIdsByNames,
+    getPlatformUserIdsByRoles,
+    insertNotification,
+    addNotificationRecipient,
+    listNotificationsForUser,
+    countUnreadNotifications,
+    markNotificationRead,
+    markAllNotificationsRead,
 };

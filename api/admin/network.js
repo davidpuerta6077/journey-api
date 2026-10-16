@@ -748,7 +748,7 @@ router.get('/logs', checkAuth, checkPermission('admin_logs'), async (req, res, n
 router.get('/logs/recent-nexo', checkAuth, checkPermission('nexo_home'), async (req, res, next) => {
     try {
         const limit = Math.min(Number(req.query.limit) || 8, 20);
-        const result = await ctrl.listRecentNexoActivity(limit);
+        const result = await ctrl.listRecentNexoActivity(req.user.email, limit);
         response.success(req, res, result, 200);
     } catch (error) {
         next(error);
@@ -863,9 +863,36 @@ router.get('/branding/:clave', async (req, res, next) => {
 
 /**
  * @swagger
+ * /admin/google:
+ *   get: { summary: Credencial de Google para Informes (sin el secreto; solo si existe y sus últimos 4 caracteres), tags: [Admin] }
+ *   put: { summary: Guardar credencial de Google (client_id, client_secret opcional se cifra, redirect_uri, front_url, quitar_secreto), tags: [Admin] }
+ */
+router.get('/google', checkAuth, checkPermission('settings'), async (req, res, next) => {
+    try {
+        response.success(req, res, await ctrl.getGoogleConfig(), 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.put('/google', checkAuth, checkPermission('settings'), saveLog('settings', {
+    // Nunca registrar valores: el body puede traer el secreto.
+    descripcion: (req) => `Actualizó la credencial de Google${req._logGoogle?.secretoCambiado ? ' (secreto cambiado)' : ''}${req._logGoogle?.secretoQuitado ? ' (secreto quitado)' : ''}`,
+}), async (req, res, next) => {
+    try {
+        const r = await ctrl.saveGoogleConfig(req.body, req.user?.email);
+        req._logGoogle = r;
+        response.success(req, res, r, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
  * /admin/ia:
  *   get: { summary: Configuración de IA (sin la API key; solo si existe y sus últimos 4 caracteres), tags: [Admin] }
- *   put: { summary: Guardar configuración de IA (proveedor, modelo, ollama_url, anthropic_key opcional se cifra, quitar_key), tags: [Admin] }
+ *   put: { summary: Guardar configuración de IA (proveedor ollama|claude|gemini|openai, modelo, ollama_url, openai_url, api_key opcional del proveedor elegido se cifra, quitar_key), tags: [Admin] }
  * /admin/ia/probar:
  *   post: { summary: Probar la conexión con la IA configurada, tags: [Admin] }
  */

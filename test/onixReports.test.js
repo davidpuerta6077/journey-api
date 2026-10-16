@@ -96,11 +96,59 @@ test('registros: valida mes/año, devuelve evidencias y solo el dueño escribe',
     assert.strictEqual(regs.length, 1);
     assert.strictEqual(regs[0].evidencias.length, 2);
     await assert.rejects(ctrl.listRegistros(beto, { actividad_id: '100', mes: '10', anio: '2027' }), no(404));
-    await assert.rejects(ctrl.createRegistro(beto, { actividad_id: '100', mes: 10, anio: 2027, desarrollo: 'x' }), no(404));
+    await assert.rejects(ctrl.createRegistro(beto, { actividad_id: '100', mes: 10, anio: 2027, titulo: 'T', desarrollo: 'x' }), no(404));
     await assert.rejects(ctrl.updateRegistro(beto, '1000', { desarrollo: 'x' }), no(404));
-    const nuevo = await ctrl.createRegistro(ana, { actividad_id: '100', mes: '11', anio: '2027', desarrollo: ' Hice B ' });
+    const nuevo = await ctrl.createRegistro(ana, { actividad_id: '100', mes: '11', anio: '2027', titulo: ' Capacitación ', desarrollo: ' Hice B ' });
     assert.strictEqual(nuevo.desarrollo, 'Hice B');
+    assert.strictEqual(nuevo.titulo, 'Capacitación');
     assert.strictEqual(nuevo.mes, 11);
+});
+
+test('createRegistro sin título → 400; título > 200 → 400', async () => {
+    const { ctrl } = setup();
+    const ana = await ctrl.getActor('ana@x.co');
+    await assert.rejects(ctrl.createRegistro(ana, { actividad_id: '100', mes: 10, anio: 2027, desarrollo: 'x' }), no(400));
+    await assert.rejects(ctrl.createRegistro(ana, { actividad_id: '100', mes: 10, anio: 2027, titulo: 'a'.repeat(201), desarrollo: 'x' }), no(400));
+});
+
+test('updateRegistro: título y párrafo opcionales (no se borran si no vienen); vacíos → 400', async () => {
+    const { ctrl, db } = setup();
+    const ana = await ctrl.getActor('ana@x.co');
+    Object.assign(db.st.registros[1000], { titulo: 'Viejo', parrafo: 'Durante este periodo se hizo A.' });
+    let r = await ctrl.updateRegistro(ana, '1000', { desarrollo: 'Nuevo texto' });
+    assert.strictEqual(r.titulo, 'Viejo');
+    assert.strictEqual(r.parrafo, 'Durante este periodo se hizo A.');
+    r = await ctrl.updateRegistro(ana, '1000', { titulo: 'Nuevo', desarrollo: 'Nuevo texto', parrafo: 'Durante este periodo se hizo B.' });
+    assert.strictEqual(r.titulo, 'Nuevo');
+    assert.strictEqual(r.parrafo, 'Durante este periodo se hizo B.');
+    await assert.rejects(ctrl.updateRegistro(ana, '1000', { titulo: '  ', desarrollo: 'x' }), no(400));
+    await assert.rejects(ctrl.updateRegistro(ana, '1000', { parrafo: ' ', desarrollo: 'x' }), no(400));
+});
+
+test('listRegistros sin actividad_id: todas las mías del mes; de otro usuario solo si puedo verlo', async () => {
+    const { ctrl, db } = setup();
+    db.st.actividades[101] = { id: 101, user_id: 1, nombre: 'Otra', descripcion: 'D', orden: 1 };
+    db.st.registros[1001] = { id: 1001, actividad_id: 101, user_id: 1, mes: 10, anio: 2027, titulo: 'X', desarrollo: 'Y' };
+    db.st.registros[1002] = { id: 1002, actividad_id: 200, user_id: 2, mes: 10, anio: 2027, titulo: 'De Beto', desarrollo: 'Z' };
+    const ana = await ctrl.getActor('ana@x.co');
+    const coord = await ctrl.getActor('coord@x.co');
+    const regs = await ctrl.listRegistros(ana, { mes: '10', anio: '2027' });
+    assert.deepStrictEqual(regs.map((r) => r.id).sort(), [1000, 1001]);
+    assert.strictEqual(regs.find((r) => r.id === 1000).evidencias.length, 2);
+    assert.strictEqual((await ctrl.listRegistros(coord, { mes: '10', anio: '2027', user_id: '1' })).length, 2);
+    await assert.rejects(ctrl.listRegistros(coord, { mes: '10', anio: '2027', user_id: '2' }), no(404));
+    await assert.rejects(ctrl.listRegistros(ana, { mes: '13', anio: '2027' }), no(400));
+});
+
+test('updateEvidencia: cambia el pie; ajena → 404; > 500 → 400', async () => {
+    const { ctrl } = setup();
+    const ana = await ctrl.getActor('ana@x.co');
+    const beto = await ctrl.getActor('beto@x.co');
+    const ev = await ctrl.updateEvidencia(ana, '5000', { descripcion: ' Pantalla de inicio ' });
+    assert.strictEqual(ev.descripcion, 'Pantalla de inicio');
+    assert.strictEqual((await ctrl.updateEvidencia(ana, '5000', { descripcion: '' })).descripcion, null);
+    await assert.rejects(ctrl.updateEvidencia(beto, '5000', { descripcion: 'x' }), no(404));
+    await assert.rejects(ctrl.updateEvidencia(ana, '5000', { descripcion: 'a'.repeat(501) }), no(400));
 });
 
 test('deleteRegistro borra archivos de sus evidencias de imagen', async () => {

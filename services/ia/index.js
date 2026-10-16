@@ -1,9 +1,12 @@
 const createClaude = require('./claude');
 const createOllama = require('./ollama');
+const createGemini = require('./gemini');
+const createOpenAI = require('./openai');
 const { iaError } = require('./errors');
 
 // Servicio de IA genérico de Bravo Hub. El proveedor sale de IA_PROVIDER
-// (claude | ollama, por defecto ollama). Con `getEnv` las variables se leen en
+// (claude | ollama | gemini | openai, por defecto ollama; openai = cualquier API
+// compatible con OpenAI según OPENAI_URL). Con `getEnv` las variables se leen en
 // cada generación (Configuración > Inteligencia artificial, sin reiniciar);
 // sin él se usa `env` fijo. No hay fallback automático entre proveedores.
 function construir(env, { claudeClient, fetchFn }) {
@@ -17,7 +20,15 @@ function construir(env, { claudeClient, fetchFn }) {
     if (proveedor === 'ollama') {
         return createOllama({ fetchFn, url: env.OLLAMA_URL || 'http://10.0.17.77:11434', model: env.IA_MODEL || 'qwen2.5:7b' });
     }
-    throw iaError(`La IA no está configurada: proveedor "${proveedor}" no válido (usa claude u ollama)`);
+    if (proveedor === 'gemini' || proveedor === 'openai') {
+        const nombre = proveedor === 'gemini' ? 'Gemini' : 'la IA compatible con OpenAI';
+        const apiKey = proveedor === 'gemini' ? env.GEMINI_API_KEY : env.OPENAI_API_KEY;
+        if (!apiKey) throw iaError(`La IA no está configurada: falta la API key de ${nombre} (Configuración > Inteligencia artificial)`);
+        if (!env.IA_MODEL) throw iaError(`La IA no está configurada: falta el modelo de ${nombre} (Configuración > Inteligencia artificial)`);
+        if (proveedor === 'gemini') return createGemini({ fetchFn, apiKey, model: env.IA_MODEL });
+        return createOpenAI({ fetchFn, apiKey, model: env.IA_MODEL, url: env.OPENAI_URL || 'https://api.openai.com/v1' });
+    }
+    throw iaError(`La IA no está configurada: proveedor "${proveedor}" no válido`);
 }
 
 function createIA({ env = process.env, getEnv, claudeClient, fetchFn } = {}) {
