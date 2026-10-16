@@ -18,6 +18,7 @@ const reports = require('./reports/network');
 const attendanceForms = require('./attendance_forms/network');
 const notifications = require('./notifications/network');
 const attendanceFormsPublic = require('./attendance_forms/networkPublic');
+const onixReports = require('./onix_reports/network');
 const ROOT = path.resolve(__dirname, '..');
 const swaggerUi   = require('swagger-ui-express');
 const swaggerSpec = require('../swagger');  
@@ -63,6 +64,7 @@ app.use('/reports', reports);
 app.use('/forms', attendanceForms);
 app.use('/notifications', notifications);
 app.use('/f', attendanceFormsPublic);
+app.use('/onix', onixReports);
 
 
 // ─── PÁGINAS ──────────────────────────────────────────────────────────────────

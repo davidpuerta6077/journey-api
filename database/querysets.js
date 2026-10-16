@@ -1009,6 +1009,18 @@ const upsertSettingQuery = (categoria, clave, valor, updatedBy) => ({
     values: [categoria, clave, JSON.stringify(valor), updatedBy || null]
 });
 
+// Logo y favicon del hub (bytea), ver database/seeds/addHubArchivosTable.js
+const upsertHubArchivoQuery = (clave, mime, datos, updatedBy) => ({
+    text: `INSERT INTO ${schema}.hub_archivos (clave, mime, datos, updated_by) VALUES ($1, $2, $3, $4)
+           ON CONFLICT (clave) DO UPDATE SET mime = $2, datos = $3, updated_at = NOW(), updated_by = $4`,
+    values: [clave, mime, datos, updatedBy || null]
+});
+
+const selectHubArchivoQuery = (clave) => ({
+    text: `SELECT clave, mime, datos FROM ${schema}.hub_archivos WHERE clave = $1`,
+    values: [clave]
+});
+
 const deleteSettingQuery = (categoria, clave) => ({
     text: `DELETE FROM ${schema}.settings WHERE categoria = $1 AND clave = $2`,
     values: [categoria, clave]
@@ -1872,7 +1884,183 @@ const coursesDetailByCategory = ({ categoryId = null, incluirSubcategorias = tru
 
 
 
+// ─── ONIX REPORTS (Informes Onix-IA) ──────────────────────────────────────────
+// user_id = platform_users.id (usuario de Bravo Hub)
+
+const onixQueries = {
+    perfil: (userId) => ({
+        text: `SELECT p.*, a.nombre AS area_nombre
+               FROM ${schema}.onix_perfiles p
+               LEFT JOIN ${schema}.onix_areas a ON a.id = p.area_id
+               WHERE p.user_id = $1`,
+        values: [userId],
+    }),
+    upsertPerfil: (userId, d) => ({
+        text: `INSERT INTO ${schema}.onix_perfiles (user_id, nombre, identificacion, area_id, contrato, objeto, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, now())
+               ON CONFLICT (user_id) DO UPDATE SET
+                   nombre = EXCLUDED.nombre, identificacion = EXCLUDED.identificacion, area_id = EXCLUDED.area_id,
+                   contrato = EXCLUDED.contrato, objeto = EXCLUDED.objeto, updated_at = now()
+               RETURNING *`,
+        values: [userId, d.nombre, d.identificacion, d.area_id, d.contrato, d.objeto],
+    }),
+
+    areas: () => ({ text: `SELECT * FROM ${schema}.onix_areas ORDER BY nombre`, values: [] }),
+    area: (id) => ({ text: `SELECT * FROM ${schema}.onix_areas WHERE id = $1`, values: [id] }),
+    insertArea: (d) => ({
+        text: `INSERT INTO ${schema}.onix_areas (nombre, color) VALUES ($1, $2) RETURNING *`,
+        values: [d.nombre, d.color],
+    }),
+    updateArea: (id, d) => ({
+        text: `UPDATE ${schema}.onix_areas SET nombre = $2, color = $3 WHERE id = $1 RETURNING *`,
+        values: [id, d.nombre, d.color],
+    }),
+    deleteArea: (id) => ({ text: `DELETE FROM ${schema}.onix_areas WHERE id = $1 RETURNING *`, values: [id] }),
+
+    actividades: (userId) => ({
+        text: `SELECT * FROM ${schema}.onix_actividades WHERE user_id = $1 ORDER BY orden, id`,
+        values: [userId],
+    }),
+    actividad: (id) => ({ text: `SELECT * FROM ${schema}.onix_actividades WHERE id = $1`, values: [id] }),
+    insertActividad: (userId, d) => ({
+        text: `INSERT INTO ${schema}.onix_actividades (user_id, nombre, descripcion, orden) VALUES ($1, $2, $3, $4) RETURNING *`,
+        values: [userId, d.nombre, d.descripcion, d.orden],
+    }),
+    updateActividad: (id, d) => ({
+        text: `UPDATE ${schema}.onix_actividades SET nombre = $2, descripcion = $3, orden = $4 WHERE id = $1 RETURNING *`,
+        values: [id, d.nombre, d.descripcion, d.orden],
+    }),
+    deleteActividad: (id) => ({ text: `DELETE FROM ${schema}.onix_actividades WHERE id = $1 RETURNING *`, values: [id] }),
+    imagenesDeActividad: (actividadId) => ({
+        text: `SELECT e.contenido
+               FROM ${schema}.onix_evidencias e
+               JOIN ${schema}.onix_registros r ON r.id = e.registro_id
+               WHERE r.actividad_id = $1 AND e.tipo = 'imagen'`,
+        values: [actividadId],
+    }),
+
+    registros: (actividadId, mes, anio) => ({
+        text: `SELECT r.*, (SELECT count(*)::int FROM ${schema}.onix_registro_logs rl WHERE rl.registro_id = r.id) AS logs
+               FROM ${schema}.onix_registros r
+               WHERE r.actividad_id = $1 AND r.mes = $2 AND r.anio = $3
+               ORDER BY r.created_at, r.id`,
+        values: [actividadId, mes, anio],
+    }),
+    registrosMes: (userId, mes, anio) => ({
+        text: `SELECT r.*, (SELECT count(*)::int FROM ${schema}.onix_registro_logs rl WHERE rl.registro_id = r.id) AS logs
+               FROM ${schema}.onix_registros r
+               WHERE r.user_id = $1 AND r.mes = $2 AND r.anio = $3
+               ORDER BY r.created_at, r.id`,
+        values: [userId, mes, anio],
+    }),
+
+    // Acciones propias del mes en Bravo Hub (logs) aún no asignadas a un
+    // registro. Sin consultas (GET) ni acciones del propio módulo Informes.
+    insertArchivo: (userId, mime, datos) => ({
+        text: `INSERT INTO ${schema}.onix_archivos (user_id, mime, datos) VALUES ($1, $2, $3) RETURNING id`,
+        values: [userId, mime, datos],
+    }),
+    archivo: (id) => ({ text: `SELECT id, mime, datos FROM ${schema}.onix_archivos WHERE id = $1`, values: [id] }),
+    deleteArchivo: (id) => ({ text: `DELETE FROM ${schema}.onix_archivos WHERE id = $1`, values: [id] }),
+
+    logsDisponibles: (email, mes, anio) => ({
+        text: `SELECT l.id, l.date, l.type, l.description, l.entity_type, m.name AS aplicacion, sm.name AS modulo
+               FROM ${schema}.logs l
+               LEFT JOIN ${schema}.submodules sm ON sm.code = l.entity_type
+               LEFT JOIN ${schema}.modules m ON m.id = sm.module_id
+               WHERE lower(l.username) = lower($1)
+                 AND l.type <> 'get'
+                 AND (l.entity_type IS NULL OR l.entity_type NOT LIKE 'onix_reports%')
+                 AND l.date >= make_date($3, $2, 1)
+                 AND l.date < make_date($3, $2, 1) + interval '1 month'
+                 AND NOT EXISTS (SELECT 1 FROM ${schema}.onix_registro_logs rl WHERE rl.log_id = l.id)
+               ORDER BY l.date`,
+        values: [email, mes, anio],
+    }),
+    logsPorIds: (ids) => ({
+        text: `SELECT l.id, l.date, l.username, l.description,
+                      EXISTS (SELECT 1 FROM ${schema}.onix_registro_logs rl WHERE rl.log_id = l.id) AS usado
+               FROM ${schema}.logs l
+               WHERE l.id = ANY($1::int[])`,
+        values: [ids],
+    }),
+    insertRegistroLogs: (registroId, ids) => ({
+        text: `INSERT INTO ${schema}.onix_registro_logs (registro_id, log_id) SELECT $1, unnest($2::int[])`,
+        values: [registroId, ids],
+    }),
+    google: (userId) => ({ text: `SELECT * FROM ${schema}.onix_google WHERE user_id = $1`, values: [userId] }),
+    upsertGoogle: (userId, email, refreshToken) => ({
+        text: `INSERT INTO ${schema}.onix_google (user_id, email, refresh_token) VALUES ($1, $2, $3)
+               ON CONFLICT (user_id) DO UPDATE SET email = EXCLUDED.email, refresh_token = EXCLUDED.refresh_token, connected_at = now()
+               RETURNING user_id, email, connected_at`,
+        values: [userId, email, refreshToken],
+    }),
+    deleteGoogle: (userId) => ({ text: `DELETE FROM ${schema}.onix_google WHERE user_id = $1 RETURNING *`, values: [userId] }),
+    eventosUsados: (userId) => ({
+        text: `SELECT evento_id FROM ${schema}.onix_registro_eventos WHERE user_id = $1`,
+        values: [userId],
+    }),
+    insertRegistroEventos: (registroId, userId, ids) => ({
+        text: `INSERT INTO ${schema}.onix_registro_eventos (registro_id, user_id, evento_id) SELECT $1, $2, unnest($3::text[])`,
+        values: [registroId, userId, ids],
+    }),
+    registro: (id) => ({ text: `SELECT * FROM ${schema}.onix_registros WHERE id = $1`, values: [id] }),
+    insertRegistro: (d) => ({
+        text: `INSERT INTO ${schema}.onix_registros (actividad_id, user_id, mes, anio, titulo, desarrollo) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        values: [d.actividad_id, d.user_id, d.mes, d.anio, d.titulo, d.desarrollo],
+    }),
+    // titulo/parrafo en NULL = no cambian.
+    updateRegistro: (id, d) => ({
+        text: `UPDATE ${schema}.onix_registros
+               SET desarrollo = $2, titulo = COALESCE($3, titulo), parrafo = COALESCE($4, parrafo)
+               WHERE id = $1 RETURNING *`,
+        values: [id, d.desarrollo, d.titulo, d.parrafo],
+    }),
+    guardarGeneracion: (id, d) => ({
+        text: `UPDATE ${schema}.onix_registros
+               SET parrafo = $2, documento = $3, proveedor = $4, modelo = $5, generado_at = now()
+               WHERE id = $1 RETURNING *`,
+        values: [id, d.parrafo, JSON.stringify(d.documento), d.proveedor, d.modelo],
+    }),
+    deleteRegistro: (id) => ({ text: `DELETE FROM ${schema}.onix_registros WHERE id = $1 RETURNING *`, values: [id] }),
+
+    evidenciasDeRegistros: (ids) => ({
+        text: `SELECT * FROM ${schema}.onix_evidencias WHERE registro_id = ANY($1::int[]) ORDER BY id`,
+        values: [ids],
+    }),
+    evidencia: (id) => ({
+        text: `SELECT e.*, r.user_id
+               FROM ${schema}.onix_evidencias e
+               JOIN ${schema}.onix_registros r ON r.id = e.registro_id
+               WHERE e.id = $1`,
+        values: [id],
+    }),
+    insertEvidencia: (d) => ({
+        text: `INSERT INTO ${schema}.onix_evidencias (registro_id, tipo, contenido, descripcion) VALUES ($1, $2, $3, $4) RETURNING *`,
+        values: [d.registro_id, d.tipo, d.contenido, d.descripcion],
+    }),
+    deleteEvidencia: (id) => ({ text: `DELETE FROM ${schema}.onix_evidencias WHERE id = $1 RETURNING *`, values: [id] }),
+    updateEvidenciaDescripcion: (id, descripcion) => ({
+        text: `UPDATE ${schema}.onix_evidencias SET descripcion = $2 WHERE id = $1 RETURNING *`,
+        values: [id, descripcion],
+    }),
+
+    usuariosConPerfil: (areaId, mes, anio) => ({
+        text: `SELECT p.user_id, p.nombre, p.identificacion, p.area_id, a.nombre AS area_nombre, pu.email,
+                      (SELECT count(*)::int FROM ${schema}.onix_registros r WHERE r.user_id = p.user_id AND r.mes = $2 AND r.anio = $3) AS registros,
+                      (SELECT count(*)::int FROM ${schema}.onix_registros r WHERE r.user_id = p.user_id AND r.mes = $2 AND r.anio = $3 AND r.parrafo IS NOT NULL) AS generados
+               FROM ${schema}.onix_perfiles p
+               JOIN ${schema}.platform_users pu ON pu.id = p.user_id
+               LEFT JOIN ${schema}.onix_areas a ON a.id = p.area_id
+               WHERE ($1::int IS NULL OR p.area_id = $1)
+               ORDER BY p.nombre`,
+        values: [areaId, mes, anio],
+    }),
+};
+
 module.exports = {
+    onixQueries,
+    upsertHubArchivoQuery, selectHubArchivoQuery,
     insertSicauNovedadData,
     selectSicauNovedades,
     selectRoleIdsByNames,

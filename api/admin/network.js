@@ -8,6 +8,7 @@ const postgresql = require('../../database/postgresql');
 const checkAuth = require('../../middleware/checkAuth');
 const checkPermission = require('../../middleware/checkPermissions');
 const saveLog = require('../../middleware/saveLog');
+const { valorParaLog } = require('../../services/settingsSecretos');
 
 // ─── USUARIOS DE PLATAFORMA ─────────────────────────────────────────────────────
 
@@ -801,7 +802,7 @@ router.get('/settings', checkAuth, checkPermission('settings'), async (req, res,
  */
 router.put('/settings', checkAuth, checkPermission('settings'), saveLog('settings', {
     descripcion: (req) => `Guardó el setting "${req.body?.categoria}.${req.body?.clave}"`,
-    detalle: (req) => [{ categoria: req.body?.categoria, clave: req.body?.clave, valor: req.body?.valor }],
+    detalle: (req) => [{ categoria: req.body?.categoria, clave: req.body?.clave, valor: valorParaLog(req.body?.categoria, req.body?.clave, req.body?.valor) }],
 }), async (req, res, next) => {
     try {
         const result = await ctrl.saveSetting(req.body, req.user?.email);
@@ -843,6 +844,93 @@ router.delete('/settings/:categoria/:clave', checkAuth, checkPermission('setting
 
 /**
  * @swagger
+ * /admin/branding/{clave}:
+ *   get: { summary: Logo o favicon del hub (público; clave = logo | favicon), tags: [Admin] }
+ */
+router.get('/branding/:clave', async (req, res, next) => {
+    try {
+        const { datos, mime } = await ctrl.getBrandingArchivo(req.params.clave);
+        res.setHeader('Content-Type', mime);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        // Un SVG subido no debe poder ejecutar scripts si se abre directo.
+        res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.send(datos);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/google:
+ *   get: { summary: Credencial de Google para Informes (sin el secreto; solo si existe y sus últimos 4 caracteres), tags: [Admin] }
+ *   put: { summary: Guardar credencial de Google (client_id, client_secret opcional se cifra, redirect_uri, front_url, quitar_secreto), tags: [Admin] }
+ */
+router.get('/google', checkAuth, checkPermission('settings'), async (req, res, next) => {
+    try {
+        response.success(req, res, await ctrl.getGoogleConfig(), 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.put('/google', checkAuth, checkPermission('settings'), saveLog('settings', {
+    // Nunca registrar valores: el body puede traer el secreto.
+    descripcion: (req) => `Actualizó la credencial de Google${req._logGoogle?.secretoCambiado ? ' (secreto cambiado)' : ''}${req._logGoogle?.secretoQuitado ? ' (secreto quitado)' : ''}`,
+}), async (req, res, next) => {
+    try {
+        const r = await ctrl.saveGoogleConfig(req.body, req.user?.email);
+        req._logGoogle = r;
+        response.success(req, res, r, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /admin/ia:
+ *   get: { summary: Configuración de IA (sin la API key; solo si existe y sus últimos 4 caracteres), tags: [Admin] }
+ *   put: { summary: Guardar configuración de IA (proveedor ollama|claude|gemini|openai, modelo, ollama_url, openai_url, api_key opcional del proveedor elegido se cifra, quitar_key), tags: [Admin] }
+ * /admin/ia/probar:
+ *   post: { summary: Probar la conexión con la IA configurada, tags: [Admin] }
+ */
+router.get('/ia', checkAuth, checkPermission('settings'), async (req, res, next) => {
+    try {
+        response.success(req, res, await ctrl.getIAConfig(), 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.put('/ia', checkAuth, checkPermission('settings'), saveLog('settings', {
+    // Nunca registrar valores: el body puede traer la API key.
+    descripcion: (req) => `Actualizó la configuración de IA (proveedor ${req._logIA?.proveedor || '—'}${req._logIA?.keyCambiada ? ', API key cambiada' : ''}${req._logIA?.keyQuitada ? ', API key quitada' : ''})`,
+}), async (req, res, next) => {
+    try {
+        const r = await ctrl.saveIAConfig(req.body, req.user?.email);
+        req._logIA = r;
+        response.success(req, res, r, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post('/ia/probar', checkAuth, checkPermission('settings'), saveLog('settings', {
+    descripcion: (req) => `Probó la conexión de IA (${req._logIA || '—'})`,
+}), async (req, res, next) => {
+    try {
+        const r = await ctrl.probarIA();
+        req._logIA = `${r.proveedor} ${r.modelo}`;
+        response.success(req, res, r, 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
  * /admin/settings/logo:
  *   post:
  *     summary: Subir el logo del hub (se guarda como setting apariencia.logo_url)
@@ -861,26 +949,13 @@ router.delete('/settings/:categoria/:clave', checkAuth, checkPermission('setting
  */
 router.post('/settings/logo', checkAuth, checkPermission('settings'), saveLog('settings', {
     descripcion: () => `Actualizó el logo del hub`,
-}), (req, res, next) => {
-    if (!req.files || !req.files.logo) {
-        return response.error(req, res, 'No se recibió ningún archivo.', 400);
+}), async (req, res, next) => {
+    try {
+        const result = await ctrl.saveBrandingArchivo('logo', req.files?.logo || null, req.user?.email);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
     }
-    const file = req.files.logo;
-    const uploadDir = path.join(__dirname, '../../uploads/branding');
-    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-    const ext = path.extname(file.name) || '.png';
-    const fileName = `logo_${Date.now()}${ext}`;
-    const filePath = path.join(uploadDir, fileName);
-    file.mv(filePath, async (err) => {
-        if (err) return response.error(req, res, err.message, 500);
-        try {
-            const logoUrl = `/uploads/branding/${fileName}`;
-            const result = await ctrl.saveSetting({ categoria: 'apariencia', clave: 'logo_url', valor: logoUrl }, req.user?.email);
-            response.success(req, res, result, 200);
-        } catch (error) {
-            next(error);
-        }
-    });
 });
 
 /**
@@ -903,26 +978,13 @@ router.post('/settings/logo', checkAuth, checkPermission('settings'), saveLog('s
  */
 router.post('/settings/favicon', checkAuth, checkPermission('settings'), saveLog('settings', {
     descripcion: () => `Actualizó el favicon del hub`,
-}), (req, res, next) => {
-    if (!req.files || !req.files.favicon) {
-        return response.error(req, res, 'No se recibió ningún archivo.', 400);
+}), async (req, res, next) => {
+    try {
+        const result = await ctrl.saveBrandingArchivo('favicon', req.files?.favicon || null, req.user?.email);
+        response.success(req, res, result, 200);
+    } catch (error) {
+        next(error);
     }
-    const file = req.files.favicon;
-    const uploadDir = path.join(__dirname, '../../uploads/branding');
-    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-    const ext = path.extname(file.name) || '.png';
-    const fileName = `favicon_${Date.now()}${ext}`;
-    const filePath = path.join(uploadDir, fileName);
-    file.mv(filePath, async (err) => {
-        if (err) return response.error(req, res, err.message, 500);
-        try {
-            const faviconUrl = `/uploads/branding/${fileName}`;
-            const result = await ctrl.saveSetting({ categoria: 'apariencia', clave: 'favicon_url', valor: faviconUrl }, req.user?.email);
-            response.success(req, res, result, 200);
-        } catch (error) {
-            next(error);
-        }
-    });
 });
 
 /**

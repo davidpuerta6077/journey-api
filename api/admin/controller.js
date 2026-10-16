@@ -1,5 +1,10 @@
+const fs = require('fs');
 const { moodleRequest } = require('../../services/moodleService');
 const { assertMoodleOk } = require('../../services/moodleAssert');
+const iaConfig = require('../../services/ia/config');
+const googleConfig = require('../../services/onix/googleConfig');
+const { esSecreto } = require('../../services/settingsSecretos');
+const { createIAConfigurada } = require('../../services/ia');
 
 module.exports = (injectedDB) => {
     let data = injectedDB;
@@ -266,8 +271,25 @@ module.exports = (injectedDB) => {
 
     // ─── SETTINGS (apartado Configuración) ───────────────────────────────────────
 
+    // Las categorías 'ia' y 'google' (con keys/secretos cifrados) solo se manejan
+    // por /admin/ia y /admin/google: así nunca se listan ni quedan en claro en los logs.
+    function rechazarCategoriaIA(categoria) {
+        const pestana = { [iaConfig.CATEGORIA]: 'Inteligencia artificial', [googleConfig.CATEGORIA]: 'Google' }[categoria];
+        if (pestana) {
+            const err = new Error(`Esta configuración se edita en Configuración > ${pestana}`);
+            err.status = 400;
+            throw err;
+        }
+    }
+
     async function listSettings(categoria) {
-        return data.getSettings(categoria);
+        const rows = await data.getSettings(categoria);
+        return rows
+            .filter((r) => !(r.categoria === iaConfig.CATEGORIA && r.clave.endsWith('_key')))
+            .filter((r) => !(r.categoria === googleConfig.CATEGORIA && r.clave === 'client_secret'))
+            .map((r) => (esSecreto(r.categoria, r.clave)
+                ? { ...r, valor: '', secreto: { configurado: !!r.valor, ultimos: String(r.valor || '').slice(-4) } }
+                : r));
     }
 
     async function saveSetting(body, updatedBy) {
@@ -277,12 +299,87 @@ module.exports = (injectedDB) => {
             err.status = 400;
             throw err;
         }
+        rechazarCategoriaIA(categoria);
+        if (esSecreto(categoria, clave) && (typeof valor !== 'string' || !valor.trim())) {
+            const err = new Error('Escribe el nuevo valor (vacío no cambia el actual)');
+            err.status = 400;
+            throw err;
+        }
         return data.upsertSetting(categoria, clave, valor, updatedBy);
     }
 
     async function removeSetting(categoria, clave) {
+        rechazarCategoriaIA(categoria);
         await data.deleteSetting(categoria, clave);
         return { categoria, clave, deleted: true };
+    }
+
+    // ─── IA (Configuración > Inteligencia artificial) ─────────────────────────
+
+    async function getIAConfig() {
+        return iaConfig.verConfig({ db: data });
+    }
+
+    async function saveIAConfig(body, email) {
+        return iaConfig.guardarConfig({ db: data, body: body || {}, email });
+    }
+
+    // ─── Google (Configuración > Google): credencial OAuth de Google Calendar ──
+
+    async function getGoogleConfig() {
+        return googleConfig.verConfig({ db: data });
+    }
+
+    async function saveGoogleConfig(body, email) {
+        return googleConfig.guardarConfig({ db: data, body: body || {}, email });
+    }
+
+    // Generación mínima con la configuración guardada, para el botón "Probar conexión".
+    async function probarIA() {
+        const r = await createIAConfigurada(data).generarTexto({
+            system: 'Responde únicamente con la palabra OK.',
+            prompt: 'Prueba de conexión. Responde OK.',
+        });
+        return { ok: true, proveedor: r.proveedor, modelo: r.modelo, respuesta: r.texto.slice(0, 100) };
+    }
+
+    // ─── LOGO Y FAVICON (Configuración > Apariencia) ──────────────────────────
+    // Se guardan en la BD (hub_archivos): el disco del contenedor (App Runner)
+    // no persiste entre despliegues. Se sirven públicos en /admin/branding/:clave.
+    const BRANDING_CLAVES = ['logo', 'favicon'];
+    const BRANDING_TIPOS = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/x-icon', 'image/vnd.microsoft.icon'];
+    const BRANDING_MAX = 2 * 1024 * 1024;
+
+    function brandingClave(clave) {
+        if (!BRANDING_CLAVES.includes(clave)) {
+            const err = new Error('No encontrado');
+            err.status = 404;
+            throw err;
+        }
+    }
+
+    async function saveBrandingArchivo(clave, file, email) {
+        brandingClave(clave);
+        const invalido = (msg) => { const err = new Error(msg); err.status = 400; return err; };
+        if (!file) throw invalido('No se recibió ningún archivo.');
+        if (!BRANDING_TIPOS.includes(file.mimetype)) throw invalido('Formato no permitido (usa PNG, JPG, WEBP, SVG o ICO)');
+        if (file.size > BRANDING_MAX) throw invalido('La imagen supera 2 MB');
+        const datos = file.tempFilePath ? await fs.promises.readFile(file.tempFilePath) : file.data;
+        if (file.tempFilePath) await fs.promises.unlink(file.tempFilePath).catch(() => {});
+        await data.upsertHubArchivo(clave, file.mimetype, datos, email);
+        // ?v= cambia en cada subida para que el navegador no muestre la imagen en caché.
+        return data.upsertSetting('apariencia', `${clave}_url`, `/admin/branding/${clave}?v=${Date.now()}`, email);
+    }
+
+    async function getBrandingArchivo(clave) {
+        brandingClave(clave);
+        const archivo = await data.getHubArchivo(clave);
+        if (!archivo) {
+            const err = new Error('No encontrado');
+            err.status = 404;
+            throw err;
+        }
+        return { datos: archivo.datos, mime: archivo.mime };
     }
 
     // Cierre de semestre global (botón en Configuración > Académico): pasa a
@@ -347,6 +444,9 @@ module.exports = (injectedDB) => {
         getPermisosMatrix, grantPermiso, revokePermiso,
         listLogs, listRecentNexoActivity,
         listSettings, saveSetting, removeSetting, finalizePeriodo,
+        getIAConfig, saveIAConfig, probarIA,
+        getGoogleConfig, saveGoogleConfig,
+        saveBrandingArchivo, getBrandingArchivo,
         listMenuLinksAdmin, listActiveMenuLinks, createMenuLink, updateMenuLinkAdmin, deleteMenuLinkAdmin
     };
 };
