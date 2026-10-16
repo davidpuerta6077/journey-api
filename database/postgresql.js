@@ -13,7 +13,7 @@ const {
     updateUserSyncStatusQuery, updateUserUnsyncQuery,selectEnrollmentsByUserId,
     updateUserPassword,
     selectAllCourses, selectCoursesForSync, selectDistinctAsignaturas, insertCourseData, updateCourseData,
-    updateCourseMoodleId, findCourseByIdnumber,
+    updateCourseMoodleId, findCourseByIdnumber, findCourseByAsignaturaDocumento, findCourseByAsignaturaNombreProfesor,
     updateCourseSyncStatusQuery, updateCourseSyncingQuery, updateCourseSyncErrorQuery,
     updateCourseFromSicauQuery,
     selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
@@ -68,6 +68,8 @@ const {
     reportEnrollmentsOfCourse: qReportEnrollmentsOfCourse,
     selectSettings, upsertSettingQuery, deleteSettingQuery,
     selectMenuLinks, selectAllMenuLinks, insertMenuLinkQuery, updateMenuLinkQuery, deleteMenuLinkQuery,
+    selectRoleIdsByNames, selectPlatformUserIdsByRoles, insertNotificationData, insertNotificationRecipientData,
+    selectNotificationsForUser, countUnreadNotificationsQuery, markNotificationReadQuery, markAllNotificationsReadQuery,
 } = require('./querysets');
  
 const pool = new Pool({
@@ -350,6 +352,24 @@ function setCourseMoodleId(id, moodleId) {
 function findCourseSicau(idnumber) {
     return new Promise((resolve, reject) => {
         pool.query(findCourseByIdnumber(idnumber), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function findCourseByDocente(codigoAsignatura, periodo, documento, grupoExcluir) {
+    return new Promise((resolve, reject) => {
+        pool.query(findCourseByAsignaturaDocumento(codigoAsignatura, periodo, documento, grupoExcluir), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
+function findCourseByNombreProfesor(codigoAsignatura, periodo, nombreProfesor, grupoExcluir) {
+    return new Promise((resolve, reject) => {
+        pool.query(findCourseByAsignaturaNombreProfesor(codigoAsignatura, periodo, nombreProfesor, grupoExcluir), (err, data) => {
             if (err) return reject(err);
             resolve(data.rows);
         });
@@ -1016,6 +1036,80 @@ function deleteMenuLink(id) {
     });
 }
 
+// ─── NOTIFICATIONS ──────────────────────────────────────────────────────────
+
+function getRoleIdsByNames(names) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectRoleIdsByNames(names), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows.map((r) => r.id));
+        });
+    });
+}
+
+function getPlatformUserIdsByRoles(roleIds) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectPlatformUserIdsByRoles(roleIds), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows.map((r) => r.id));
+        });
+    });
+}
+
+function insertNotification(data) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertNotificationData(data), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function addNotificationRecipient(notificationId, platformUserId) {
+    return new Promise((resolve, reject) => {
+        pool.query(insertNotificationRecipientData(notificationId, platformUserId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function listNotificationsForUser(platformUserId, limit) {
+    return new Promise((resolve, reject) => {
+        pool.query(selectNotificationsForUser(platformUserId, limit), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function countUnreadNotifications(platformUserId) {
+    return new Promise((resolve, reject) => {
+        pool.query(countUnreadNotificationsQuery(platformUserId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0].count);
+        });
+    });
+}
+
+function markNotificationRead(notificationId, platformUserId) {
+    return new Promise((resolve, reject) => {
+        pool.query(markNotificationReadQuery(notificationId, platformUserId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+}
+
+function markAllNotificationsRead(platformUserId) {
+    return new Promise((resolve, reject) => {
+        pool.query(markAllNotificationsReadQuery(platformUserId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
 function checkPermissionsData(email) {
     return new Promise((resolve, reject) => {
         pool.query(checkPermissions(email), (err, result) => {
@@ -1525,6 +1619,8 @@ module.exports = {
     getDistinctAsignaturas,
     setCourseMoodleId,
     findCourseSicau,
+    findCourseByDocente,
+    findCourseByNombreProfesor,
     updateCourseSyncStatus,
     markCourseSyncing,
     markCourseSyncError,
@@ -1653,4 +1749,13 @@ module.exports = {
     reportPlatformUsersDetail,
     reportAuditDetail,
     reportEnrollmentsOfCourse,
+    // notifications
+    getRoleIdsByNames,
+    getPlatformUserIdsByRoles,
+    insertNotification,
+    addNotificationRecipient,
+    listNotificationsForUser,
+    countUnreadNotifications,
+    markNotificationRead,
+    markAllNotificationsRead,
 };

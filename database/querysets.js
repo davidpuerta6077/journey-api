@@ -428,6 +428,29 @@ const findCourseByIdnumber = (idnumber) => ({
     values: [idnumber]
 });
 
+// Mismo codigo_asignatura+periodo+profesor con un grupo distinto: en SICAU el
+// grupo cambia cuando cambia la jornada del mismo curso (no es un curso
+// nuevo). Se usa para detectar ese caso antes de crear el curso como "nuevo"
+// (ver saveSicauCurso en api/SICAU/controller.js). documento es más
+// confiable que el nombre; se usa nombre_profesor solo si no hay documento.
+const findCourseByAsignaturaDocumento = (codigoAsignatura, periodo, documento, grupoExcluir) => ({
+    text: `
+        SELECT id, idnumber, grupo FROM ${schema}.courses
+        WHERE codigo_asignatura = $1 AND periodo = $2 AND documento = $3 AND grupo <> $4
+        ORDER BY id DESC LIMIT 1
+    `,
+    values: [codigoAsignatura, periodo, documento, grupoExcluir]
+});
+
+const findCourseByAsignaturaNombreProfesor = (codigoAsignatura, periodo, nombreProfesor, grupoExcluir) => ({
+    text: `
+        SELECT id, idnumber, grupo FROM ${schema}.courses
+        WHERE codigo_asignatura = $1 AND periodo = $2 AND nombre_profesor = $3 AND grupo <> $4
+        ORDER BY id DESC LIMIT 1
+    `,
+    values: [codigoAsignatura, periodo, nombreProfesor, grupoExcluir]
+});
+
 // ─── ENROLLMENTS ──────────────────────────────────────────────────────────────
 
 const selectAllEnrollments = () => ({
@@ -1445,6 +1468,79 @@ const findEnrollmentsByCodigoJourneyQuery = (codigoJourney) => ({
     values: [codigoJourney]
 });
 
+// ─── Notificaciones (fan-out por platform_user, leído/no leído individual) ──
+
+const selectRoleIdsByNames = (names) => ({
+    text: `SELECT id FROM ${schema}.roles WHERE name = ANY($1)`,
+    values: [names]
+});
+
+const selectPlatformUserIdsByRoles = (roleIds) => ({
+    text: `SELECT id FROM ${schema}.platform_users WHERE role_id = ANY($1) AND estado = true`,
+    values: [roleIds]
+});
+
+const insertNotificationData = (n) => ({
+    text: `
+        INSERT INTO ${schema}.notifications (type, title, body, entity_type, entity_id, link, detail)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+    `,
+    values: [n.type, n.title, n.body || null, n.entity_type || null, n.entity_id || null,
+             n.link || null, n.detail ? JSON.stringify(n.detail) : null]
+});
+
+const insertNotificationRecipientData = (notificationId, platformUserId) => ({
+    text: `
+        INSERT INTO ${schema}.notification_recipients (notification_id, platform_user_id)
+        VALUES ($1, $2)
+        ON CONFLICT (notification_id, platform_user_id) DO NOTHING
+        RETURNING *
+    `,
+    values: [notificationId, platformUserId]
+});
+
+const selectNotificationsForUser = (platformUserId, limit) => ({
+    text: `
+        SELECT n.id, n.created_at, n.type, n.title, n.body, n.entity_type, n.entity_id, n.link, n.detail,
+               r.read_at
+        FROM ${schema}.notification_recipients r
+        JOIN ${schema}.notifications n ON n.id = r.notification_id
+        WHERE r.platform_user_id = $1
+        ORDER BY n.created_at DESC
+        LIMIT $2
+    `,
+    values: [platformUserId, limit]
+});
+
+const countUnreadNotificationsQuery = (platformUserId) => ({
+    text: `
+        SELECT COUNT(*)::int AS count
+        FROM ${schema}.notification_recipients
+        WHERE platform_user_id = $1 AND read_at IS NULL
+    `,
+    values: [platformUserId]
+});
+
+const markNotificationReadQuery = (notificationId, platformUserId) => ({
+    text: `
+        UPDATE ${schema}.notification_recipients
+        SET read_at = NOW()
+        WHERE notification_id = $1 AND platform_user_id = $2
+        RETURNING *
+    `,
+    values: [notificationId, platformUserId]
+});
+
+const markAllNotificationsReadQuery = (platformUserId) => ({
+    text: `
+        UPDATE ${schema}.notification_recipients
+        SET read_at = NOW()
+        WHERE platform_user_id = $1 AND read_at IS NULL
+    `,
+    values: [platformUserId]
+});
+
 // entity_type guarda el código de submódulo (el mismo que checkPermission).
 // Se resuelve contra submodules/modules: modules.name es la categoría principal
 // del menú lateral (Nexo Sync, Administrador, ...) y submodules.name el módulo.
@@ -1779,6 +1875,14 @@ const coursesDetailByCategory = ({ categoryId = null, incluirSubcategorias = tru
 module.exports = {
     insertSicauNovedadData,
     selectSicauNovedades,
+    selectRoleIdsByNames,
+    selectPlatformUserIdsByRoles,
+    insertNotificationData,
+    insertNotificationRecipientData,
+    selectNotificationsForUser,
+    countUnreadNotificationsQuery,
+    markNotificationReadQuery,
+    markAllNotificationsReadQuery,
     findEnrollmentsByCodigoJourneyQuery,
     selectAllItems,
     // users
@@ -1812,6 +1916,8 @@ module.exports = {
     updateCourseData,
     updateCourseMoodleId,
     findCourseByIdnumber,
+    findCourseByAsignaturaDocumento,
+    findCourseByAsignaturaNombreProfesor,
     updateCourseSyncStatusQuery,
     updateCourseSyncingQuery,
     updateCourseSyncErrorQuery,

@@ -259,6 +259,20 @@ module.exports = (injectedDB) => {
                 resultado = { idnumber, status: 'exists' };
             }
         } else {
+            // No matcheó por idnumber (codigo_asignatura+periodo+grupo), pero puede
+            // ser el mismo curso con otro grupo: en SICAU el código de grupo cambia
+            // cuando cambia la jornada del mismo curso (mismo codigo_asignatura +
+            // periodo + profesor), no es un curso nuevo. Se detecta ANTES de
+            // insertar (documento es más confiable que el nombre; se cae a
+            // nombre_profesor solo si no hay documento) para poder dejar la
+            // novedad. No se desmatricula ni se da de baja el curso anterior acá
+            // -eso lo hace un humano desde Módulo Cursos al ver la novedad-, las
+            // matrículas se trasladan solas porque cada una trae su propia novedad
+            // (ver saveSicauMatricula).
+            const cursoAnterior = documento
+                ? (await data.findCourseByDocente(codigo_asignatura, periodo, documento, grupo))[0]
+                : (nombre_profesor ? (await data.findCourseByNombreProfesor(codigo_asignatura, periodo, nombre_profesor, grupo))[0] : null);
+
             await data.insertCourse({
                 fullname,
                 shortname,
@@ -285,6 +299,23 @@ module.exports = (injectedDB) => {
                 templatecourse
             });
             resultado = { idnumber, shortname, status: 'saved' };
+
+            if (cursoAnterior) {
+                await registrarNovedadSicau({
+                    nivel: 'curso',
+                    tipo: 'CAMBIO_DE_GRUPO',
+                    motivo: 'CAMBIO_DE_JORNADA',
+                    codigo_journey: idnumber,
+                    codigo_asignatura,
+                    nombre_asignatura,
+                    periodo,
+                    grupo,
+                    cedula: null,
+                    cambios: [{ campo: 'grupo', anterior: cursoAnterior.grupo, actual: grupo }],
+                    usuario_sicau: usuario,
+                    resultado: `Curso anterior "${cursoAnterior.idnumber}" pendiente de dar de baja`,
+                });
+            }
         }
 
         // El profesor llega junto con el curso (no por /sicau/send_users_sicau):
@@ -373,6 +404,41 @@ module.exports = (injectedDB) => {
             await data.insertSicauNovedad(row);
         } catch (err) {
             console.error('No se pudo registrar la novedad de SICAU:', err.message);
+            return;
+        }
+        await notificarNovedadSicau(row);
+    }
+
+    // Avisa a superadmin/gestor (Sync > Novedades) de que llegó una novedad
+    // de SICAU. Best-effort, igual que registrarNovedadSicau: si falla no
+    // debe tumbar la ingesta.
+    const NIVEL_NOVEDAD_LABEL = { usuario: 'Usuario', curso: 'Curso', matricula: 'Matrícula' };
+    const ROLES_NOTIFICADOS = ['superadmin', 'gestor'];
+
+    async function notificarNovedadSicau(row) {
+        try {
+            const nivel = NIVEL_NOVEDAD_LABEL[row.nivel] || 'Novedad';
+            const tipo = String(row.tipo || '').replace(/_/g, ' ').trim().toLowerCase();
+            const title = `SICAU · ${nivel}${tipo ? ' · ' + tipo.charAt(0).toUpperCase() + tipo.slice(1) : ''}`;
+            const body = [row.codigo_journey || row.cedula || null, row.resultado].filter(Boolean).join(' — ') || null;
+
+            const roleIds = await data.getRoleIdsByNames(ROLES_NOTIFICADOS);
+            const userIds = await data.getPlatformUserIdsByRoles(roleIds);
+            if (userIds.length === 0) return;
+
+            const notification = await data.insertNotification({
+                type: 'sicau_novedad',
+                title,
+                body,
+                entity_type: 'sync_enrollments_novedades',
+                link: '/sync/novedades',
+                detail: row,
+            });
+            for (const userId of userIds) {
+                await data.addNotificationRecipient(notification.id, userId);
+            }
+        } catch (err) {
+            console.error('No se pudo notificar la novedad de SICAU:', err.message);
         }
     }
 
