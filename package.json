@@ -9,7 +9,7 @@
     "BD": "nodemon run postgresql/index.js",
     "PM2_API_USERS": "pm2 start api/index.js --name api-users",
     "PM2_BD": "pm2 start postgresql/index.js --name bbdd",
-    "migrar:hub": "node database/seeds/addOnixReportsTables.js && node database/seeds/seedOnixReportsModule.js && node database/seeds/addOnixRegistroLogsTable.js && node database/seeds/addOnixArchivosTable.js && node database/seeds/addHubArchivosTable.js && node database/seeds/addOnixSubactividades.js && node database/seeds/seedOnixAreas.js && node database/seeds/addOnixGoogleTables.js"
+    "migrar:hub": "node database/seeds/addOnixReportsTables.js && node database/seeds/seedOnixReportsModule.js && node database/seeds/addOnixRegistroLogsTable.js && node database/seeds/addOnixArchivosTable.js && node database/seeds/addHubArchivosTable.js && node database/seeds/addOnixSubactividades.js && node database/seeds/seedOnixAreas.js && node database/seeds/addOnixGoogleTables.js && node database/seeds/addCodexPagesTable.js && node database/seeds/seedCodexModule.js"
   },
   "author": "David Santiago Puerta B.",
   "license": "ISC",
