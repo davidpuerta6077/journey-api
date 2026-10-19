@@ -23,7 +23,7 @@ const ok = (req, res, body) => response.success(req, res, body, 200);
 
 // El autoguardado de bloques no se registra en logs; solo el renombrar.
 const logRenombrar = saveLog(USE, {
-    descripcion: (req) => `Renombró la página de CodeX "${req._logNombre || '—'}"`,
+    descripcion: (req) => `Renombró la página de C0deX "${req._logNombre || '—'}"`,
     entityId: (req) => req.params.id,
 });
 const siRenombra = (req, res, next) => (req.body?.nombre !== undefined ? logRenombrar(req, res, next) : next());
@@ -31,21 +31,21 @@ const siRenombra = (req, res, next) => (req.body?.nombre !== undefined ? logReno
 /**
  * @swagger
  * /codex/pages:
- *   get: { summary: Mis páginas de CodeX (sin bloques), tags: [CodeX] }
- *   post: { summary: Crear página (nombre y bloques opcionales), tags: [CodeX] }
+ *   get: { summary: Mis páginas de C0deX (sin bloques), tags: [C0deX] }
+ *   post: { summary: Crear página (nombre y bloques opcionales), tags: [C0deX] }
  * /codex/pages/{id}:
- *   get: { summary: Página con sus bloques, tags: [CodeX] }
- *   put: { summary: Guardar bloques y/o nombre, tags: [CodeX] }
- *   delete: { summary: Borrar página, tags: [CodeX] }
+ *   get: { summary: Página con sus bloques, tags: [C0deX] }
+ *   put: { summary: Guardar bloques y/o nombre, tags: [C0deX] }
+ *   delete: { summary: Borrar página, tags: [C0deX] }
  * /codex/pages/{id}/duplicar:
- *   post: { summary: Duplicar página, tags: [CodeX] }
+ *   post: { summary: Duplicar página, tags: [C0deX] }
  */
 router.get('/pages', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
     ok(req, res, await ctrl.listPaginas(actor));
 }));
 
 router.post('/pages', checkAuth, checkPermission(USE), saveLog(USE, {
-    descripcion: (req) => `Creó la página de CodeX "${req._logNombre || '—'}"`,
+    descripcion: (req) => `Creó la página de C0deX "${req._logNombre || '—'}"`,
     entityId: (req) => req._logId,
 }), run(async (req, res, actor) => {
     const p = await ctrl.createPagina(actor, req.body || {});
@@ -65,7 +65,7 @@ router.put('/pages/:id', checkAuth, checkPermission(USE), siRenombra, run(async 
 }));
 
 router.post('/pages/:id/duplicar', checkAuth, checkPermission(USE), saveLog(USE, {
-    descripcion: (req) => `Duplicó la página de CodeX "${req._logNombre || '—'}"`,
+    descripcion: (req) => `Duplicó la página de C0deX "${req._logNombre || '—'}"`,
     entityId: (req) => req._logId,
 }), run(async (req, res, actor) => {
     const p = await ctrl.duplicarPagina(actor, req.params.id);
@@ -75,7 +75,7 @@ router.post('/pages/:id/duplicar', checkAuth, checkPermission(USE), saveLog(USE,
 }));
 
 router.delete('/pages/:id', checkAuth, checkPermission(USE), saveLog(USE, {
-    descripcion: (req) => `Borró la página de CodeX "${req._logNombre || '—'}"`,
+    descripcion: (req) => `Borró la página de C0deX "${req._logNombre || '—'}"`,
     entityId: (req) => req.params.id,
 }), run(async (req, res, actor) => {
     const p = await ctrl.deletePagina(actor, req.params.id);

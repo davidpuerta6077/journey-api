@@ -15,9 +15,9 @@ const pool = new Pool({
 });
 const schema = config.postgresql.schema;
 
-const MODULE = { code: 'codex', name: 'CodeX' };
+const MODULE = { code: 'codex', name: 'C0deX' };
 const SUBMODULES = [
-    { code: 'codex_use', name: 'CodeX - Uso' },
+    { code: 'codex_use', name: 'C0deX - Uso' },
 ];
 const GRANTED_ROLE_NAME = 'superadmin';
 
