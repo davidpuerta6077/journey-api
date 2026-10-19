@@ -26,7 +26,7 @@ const {
     healthCheck, checkPermissions,
     checkSubmodulePermissions,
     updateJourneyEnrollmentData,
-    selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData, onixQueries, upsertHubArchivoQuery, selectHubArchivoQuery,
+    selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData, onixQueries, codexQueries, upsertHubArchivoQuery, selectHubArchivoQuery,
     updatePlatformUserData, updatePlatformUserEstadoData, updatePlatformUserPhotoData, updatePlatformUserUsernameData,
     updatePlatformUserLastLoginData,
     selectRoles, findRoleById, insertRoleData, updateRoleData,
@@ -1647,8 +1647,19 @@ const onix = {
     insertRegistroEventos: (registroId, userId, ids) => query(onixQueries.insertRegistroEventos(registroId, userId, ids)),
 };
 
+// ─── CODEX (editor de páginas para Moodle) ────────────────────────────────────
+
+const codex = {
+    listPaginas: (userId) => query(codexQueries.paginas(userId)),
+    getPagina: (id) => queryOne(codexQueries.pagina(id)),
+    insertPagina: (userId, nombre, bloquesJson) => queryOne(codexQueries.insertPagina(userId, nombre, bloquesJson)),
+    updatePagina: (id, nombre, bloquesJson) => queryOne(codexQueries.updatePagina(id, nombre, bloquesJson)),
+    deletePagina: (id) => queryOne(codexQueries.deletePagina(id)),
+};
+
 module.exports = {
     onix,
+    codex,
     upsertHubArchivo, getHubArchivo,
     insertSicauNovedad,
     listSicauNovedades,
