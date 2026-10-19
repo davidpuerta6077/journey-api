@@ -2059,8 +2059,36 @@ const onixQueries = {
     }),
 };
 
+const codexQueries = {
+    paginas: (userId) => ({
+        text: `SELECT id, nombre, created_at, updated_at FROM ${schema}.codex_pages
+               WHERE platform_user_id = $1 ORDER BY updated_at DESC, id DESC`,
+        values: [userId],
+    }),
+    pagina: (id) => ({
+        text: `SELECT * FROM ${schema}.codex_pages WHERE id = $1`,
+        values: [id],
+    }),
+    insertPagina: (userId, nombre, bloquesJson) => ({
+        text: `INSERT INTO ${schema}.codex_pages (platform_user_id, nombre, bloques)
+               VALUES ($1, $2, $3::jsonb) RETURNING id, nombre, created_at, updated_at`,
+        values: [userId, nombre, bloquesJson],
+    }),
+    updatePagina: (id, nombre, bloquesJson) => ({
+        text: `UPDATE ${schema}.codex_pages
+               SET nombre = COALESCE($2, nombre), bloques = COALESCE($3::jsonb, bloques), updated_at = now()
+               WHERE id = $1 RETURNING id, nombre, created_at, updated_at`,
+        values: [id, nombre, bloquesJson],
+    }),
+    deletePagina: (id) => ({
+        text: `DELETE FROM ${schema}.codex_pages WHERE id = $1 RETURNING id, nombre`,
+        values: [id],
+    }),
+};
+
 module.exports = {
     onixQueries,
+    codexQueries,
     upsertHubArchivoQuery, selectHubArchivoQuery,
     insertSicauNovedadData,
     selectSicauNovedades,

@@ -19,6 +19,7 @@ const attendanceForms = require('./attendance_forms/network');
 const notifications = require('./notifications/network');
 const attendanceFormsPublic = require('./attendance_forms/networkPublic');
 const onixReports = require('./onix_reports/network');
+const codex = require('./codex/network');
 const ROOT = path.resolve(__dirname, '..');
 const swaggerUi   = require('swagger-ui-express');
 const swaggerSpec = require('../swagger');  
@@ -34,6 +35,8 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: '*'
 }));
+// Las páginas de CodeX pueden pesar varios MB (imágenes en base64 dentro de los bloques).
+app.use('/codex', bodyParser.json({ limit: '5mb' }));
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(fileUpload({
@@ -65,6 +68,7 @@ app.use('/forms', attendanceForms);
 app.use('/notifications', notifications);
 app.use('/f', attendanceFormsPublic);
 app.use('/onix', onixReports);
+app.use('/codex', codex);
 
 
 // ─── PÁGINAS ──────────────────────────────────────────────────────────────────
