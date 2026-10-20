@@ -8,9 +8,9 @@ const fakeDB = (overrides = {}) => {
     const record = (name, ret) => async (...args) => { calls.push([name, ...args]); return ret; };
     const db = {
         findEnrollmentsByCodigoJourney: record('findEnrollmentsByCodigoJourney', [
-            { id: 1, estado: 'Matriculado' },
-            { id: 2, estado: 'Activa' },
-            { id: 3, estado: 'Cancelado' },
+            { id: 1, estado: 'Matriculado', cedula: '1111111124' },
+            { id: 2, estado: 'Activa', cedula: '1111111125' },
+            { id: 3, estado: 'Cancelado', cedula: '1111111126' },
         ]),
         updateEnrollmentEstado: record('updateEnrollmentEstado'),
         updateEnrollmentEstadoSync: record('updateEnrollmentEstadoSync'),
@@ -39,8 +39,13 @@ test('RETIRO de curso desmatricula solo las matrículas activas y no toca el cur
     assert.ok(calls.some(c => c[0] === 'updateEnrollmentEstadoSync' && c[1] === 1 && c[2] === 'pendiente'));
     assert.ok(calls.some(c => c[0] === 'updateEnrollmentSyncStatus' && c[1] === 2 && c[2] === false));
     assert.ok(!calls.some(c => c[0] === 'insertCourse' || c[0] === 'findCourseSicau'), 'el curso no se crea ni se actualiza');
-    assert.strictEqual(result.course.status, 'retiro');
+    assert.strictEqual(result.course.ok, true);
+    assert.strictEqual(result.course.status, 'unenrolled');
     assert.strictEqual(result.course.desmatriculadas, 2);
+    assert.deepStrictEqual(result.enrollments, [
+        { cedula: '1111111124', codigo_journey: 'FB001020261G101', ok: true, status: 'unenrolled' },
+        { cedula: '1111111125', codigo_journey: 'FB001020261G101', ok: true, status: 'unenrolled' },
+    ]);
 });
 
 test('RETIRO de curso queda registrado como novedad SICAU con motivo y usuario', async () => {
@@ -83,7 +88,8 @@ test('RETIRO de curso enviado directo a saveSicauCurso (sin pasar por el endpoin
     const { db, calls } = fakeDB();
     const result = await createSicauCtrl(db).saveSicauCurso(cursoRetiro);
 
-    assert.strictEqual(result.status, 'retiro');
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.status, 'unenrolled');
     assert.ok(!calls.some(c => c[0] === 'findCourseSicau'), 'no debe tratarse como curso normal');
     assert.ok(calls.some(c => c[0] === 'insertSicauNovedad'));
 });
@@ -130,6 +136,6 @@ test('si falla el registro de la novedad, la ingesta sigue', async () => {
     const original = console.error; console.error = () => {};
     try {
         const result = await createSicauCtrl(db).saveSicauCursoYMatriculas({ course: cursoRetiro, enrollments: [] }, 'x');
-        assert.strictEqual(result.course.status, 'retiro');
+        assert.strictEqual(result.course.status, 'unenrolled');
     } finally { console.error = original; }
 });

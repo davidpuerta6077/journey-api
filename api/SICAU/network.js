@@ -189,7 +189,17 @@ router.post('/search_user_sicau', async (req, res) => {
  *                                   actual:   { type: string, example: "VIRTUAL" }
  *     responses:
  *       200:
- *         description: Usuarios guardados
+ *         description: >
+ *           Usuarios guardados. `results` trae un item por cada usuario enviado, en el mismo orden,
+ *           con `email` y `documento` como identificador (no depender de la posición en el array).
+ *
+ *           Valores posibles de `status` (siempre viene `ok` boolean, true salvo "error"):
+ *
+ *           | status  | ok    | Significado |
+ *           |---------|-------|-------------|
+ *           | created | true  | Usuario nuevo, se creó |
+ *           | updated | true  | Usuario ya existía (localizado por documento), se actualizaron sus datos |
+ *           | error   | false | No se pudo procesar; el motivo va en `error` (texto) |
  *         content:
  *           application/json:
  *             schema:
@@ -200,7 +210,25 @@ router.post('/search_user_sicau', async (req, res) => {
  *                 body:
  *                   type: object
  *                   properties:
- *                     results: { type: array, items: { type: object } }
+ *                     results:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           email:     { type: string, example: "juan.perez@pascualbravo.edu.co" }
+ *                           documento: { type: string, example: "1035421789" }
+ *                           ok:        { type: boolean, example: true }
+ *                           status:    { type: string, enum: [created, updated, error], example: "updated" }
+ *                           error:     { type: string, example: "El correo ya está registrado para otro usuario", description: "Solo viene si ok es false" }
+ *             examples:
+ *               ejemplo:
+ *                 value:
+ *                   error: false
+ *                   status: 200
+ *                   body:
+ *                     results:
+ *                       - { email: "juan.perez@pascualbravo.edu.co", documento: "1035421789", ok: true, status: "updated" }
+ *                       - { email: "ana.gomez@pascualbravo.edu.co", documento: "1001463268", ok: false, status: "error", error: "El correo ya está registrado para otro usuario" }
  *       500:
  *         description: Error interno
  *         content:
@@ -270,11 +298,48 @@ router.post('/send_users_sicau', async (req, res, next) => {
  *                         motivo: { type: string, example: "NO_REQUIERE_CURSO_VIRTUAL" }
  *     responses:
  *       200:
- *         description: Cursos guardados
+ *         description: >
+ *           Cursos guardados. `results` trae un item por curso enviado, en el mismo orden, con
+ *           `codigo_asignatura`/`periodo`/`grupo` como identificador.
+ *
+ *           Valores posibles de `status` (siempre viene `ok` boolean, true salvo "error"):
+ *
+ *           | status            | ok    | Significado |
+ *           |-------------------|-------|-------------|
+ *           | created           | true  | Curso nuevo, se creó |
+ *           | updated_profesor  | true  | Curso ya existía, cambió el profesor (gana sobre fechas/asignatura si varias cambiaron a la vez) |
+ *           | updated_fechas    | true  | Curso ya existía, cambiaron fecha_inicio y/o fecha_fin (y no el profesor) |
+ *           | updated_asignatura| true  | Curso ya existía, cambió el nombre de la asignatura (y no profesor ni fechas) |
+ *           | exists            | true  | Curso ya existía, sin cambios |
+ *           | unenrolled        | true  | `novedad.tipo: "RETIRO"`: se desmatricularon sus estudiantes activos, el curso no se toca |
+ *           | error             | false | No se pudo procesar; el motivo va en `error` (texto) |
+ *
+ *           Cada resultado trae además `profesor` (si el curso mandó nombre_profesor/documento/
+ *           correo_institucional): mismo patrón `{ok, status}`, con `status: "omitido"` (ok:false)
+ *           si faltó alguno de esos tres datos, o `created`/`exists`/`updated_estado`/`error` si se
+ *           intentó matricular al profesor (ver tabla de /send_enrollments_sicau).
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
+ *               type: object
+ *               properties:
+ *                 error:  { type: boolean, example: false }
+ *                 status: { type: integer, example: 200 }
+ *                 body:
+ *                   type: object
+ *                   properties:
+ *                     results:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           codigo_asignatura: { type: string, example: "FB0010" }
+ *                           periodo:           { type: string, example: "20261" }
+ *                           grupo:             { type: string, example: "G101" }
+ *                           idnumber:          { type: string, example: "FB0010020261G101" }
+ *                           ok:                { type: boolean, example: true }
+ *                           status:            { type: string, enum: [created, updated_profesor, updated_fechas, updated_asignatura, exists, unenrolled, error] }
+ *                           error:             { type: string, description: "Solo viene si ok es false" }
  *       500:
  *         description: Error interno
  *         content:
@@ -303,7 +368,7 @@ router.post('/send_courses_sicau', async (req, res, next) => {
 /**
  * @swagger
  * /sicau/send_enrollments_sicau:
- * 
+ *   post:
  *     summary: Guardar matrículas provenientes del sistema SICAU
  *     tags: [SICAU]
  *     requestBody:
@@ -329,11 +394,42 @@ router.post('/send_courses_sicau', async (req, res, next) => {
  *                     usuario:           { type: string, example: "jor.ramirez", description: "Usuario de SICAU que originó el envío, para el log de auditoría" }
  *     responses:
  *       200:
- *         description: Matrículas guardadas
+ *         description: >
+ *           Matrículas guardadas. `results` trae un item por matrícula enviada, en el mismo orden,
+ *           con `cedula` como identificador.
+ *
+ *           Valores posibles de `status` (siempre viene `ok` boolean, true salvo "error"):
+ *
+ *           | status         | ok    | Significado |
+ *           |----------------|-------|-------------|
+ *           | created        | true  | Matrícula nueva, se creó |
+ *           | updated_estado | true  | Matrícula ya existía, cambió `estado` (incluye enviar `estado: "Cancelada"`: se guarda como "Cancelado" y queda con este status, no se desmatricula sola — eso solo lo hace un RETIRO de curso) |
+ *           | exists         | true  | Matrícula ya existía, mismo estado, sin cambios |
+ *           | error          | false | No se pudo procesar (p.ej. la cédula no corresponde a ningún usuario); el motivo va en `error` (texto) |
+ *
+ *           Un RETIRO de curso (ver /send_courses_sicau y /send_courses_enrollments_sicau) no pasa
+ *           por este endpoint: lo dispara el curso, no una matrícula individual, y cada matrícula
+ *           desmatriculada queda con `status: "unenrolled"` en la respuesta de ese curso.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
+ *               type: object
+ *               properties:
+ *                 error:  { type: boolean, example: false }
+ *                 status: { type: integer, example: 200 }
+ *                 body:
+ *                   type: object
+ *                   properties:
+ *                     results:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           cedula:         { type: string, example: "1038106398" }
+ *                           codigo_journey: { type: string, example: "FB0010020261G101" }
+ *                           ok:             { type: boolean, example: true }
+ *                           status:         { type: string, enum: [created, updated_estado, exists, error] }
+ *                           error:          { type: string, description: "Solo viene si ok es false" }
  *       500:
  *         description: Error interno
  *         content:
@@ -448,7 +544,47 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
  *                                     actual:   { type: string, example: "G102" }
  *     responses:
  *       200:
- *         description: Curso y matrículas guardados
+ *         description: >
+ *           Curso y matrículas guardados. `results` trae un item por cada `{course, enrollments}` del
+ *           envío, en el mismo orden. `course` identifica con `codigo_asignatura`/`periodo`/`grupo` y
+ *           cada matrícula de `enrollments` con `cedula` — no depender de la posición en el array.
+ *           Todo resultado (curso, matrícula o el sub-objeto `course.profesor`) trae siempre `ok`
+ *           (boolean) además de `status`: así no hace falta interpretar el string para saber si quedó
+ *           aplicado, y un `status` nuevo que se agregue a futuro no rompe nada que solo mire `ok`.
+ *           Si `ok` es `false`, el motivo va como texto en `error`.
+ *
+ *           Valores posibles de `course.status`:
+ *
+ *           | status             | ok    | Significado |
+ *           |--------------------|-------|-------------|
+ *           | created            | true  | Curso nuevo, se creó |
+ *           | updated_profesor   | true  | Curso ya existía, cambió el profesor (gana sobre fechas/asignatura si varias cambiaron a la vez) |
+ *           | updated_fechas     | true  | Curso ya existía, cambiaron fecha_inicio y/o fecha_fin (y no el profesor) |
+ *           | updated_asignatura | true  | Curso ya existía, cambió el nombre de la asignatura (y no profesor ni fechas) |
+ *           | exists             | true  | Curso ya existía, sin cambios |
+ *           | unenrolled         | true  | `course.novedad.tipo: "RETIRO"`: se desmatricularon sus estudiantes activos, el curso no se crea/actualiza. `enrollments` trae un item por cada matrícula desmatriculada (ver abajo), no se procesa el `enrollments` enviado en el request |
+ *           | error              | false | No se pudo procesar el curso; el motivo va en `error` |
+ *
+ *           Valores posibles de `course.profesor.status` (solo si el curso trajo nombre_profesor/
+ *           documento/correo_institucional — si falta alguno, no se intenta y queda "omitido"):
+ *
+ *           | status         | ok    | Significado |
+ *           |----------------|-------|-------------|
+ *           | created        | true  | El profesor no existía como usuario, se creó y matriculó |
+ *           | exists         | true  | El profesor ya estaba matriculado en el curso, sin cambios |
+ *           | updated_estado | true  | El profesor ya tenía una matrícula en el curso con otro estado, se actualizó |
+ *           | omitido        | false | Faltó nombre_profesor, documento o correo_institucional: no se creó ni matriculó |
+ *           | error          | false | No se pudo crear/matricular; el motivo va en `error` |
+ *
+ *           Valores posibles de cada item de `enrollments[].status`:
+ *
+ *           | status         | ok    | Significado |
+ *           |----------------|-------|-------------|
+ *           | created        | true  | Matrícula nueva, se creó |
+ *           | updated_estado | true  | Matrícula ya existía, cambió `estado` (incluye `estado: "Cancelada"`: se guarda como "Cancelado" y queda con este status — una matrícula Cancelada NO se desmatricula sola, eso solo lo hace un RETIRO de curso) |
+ *           | exists         | true  | Matrícula ya existía, mismo estado, sin cambios |
+ *           | unenrolled     | true  | Viene de un `course.novedad.tipo: "RETIRO"`: esta matrícula estaba activa y se desmatriculó junto con el curso |
+ *           | error          | false | No se pudo procesar (p.ej. la cédula no corresponde a ningún usuario); el motivo va en `error` |
  *         content:
  *           application/json:
  *             schema:
@@ -466,27 +602,53 @@ router.post('/send_enrollments_sicau', async (req, res, next) => {
  *                         properties:
  *                           course:
  *                             type: object
- *                             description: >
- *                               Si el curso trae nombre_profesor/documento/correo_institucional, el profesor
- *                               se crea como usuario si no existía (localizado por documento) y queda
- *                               matriculado en el curso con rol editingteacher (ver course.profesor).
  *                             properties:
- *                               idnumber:  { type: string }
- *                               shortname: { type: string }
- *                               status:    { type: string, example: "saved" }
+ *                               codigo_asignatura: { type: string, example: "FB0010" }
+ *                               periodo:           { type: string, example: "20261" }
+ *                               grupo:             { type: string, example: "G101" }
+ *                               idnumber:          { type: string, example: "FB0010020261G101" }
+ *                               ok:                { type: boolean, example: true }
+ *                               status:            { type: string, enum: [created, updated_profesor, updated_fechas, updated_asignatura, exists, unenrolled, error] }
+ *                               error:             { type: string, description: "Solo viene si ok es false" }
  *                               profesor:
  *                                 type: object
- *                                 description: Resultado de crear/matricular al profesor. status "omitido" si faltó nombre_profesor, documento o correo_institucional.
  *                                 properties:
- *                                   status: { type: string, example: "saved" }
+ *                                   ok:     { type: boolean }
+ *                                   status: { type: string, enum: [created, exists, updated_estado, omitido, error] }
+ *                                   error:  { type: string, description: "Solo viene si ok es false" }
  *                           enrollments:
  *                             type: array
  *                             items:
  *                               type: object
  *                               properties:
- *                                 cedula:         { type: string }
- *                                 codigo_journey: { type: string }
- *                                 status:         { type: string, example: "saved" }
+ *                                 cedula:         { type: string, example: "1038106398" }
+ *                                 codigo_journey: { type: string, example: "FB0010020261G101" }
+ *                                 ok:             { type: boolean }
+ *                                 status:         { type: string, enum: [created, updated_estado, exists, unenrolled, error] }
+ *                                 error:          { type: string, description: "Solo viene si ok es false" }
+ *             examples:
+ *               curso_actualizado_con_error_de_matricula:
+ *                 summary: Curso con cambio de profesor + una matrícula creada y otra con error
+ *                 value:
+ *                   error: false
+ *                   status: 200
+ *                   body:
+ *                     results:
+ *                       - course: { codigo_asignatura: "PR0635", periodo: "20262", grupo: "100", idnumber: "PR0635020262G100", ok: true, status: "updated_profesor" }
+ *                         enrollments:
+ *                           - { cedula: "1038106398", codigo_journey: "PR0635020262G100", ok: true, status: "created" }
+ *                           - { cedula: "1017178084", codigo_journey: "PR0635020262G100", ok: false, status: "error", error: "duplicate key value violates unique constraint users_email_uniq" }
+ *               retiro_de_curso:
+ *                 summary: "course.novedad.tipo: RETIRO — se desmatriculan las activas, no se envían enrollments"
+ *                 value:
+ *                   error: false
+ *                   status: 200
+ *                   body:
+ *                     results:
+ *                       - course: { codigo_asignatura: "FB0010", periodo: "20261", grupo: "G101", codigo_journey: "FB0010020261G101", ok: true, status: "unenrolled", desmatriculadas: 2 }
+ *                         enrollments:
+ *                           - { cedula: "1038106398", codigo_journey: "FB0010020261G101", ok: true, status: "unenrolled" }
+ *                           - { cedula: "1017178084", codigo_journey: "FB0010020261G101", ok: true, status: "unenrolled" }
  *       500:
  *         description: Error interno
  *         content:

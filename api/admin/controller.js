@@ -17,20 +17,20 @@ module.exports = (injectedDB) => {
     }
 
     async function createUsuario(body, createdBy) {
-        const { username, email, role_id, departamento } = body;
+        const { username, email, role_id, departamento, fecha_nacimiento } = body;
         const existing = await data.findPlatformUser(email, username);
         if (existing.length > 0) {
             const err = new Error('Ya existe un usuario de plataforma con ese email o username');
             err.status = 409;
             throw err;
         }
-        const result = await data.insertPlatformUser({ username, email, role_id, created_by: createdBy || null, departamento });
+        const result = await data.insertPlatformUser({ username, email, role_id, created_by: createdBy || null, departamento, fecha_nacimiento });
         return result[0];
     }
 
     async function updateUsuario(id, body) {
-        const { username, role_id, departamento } = body;
-        const result = await data.updatePlatformUser(id, { username, role_id, departamento });
+        const { username, role_id, departamento, fecha_nacimiento } = body;
+        const result = await data.updatePlatformUser(id, { username, role_id, departamento, fecha_nacimiento });
         return result[0];
     }
 
