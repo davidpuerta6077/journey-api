@@ -112,3 +112,24 @@ test('guardarConfig: la key se guarda en la del proveedor elegido; gemini/openai
     assert.deepStrictEqual(vista.keys.openai, { configurada: true, origen: 'hub', ultimos: '0000' });
     assert.deepStrictEqual(vista.keys.gemini, { configurada: true, origen: 'hub', ultimos: '5678' });
 });
+
+test('prompt de informes: de fábrica sin guardar; se guarda; vacío o igual al de fábrica lo quita; sin campo no se toca', async () => {
+    const db = fakeDB();
+    const base = { proveedor: 'ollama' };
+    const defecto = (await verConfig({ db, env: ENV })).prompt_defecto;
+    assert.strictEqual((await verConfig({ db, env: ENV })).prompt_informes, defecto);
+    await guardarConfig({ db, env: ENV, body: { ...base, prompt_informes: '  Mi prompt  ' } });
+    assert.strictEqual(db.st.get('prompt_informes'), 'Mi prompt');
+    await guardarConfig({ db, env: ENV, body: base });
+    assert.strictEqual(db.st.get('prompt_informes'), 'Mi prompt');
+    await guardarConfig({ db, env: ENV, body: { ...base, prompt_informes: defecto } });
+    assert.strictEqual(db.st.has('prompt_informes'), false);
+    await assert.rejects(guardarConfig({ db, env: ENV, body: { ...base, prompt_informes: 'x'.repeat(8001) } }), (e) => e.status === 400);
+});
+
+test('con Ollama no se descifran keys guardadas de otros proveedores (no exige IA_SECRET_KEY)', async () => {
+    const db = fakeDB([{ clave: 'proveedor', valor: 'ollama' }, { clave: 'anthropic_key', valor: { ...cifrar('sk-ant-1', ENV), ultimos: '-1' } }]);
+    const e = await leerEnvEfectivo({ db, env: {} });
+    assert.strictEqual(e.IA_PROVIDER, 'ollama');
+    assert.strictEqual(e.ANTHROPIC_API_KEY, undefined);
+});

@@ -32,6 +32,15 @@ test('el system prompt aplica las reglas institucionales', async () => {
     for (const re of [/tercera persona/, /mínimo 35 palabras/, /SICAU/, /Sistema de Gestión Académica/, /español colombiano/]) assert.match(system, re);
 });
 
+test('las instrucciones guardadas en Configuración reemplazan las de fábrica; el formato JSON se mantiene', async () => {
+    const { ctrl, iaCalls } = setup({ settings: [{ categoria: 'ia', clave: 'prompt_informes', valor: 'Redacta en primera persona.' }] });
+    await ctrl.generarSubactividad(await ctrl.getActor('ana@x.co'), '1000');
+    const { system } = iaCalls[0];
+    assert.match(system, /^Redacta en primera persona\./);
+    assert.doesNotMatch(system, /tercera persona/);
+    assert.match(system, /Durante este periodo se/);
+});
+
 test('acepta JSON envuelto en ```json o con texto alrededor; el párrafo queda en una línea', async () => {
     const { ctrl, ia } = setup();
     conIA(ia, 'Claro, aquí está:\n```json\n{"parrafo": "Durante este periodo se\\n\\nhizo A.", "secciones": [{"titulo": "A", "texto": "Texto A", "imagenes": []}]}\n```');
