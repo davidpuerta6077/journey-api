@@ -25,6 +25,7 @@ function fakeDB(seed = {}) {
     const db = {
         st,
         findPlatformUserByEmail: async (email) => (st.users[email] ? [{ id: st.users[email], email }] : []),
+        getSettings: async (cat) => (st.settings || []).filter((r) => r.categoria === cat),
         checkSubmodulesPermissionsData: async (email, code) => [{ '?column?': (st.permisos[email] || []).includes(code) ? 1 : 0 }],
         onix: {
             getPerfil: async (id) => st.perfiles[id] || null,

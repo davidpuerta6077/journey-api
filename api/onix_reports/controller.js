@@ -6,21 +6,14 @@
 
 const JSZip = require('jszip');
 const { tituloDe, nombreArchivo } = require('../../services/onix/titulo');
+const { leerPromptInformes } = require('../../services/ia/config');
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-// Reglas de redacción institucionales (definidas por la Unidad para los
-// informes de contratistas). Por cada subactividad la IA redacta el párrafo del
-// documento de la actividad y organiza el documento de evidencia.
-const SYSTEM_PROMPT = [
-    'Eres un experto en gestión documental y generación de informes para contratistas universitarios de la Institución Universitaria Pascual Bravo.',
-    'A partir de las notas que el contratista escribió sobre una subactividad del mes, redactas el párrafo que va en el informe de la actividad y organizas el documento de evidencia de esa subactividad.',
-    'Reglas de redacción:',
-    '- Redacta en tercera persona, con lenguaje técnico-profesional orientado a la educación virtual, los LMS y la innovación.',
-    '- No uses siglas de sistemas o dependencias internas (por ejemplo SICAU o UEAD); usa términos descriptivos generales, como "Sistema de Gestión Académica" o "Unidad de Apoyo Digital".',
-    '- Sé fiel a las notas: no inventes actividades, cifras ni resultados que no aparezcan en ellas.',
-    '- Responde únicamente en español colombiano.',
+// Las reglas de redacción se editan en Configuración > Inteligencia artificial
+// (services/ia/config.js). El formato de salida es fijo: parsearGeneracion depende de él.
+const FORMATO_SALIDA = [
     'Formato de salida: responde únicamente con un objeto JSON válido, sin markdown ni texto antes o después, con esta forma:',
     '{"parrafo": "...", "titulo": "...", "secciones": [{"titulo": "...", "texto": "...", "imagenes": [1]}]}',
     '- "parrafo": un solo párrafo continuo de mínimo 35 palabras que empieza exactamente con "Durante este periodo se" y resume lo realizado.',
@@ -544,7 +537,8 @@ module.exports = (injectedDB, deps = {}) => {
         const [conEv] = await conEvidencias([r]);
         const imagenes = conEv.evidencias.filter((e) => e.tipo === 'imagen');
         const otras = conEv.evidencias.filter((e) => e.tipo !== 'imagen');
-        const res = await ia.generarTexto({ system: SYSTEM_PROMPT, prompt: armarPrompt({ actividad: act, registro: r, imagenes, otras }) });
+        const system = `${await leerPromptInformes(data)}\n${FORMATO_SALIDA}`;
+        const res = await ia.generarTexto({ system, prompt: armarPrompt({ actividad: act, registro: r, imagenes, otras }) });
         const g = parsearGeneracion(res.texto, imagenes.map((e) => e.id));
         const guardado = await data.onix.guardarGeneracion(r.id, { ...g, proveedor: res.proveedor, modelo: res.modelo });
         return { ...guardado, actividad_nombre: act.nombre, evidencias: conEv.evidencias };
