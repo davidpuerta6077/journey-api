@@ -2,6 +2,7 @@ const axios = require('axios');
 const https = require('https');
 const config = require('../config');
 const postgresql = require('../database/postgresql');
+const { leerSecreto } = require('./settingsSecretos');
 
 const agent = new https.Agent({ rejectUnauthorized: false });
 
@@ -22,7 +23,7 @@ async function getMoodleConfig() {
   } catch { /* si falla la BD, se sigue con los defaults de config.js */ }
   moodleConfigCache = {
     url: porClave.moodle_url || config.moodle.url,
-    token: porClave.moodle_token || config.moodle.token,
+    token: porClave.moodle_token ? leerSecreto(porClave.moodle_token) : config.moodle.token,
   };
   moodleConfigCacheAt = now;
   return moodleConfigCache;

@@ -66,6 +66,8 @@ function fakeDB(seed = {}) {
                 if (ids.some((id) => st.registroLogs[id])) { const e = new Error('dup'); e.code = '23505'; throw e; }
                 ids.forEach((id) => { st.registroLogs[id] = registroId; });
             },
+            listTareasAtomDelMes: async (uid, desde, hasta) => (st.tareasAtom || [])
+                .filter((t) => t.uid === uid && t.fecha >= new Date(desde) && t.fecha < new Date(hasta)),
             getGoogle: async (uid) => st.google[uid] || null,
             upsertGoogle: async (uid, email, refresh_token) => (st.google[uid] = { user_id: uid, email, refresh_token }),
             deleteGoogle: async (uid) => { const g = st.google[uid]; delete st.google[uid]; return g || null; },
@@ -94,6 +96,11 @@ const eventosGoogle = [
     { id: 'ev2', titulo: 'Capacitación Moodle', inicio: '2027-10-01', fin: '2027-10-02', todoElDia: true, duracionMin: null, asistentes: 0 },
 ];
 
+const correosGoogle = [
+    { id: 'h1', asunto: 'Cronograma de capacitación', para: ['Ana Pérez', 'bob@x.co', 'Carla', 'Dani'], mensajes: 3, fecha: '2027-10-02T15:00:00.000Z' },
+    { id: 'h2', asunto: 'Solicitud de aulas', para: ['Soporte'], mensajes: 1, fecha: '2027-10-06T15:00:00.000Z' },
+];
+
 function setup(seed) {
     const db = fakeDB(seed);
     const storage = fakeStorage();
@@ -118,6 +125,7 @@ function setup(seed) {
         leerEstado: (state) => (state === 'valido-1' ? 1 : null),
         canjearCodigo: async (code) => { googleCalls.push(['canjear', code]); return { refreshToken: 'rt-1', email: 'ana@gmail.com' }; },
         eventos: async (rt, desde, hasta) => { googleCalls.push(['eventos', rt, desde, hasta]); return eventosGoogle; },
+        correosEnviados: async (rt, desde, hasta) => { googleCalls.push(['correos', rt, desde, hasta]); return correosGoogle; },
         revocar: async (rt) => { googleCalls.push(['revocar', rt]); },
     };
     const secreto = { cifrar: (t) => ({ c: t }), descifrar: (o) => o.c };

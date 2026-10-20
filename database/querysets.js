@@ -2029,6 +2029,28 @@ const onixQueries = {
         text: `INSERT INTO ${schema}.onix_registro_eventos (registro_id, user_id, evento_id) SELECT $1, $2, unnest($3::text[])`,
         values: [registroId, userId, ids],
     }),
+    // Tareas de Atom que trabajé en el mes: las mías (asignadas a mí, o creadas
+    // por mí sin asignar) completadas en el rango, o en proceso/revisión con
+    // movimiento en el rango (edición o historial).
+    tareasAtomDelMes: (userId, desde, hasta) => ({
+        text: `
+            SELECT t.id, t.title, t.description, t.status, t.priority, t.category, t.due_date, t.completed_at,
+                   COALESCE(t.completed_at, t.updated_at) AS fecha,
+                   (SELECT count(*)::int FROM ${schema}.atom_subtasks s WHERE s.task_id = t.id) AS subtareas,
+                   (SELECT count(*)::int FROM ${schema}.atom_subtasks s WHERE s.task_id = t.id AND s.done) AS subtareas_hechas,
+                   (SELECT string_agg(s.title, '; ' ORDER BY s.orden) FROM ${schema}.atom_subtasks s WHERE s.task_id = t.id AND s.done) AS hechas
+            FROM ${schema}.atom_tasks t
+            WHERE (t.assigned_to = $1 OR (t.assigned_to IS NULL AND t.created_by = $1))
+              AND (
+                (t.status = 'Completada' AND t.completed_at >= $2 AND t.completed_at < $3)
+                OR (t.status IN ('En proceso', 'En revisión') AND (
+                    (t.updated_at >= $2 AND t.updated_at < $3)
+                    OR EXISTS (SELECT 1 FROM ${schema}.atom_task_history h WHERE h.task_id = t.id AND h.created_at >= $2 AND h.created_at < $3)
+                ))
+              )
+            ORDER BY COALESCE(t.completed_at, t.updated_at)`,
+        values: [userId, desde, hasta],
+    }),
     registro: (id) => ({ text: `SELECT * FROM ${schema}.onix_registros WHERE id = $1`, values: [id] }),
     insertRegistro: (d) => ({
         text: `INSERT INTO ${schema}.onix_registros (actividad_id, user_id, mes, anio, titulo, desarrollo) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
