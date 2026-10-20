@@ -67,21 +67,21 @@ module.exports = (injectedDB) => {
 
             await data.updateUserFromSicau({ ...user, id: existing[0].id });
             if (user.novedad) await registrarNovedadUsuario(user, 'Usuario actualizado');
-            return { username: user.username, status: 'updated' };
+            return { email: user.email, documento: user.documento || null, ok: true, status: 'updated' };
         }
         if (user.documento) {
             const emailTomado = await data.findUserSicau(user.email, user.username);
             if (emailTomado.length > 0) {
                 const error = `El email ${user.email} ya pertenece a otro usuario`;
                 if (user.novedad) await registrarNovedadUsuario(user, error);
-                return { username: user.username, status: 'error', error };
+                return { email: user.email, documento: user.documento || null, ok: false, status: 'error', error };
             }
         }
         const dominioCorreo = await getDominioCorreoPermitido(data);
         if (!emailTieneDominio(user.email, dominioCorreo)) {
             const error = `El email ${user.email} no es del dominio institucional (@${dominioCorreo}), no se crea el usuario`;
             if (user.novedad) await registrarNovedadUsuario(user, error);
-            return { username: user.username, status: 'error', error };
+            return { email: user.email, documento: user.documento || null, ok: false, status: 'error', error };
         }
         await data.insertUser({
             username:               user.username,
@@ -104,7 +104,7 @@ module.exports = (injectedDB) => {
             sincronizado:           false
         });
         if (user.novedad) await registrarNovedadUsuario(user, 'Usuario creado');
-        return { username: user.username, status: 'saved' };
+        return { email: user.email, documento: user.documento || null, ok: true, status: 'created' };
     }
 
     // SICAU manda su propia novedad ya calculada para el usuario (NUEVO,
@@ -133,8 +133,10 @@ module.exports = (injectedDB) => {
         // curso, sin enrollments): se revisa aquí, no en saveSicauCursoYMatriculas,
         // para que ambos caminos lo manejen igual en vez de que el segundo caiga
         // en el flujo normal de curso y falle por falta de datos de profesor.
+        // Solo se devuelve la parte "course": quien llama por /send_courses_sicau
+        // espera un resultado de curso plano, igual que los demás status.
         if (course.novedad?.tipo === 'RETIRO') {
-            return retirarCursoSicau(course, usuario);
+            return (await retirarCursoSicau(course, usuario)).course;
         }
 
         const {
@@ -213,7 +215,12 @@ module.exports = (injectedDB) => {
                     estado_sync: estadoDestino,
                     novedad_datos: cambiosDatos
                 });
-                resultado = { idnumber, status: 'updated_profesor' };
+                // Un solo status por resultado: si cambió más de un campo a la vez,
+                // gana el más relevante para SICAU en este orden (profesor > fechas >
+                // asignatura). El detalle completo de qué cambió igual queda en
+                // sicau_novedades (Sync > Novedades), esto es solo la etiqueta corta.
+                const statusCambio = cambioProfesor ? 'updated_profesor' : (cambioFechas ? 'updated_fechas' : 'updated_asignatura');
+                resultado = { codigo_asignatura, periodo, grupo, idnumber, ok: true, status: statusCambio };
 
                 // Igual que con matrículas: se deja constancia en sicau_novedades
                 // (Sync > Novedades) de qué cambió, no solo se marca el curso en
@@ -256,7 +263,7 @@ module.exports = (injectedDB) => {
                     });
                 }
             } else {
-                resultado = { idnumber, status: 'exists' };
+                resultado = { codigo_asignatura, periodo, grupo, idnumber, ok: true, status: 'exists' };
             }
         } else {
             // No matcheó por idnumber (codigo_asignatura+periodo+grupo), pero puede
@@ -298,7 +305,7 @@ module.exports = (injectedDB) => {
                 nombre_asignatura: nombre_asignatura || null,
                 templatecourse
             });
-            resultado = { idnumber, shortname, status: 'saved' };
+            resultado = { codigo_asignatura, periodo, grupo, idnumber, shortname, ok: true, status: 'created' };
 
             if (cursoAnterior) {
                 await registrarNovedadSicau({
@@ -345,7 +352,7 @@ module.exports = (injectedDB) => {
     // omite en silencio (el curso igual se guarda) en vez de fallar todo el lote.
     async function ensureDocenteMatriculado({ nombre_profesor, documento, celular, correo_institucional, codigo_asignatura, nombre_asignatura, programa, periodo, grupo }) {
         if (!nombre_profesor || !documento || !correo_institucional) {
-            return { status: 'omitido', error: 'Falta nombre_profesor, documento o correo_institucional' };
+            return { ok: false, status: 'omitido', error: 'Falta nombre_profesor, documento o correo_institucional' };
         }
 
         let userid;
@@ -357,7 +364,7 @@ module.exports = (injectedDB) => {
             // crea un segundo usuario con el mismo email (ver saveSicauUsuario).
             const emailTomado = await data.findUserSicau(correo_institucional, correo_institucional);
             if (emailTomado.length > 0) {
-                return { status: 'error', error: `El email ${correo_institucional} ya pertenece a otro usuario` };
+                return { ok: false, status: 'error', error: `El email ${correo_institucional} ya pertenece a otro usuario` };
             }
             const { firstname, lastname } = splitNombreCompleto(nombre_profesor);
             const insertado = await data.insertUser({
@@ -445,7 +452,10 @@ module.exports = (injectedDB) => {
     // RETIRO de curso (p.ej. desde "Gestión de grupos virtuales" desmarcan que
     // requiere curso virtual): se desmatriculan sus estudiantes activos por la
     // misma vía que "Desmatricular" en Nexo (estado 'Desmatriculado', la fila
-    // sale de moodle_enrol). El curso no se crea, actualiza ni oculta.
+    // sale de moodle_enrol). El curso no se crea, actualiza ni oculta. Devuelve
+    // {course, enrollments} con el mismo shape que un curso+matrículas normal
+    // (status "unenrolled" en el curso y en cada matrícula desmatriculada, con
+    // su cédula) para que SICAU lo procese igual sin un caso especial.
     async function retirarCursoSicau(course, usuario) {
         const codigoJourney = `${course.codigo_asignatura}${course.periodo}${normalizeGrupo(course.grupo)}`;
         const matriculas = await data.findEnrollmentsByCodigoJourney(codigoJourney);
@@ -469,7 +479,13 @@ module.exports = (injectedDB) => {
             usuario_sicau: usuario || null,
             resultado: `${activas.length} matrícula(s) desmatriculada(s)`,
         });
-        return { codigo_journey: codigoJourney, status: 'retiro', desmatriculadas: activas.length };
+        return {
+            course: {
+                codigo_asignatura: course.codigo_asignatura, periodo: course.periodo, grupo: normalizeGrupo(course.grupo),
+                codigo_journey: codigoJourney, ok: true, status: 'unenrolled', desmatriculadas: activas.length,
+            },
+            enrollments: activas.map(m => ({ cedula: m.cedula || null, codigo_journey: codigoJourney, ok: true, status: 'unenrolled' })),
+        };
     }
 
     async function saveSicauMatricula(enr, usuario) {
@@ -494,7 +510,7 @@ module.exports = (injectedDB) => {
         // 1. Buscar userid por cédula (SICAU manda cédula, no el id interno)
         const userResult = await data.findUserByDoc(String(enr.cedula));
         if (userResult.length === 0) {
-            return { cedula: enr.cedula, status: 'error', error: 'Usuario no encontrado' };
+            return { cedula: enr.cedula, ok: false, status: 'error', error: 'Usuario no encontrado' };
         }
         const userid = userResult[0].id;
         const moodleRole = ROLE_MAP[enr.role?.toUpperCase()] || 'student';
@@ -526,10 +542,13 @@ module.exports = (injectedDB) => {
     async function saveSicauCursoYMatriculas(item, usuario) {
         const { course, enrollments } = item;
         usuario = usuario || course?.usuario || item.usuario;
-        const courseResult = await saveSicauCurso(course, usuario);
-        if (courseResult.status === 'retiro') {
-            return { course: courseResult, enrollments: [] };
+        // RETIRO ya trae su propio {course, enrollments} desglosado por cédula
+        // (ver retirarCursoSicau): se devuelve tal cual, sin pasar por
+        // saveSicauCurso (que para este caso solo expondría la mitad "course").
+        if (course?.novedad?.tipo === 'RETIRO') {
+            return retirarCursoSicau(course, usuario);
         }
+        const courseResult = await saveSicauCurso(course, usuario);
 
         const enrollmentResults = [];
         for (const enr of (enrollments || [])) {

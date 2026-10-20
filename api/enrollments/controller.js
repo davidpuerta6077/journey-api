@@ -135,11 +135,11 @@ module.exports = (injectedDB) => {
                 await data.updateEnrollmentEstadoSync(matricula.id, 'pendiente');
                 await data.updateEnrollmentSyncStatus(matricula.id, false);
                 return {
-                    codigo_journey: codigoJourney, id: matricula.id, status: 'estado_actualizado',
+                    codigo_journey: codigoJourney, id: matricula.id, ok: true, status: 'updated_estado',
                     estado_anterior: matricula.estado, estado_nuevo: estadoNuevo
                 };
             }
-            return { codigo_journey: codigoJourney, id: matricula.id, status: 'exists' };
+            return { codigo_journey: codigoJourney, id: matricula.id, ok: true, status: 'exists' };
         }
 
         // Un profesor/tutor puede dictar varios grupos de la misma asignatura y
@@ -169,7 +169,7 @@ module.exports = (injectedDB) => {
         });
 
         return {
-            codigo_journey: codigoJourney, id: inserted[0].id, status: 'saved',
+            codigo_journey: codigoJourney, id: inserted[0].id, ok: true, status: 'created',
             ...(traslados.length > 0 ? { traslado: true, codigo_journey_anterior: traslados.map(t => t.codigo_journey) } : {})
         };
     }
