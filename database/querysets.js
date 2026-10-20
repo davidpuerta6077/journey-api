@@ -781,7 +781,7 @@ const healthCheck = () => ({
 
 const selectPlatformUsers = () => ({
     text: `SELECT u.id, u.username, u.email, u.estado, u.created_at, u.updated_at,
-           u.last_login, u.created_by, u.role_id, u.photo_url, u.departamento, r.name AS role_name
+           u.last_login, u.created_by, u.role_id, u.photo_url, u.departamento, u.fecha_nacimiento, r.name AS role_name
            FROM ${schema}.platform_users u
            LEFT JOIN ${schema}.roles r ON r.id = u.role_id
            ORDER BY u.id`,
@@ -819,25 +819,25 @@ const updatePlatformUserUsernameData = (email, username) => ({
 });
 
 const insertPlatformUserData = (data) => {
-    const { username, email, role_id, created_by, departamento } = data;
+    const { username, email, role_id, created_by, departamento, fecha_nacimiento } = data;
     const text = `
-        INSERT INTO ${schema}.platform_users (username, email, role_id, created_by, departamento)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO ${schema}.platform_users (username, email, role_id, created_by, departamento, fecha_nacimiento)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
     `;
-    const values = [username, email, role_id || null, created_by || null, departamento || null];
+    const values = [username, email, role_id || null, created_by || null, departamento || null, fecha_nacimiento || null];
     return { text, values };
 };
 
 const updatePlatformUserData = (id, data) => {
-    const { username, role_id, departamento } = data;
+    const { username, role_id, departamento, fecha_nacimiento } = data;
     const text = `
         UPDATE ${schema}.platform_users
-        SET username = $1, role_id = $2, departamento = $3, updated_at = now()
-        WHERE id = $4
+        SET username = $1, role_id = $2, departamento = $3, fecha_nacimiento = $4, updated_at = now()
+        WHERE id = $5
         RETURNING *
     `;
-    const values = [username, role_id || null, departamento || null, id];
+    const values = [username, role_id || null, departamento || null, fecha_nacimiento || null, id];
     return { text, values };
 };
 
@@ -1476,7 +1476,10 @@ const selectSicauNovedades = (limit) => ({
 });
 
 const findEnrollmentsByCodigoJourneyQuery = (codigoJourney) => ({
-    text: `SELECT id, estado FROM ${schema}.enrollments WHERE codigo_journey = $1`,
+    text: `SELECT e.id, e.estado, u.documento AS cedula
+           FROM ${schema}.enrollments e
+           LEFT JOIN ${schema}.users u ON u.id = e.userid
+           WHERE e.codigo_journey = $1`,
     values: [codigoJourney]
 });
 
@@ -1490,6 +1493,27 @@ const selectRoleIdsByNames = (names) => ({
 const selectPlatformUserIdsByRoles = (roleIds) => ({
     text: `SELECT id FROM ${schema}.platform_users WHERE role_id = ANY($1) AND estado = true`,
     values: [roleIds]
+});
+
+const selectPlatformUsersWithBirthdayToday = () => ({
+    text: `
+        SELECT id, username
+        FROM ${schema}.platform_users
+        WHERE estado = true AND fecha_nacimiento IS NOT NULL
+          AND EXTRACT(MONTH FROM fecha_nacimiento) = EXTRACT(MONTH FROM CURRENT_DATE)
+          AND EXTRACT(DAY FROM fecha_nacimiento) = EXTRACT(DAY FROM CURRENT_DATE)
+    `,
+    values: []
+});
+
+const existsBirthdayNotificationTodayQuery = (platformUserId) => ({
+    text: `
+        SELECT 1 FROM ${schema}.notifications
+        WHERE type = 'birthday' AND entity_type = 'platform_user' AND entity_id = $1
+          AND created_at::date = CURRENT_DATE
+        LIMIT 1
+    `,
+    values: [platformUserId]
 });
 
 const insertNotificationData = (n) => ({
@@ -2094,6 +2118,8 @@ module.exports = {
     selectSicauNovedades,
     selectRoleIdsByNames,
     selectPlatformUserIdsByRoles,
+    selectPlatformUsersWithBirthdayToday,
+    existsBirthdayNotificationTodayQuery,
     insertNotificationData,
     insertNotificationRecipientData,
     selectNotificationsForUser,

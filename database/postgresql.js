@@ -68,7 +68,8 @@ const {
     reportEnrollmentsOfCourse: qReportEnrollmentsOfCourse,
     selectSettings, upsertSettingQuery, deleteSettingQuery,
     selectMenuLinks, selectAllMenuLinks, insertMenuLinkQuery, updateMenuLinkQuery, deleteMenuLinkQuery,
-    selectRoleIdsByNames, selectPlatformUserIdsByRoles, insertNotificationData, insertNotificationRecipientData,
+    selectRoleIdsByNames, selectPlatformUserIdsByRoles, selectPlatformUsersWithBirthdayToday, existsBirthdayNotificationTodayQuery,
+    insertNotificationData, insertNotificationRecipientData,
     selectNotificationsForUser, countUnreadNotificationsQuery, markNotificationReadQuery, markAllNotificationsReadQuery,
 } = require('./querysets');
  
@@ -1064,6 +1065,24 @@ function getPlatformUserIdsByRoles(roleIds) {
     });
 }
 
+function getPlatformUsersWithBirthdayToday() {
+    return new Promise((resolve, reject) => {
+        pool.query(selectPlatformUsersWithBirthdayToday(), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows);
+        });
+    });
+}
+
+function hasBirthdayNotificationToday(platformUserId) {
+    return new Promise((resolve, reject) => {
+        pool.query(existsBirthdayNotificationTodayQuery(platformUserId), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows.length > 0);
+        });
+    });
+}
+
 function insertNotification(data) {
     return new Promise((resolve, reject) => {
         pool.query(insertNotificationData(data), (err, result) => {
@@ -1824,6 +1843,8 @@ module.exports = {
     // notifications
     getRoleIdsByNames,
     getPlatformUserIdsByRoles,
+    getPlatformUsersWithBirthdayToday,
+    hasBirthdayNotificationToday,
     insertNotification,
     addNotificationRecipient,
     listNotificationsForUser,
