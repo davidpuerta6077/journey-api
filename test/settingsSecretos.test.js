@@ -33,3 +33,37 @@ test('saveSetting de un secreto vacío no lo borra ni lo pisa → 400', async ()
     await assert.rejects(ctrl.saveSetting({ categoria: 'moodle', clave: 'moodle_token', valor: '' }, 'a@x.co'), (e) => e.status === 400);
     assert.strictEqual(upserts.length, 0);
 });
+
+test('saveSetting cifra el token de Moodle y no lo devuelve; leerSecreto acepta cifrado y texto plano', async () => {
+    const { leerSecreto, cifrarSecreto } = require('../services/settingsSecretos');
+    const env = { IA_SECRET_KEY: 'clave-de-prueba' };
+    const anterior = process.env.IA_SECRET_KEY;
+    process.env.IA_SECRET_KEY = env.IA_SECRET_KEY;
+    try {
+        const upserts = [];
+        const ctrl = createAdmin({ upsertSetting: async (c, k, v) => { upserts.push(v); return { categoria: c, clave: k, valor: v }; } });
+        const r = await ctrl.saveSetting({ categoria: 'moodle', clave: 'moodle_token', valor: ' tok-123456 ' }, 'a@x.co');
+        assert.strictEqual(r.valor, '');
+        assert.ok(!JSON.stringify(upserts).includes('tok-123456'));
+        assert.strictEqual(upserts[0].ultimos, '3456');
+        assert.strictEqual(leerSecreto(upserts[0], env), 'tok-123456');
+        assert.strictEqual(leerSecreto('plano', env), 'plano');
+        const rows = await createAdmin({ getSettings: async () => [{ categoria: 'moodle', clave: 'moodle_token', valor: cifrarSecreto('abcd9876', env) }] }).listSettings('moodle');
+        assert.deepStrictEqual(rows[0].secreto, { configurado: true, ultimos: '9876' });
+    } finally {
+        if (anterior === undefined) delete process.env.IA_SECRET_KEY; else process.env.IA_SECRET_KEY = anterior;
+    }
+});
+
+test('sin IA_SECRET_KEY no se guarda el token de Moodle (no queda en claro)', async () => {
+    const anterior = process.env.IA_SECRET_KEY;
+    delete process.env.IA_SECRET_KEY;
+    try {
+        const upserts = [];
+        const ctrl = createAdmin({ upsertSetting: async (...a) => { upserts.push(a); return {}; } });
+        await assert.rejects(ctrl.saveSetting({ categoria: 'moodle', clave: 'moodle_token', valor: 'tok' }, 'a@x.co'), (e) => e.status === 503);
+        assert.strictEqual(upserts.length, 0);
+    } finally {
+        if (anterior !== undefined) process.env.IA_SECRET_KEY = anterior;
+    }
+});

@@ -3,7 +3,7 @@ const { moodleRequest } = require('../../services/moodleService');
 const { assertMoodleOk } = require('../../services/moodleAssert');
 const iaConfig = require('../../services/ia/config');
 const googleConfig = require('../../services/onix/googleConfig');
-const { esSecreto } = require('../../services/settingsSecretos');
+const { esSecreto, cifrarSecreto, ultimosDe } = require('../../services/settingsSecretos');
 const { createIAConfigurada } = require('../../services/ia');
 
 module.exports = (injectedDB) => {
@@ -289,7 +289,7 @@ module.exports = (injectedDB) => {
             .filter((r) => !(r.categoria === iaConfig.CATEGORIA && r.clave.endsWith('_key')))
             .filter((r) => !(r.categoria === googleConfig.CATEGORIA && r.clave === 'client_secret'))
             .map((r) => (esSecreto(r.categoria, r.clave)
-                ? { ...r, valor: '', secreto: { configurado: !!r.valor, ultimos: String(r.valor || '').slice(-4) } }
+                ? { ...r, valor: '', secreto: { configurado: !!r.valor, ultimos: ultimosDe(r.valor) } }
                 : r));
     }
 
@@ -305,6 +305,10 @@ module.exports = (injectedDB) => {
             const err = new Error('Escribe el nuevo valor (vacío no cambia el actual)');
             err.status = 400;
             throw err;
+        }
+        if (esSecreto(categoria, clave)) {
+            const r = await data.upsertSetting(categoria, clave, cifrarSecreto(valor.trim()), updatedBy);
+            return { ...r, valor: '' };
         }
         return data.upsertSetting(categoria, clave, valor, updatedBy);
     }

@@ -120,3 +120,65 @@ test('servicio: canjearCodigo exige refresh_token y permiso de calendario; lee e
     await assert.rejects(createGoogle({ env: ENV, fetchFn: resp({ refresh_token: 'rt', scope: 'openid', id_token: idToken }) }).canjearCodigo('c'), (e) => e.status === 400);
     await assert.rejects(createGoogle({ env: ENV, fetchFn: resp({ scope: 'calendar.readonly' }) }).canjearCodigo('c'), (e) => e.status === 503);
 });
+
+// ── Gmail (correos enviados) ──
+test('correos del mes: rango en ms hora Colombia; sin conexión → 409; usados no se ofrecen y no chocan con eventos', async () => {
+    const { ctrl, googleCalls } = setup();
+    const ana = await ctrl.getActor('ana@x.co');
+    await assert.rejects(ctrl.listCorreosGoogle(ana, { mes: '10', anio: '2027' }), no(409));
+    await conectar(ctrl);
+    assert.strictEqual((await ctrl.listCorreosGoogle(ana, { mes: '10', anio: '2027' })).length, 2);
+    assert.deepStrictEqual(googleCalls.at(-1), ['correos', 'rt-1', Date.parse('2027-10-01T05:00:00Z'), Date.parse('2027-11-01T05:00:00Z')]);
+    await ctrl.registroDesdeCorreo(ana, { actividad_id: '100', mes: '10', anio: '2027', correo_ids: ['h1'] });
+    assert.deepStrictEqual((await ctrl.listCorreosGoogle(ana, { mes: '10', anio: '2027' })).map((c) => c.id), ['h2']);
+    assert.strictEqual((await ctrl.listEventosGoogle(ana, { mes: '10', anio: '2027' })).length, 2);
+});
+
+test('registroDesdeCorreo arma el texto con destinatarios y cantidad; inexistente → 404, vacío → 400, repetido → 409', async () => {
+    const { ctrl, db } = setup();
+    await conectar(ctrl);
+    const ana = await ctrl.getActor('ana@x.co');
+    const base = { actividad_id: '100', mes: '10', anio: '2027' };
+    await assert.rejects(ctrl.registroDesdeCorreo(ana, { ...base, correo_ids: ['nope'] }), no(404));
+    await assert.rejects(ctrl.registroDesdeCorreo(ana, { ...base, correo_ids: [] }), no(400));
+    const r = await ctrl.registroDesdeCorreo(ana, { ...base, correo_ids: ['h1', 'h2'] });
+    assert.deepStrictEqual(r.desarrollo.split('\n'), [
+        '- 02/10/2027: Correo "Cronograma de capacitación" (a Ana Pérez, bob@x.co, Carla y 1 más, 3 correos)',
+        '- 06/10/2027: Correo "Solicitud de aulas" (a Soporte)',
+    ]);
+    assert.strictEqual(r.titulo, 'Gestión por correo electrónico');
+    assert.strictEqual(r.correos, 2);
+    assert.strictEqual(db.st.eventosUsados['gmail:h1'].registroId, r.id);
+    await assert.rejects(ctrl.registroDesdeCorreo(ana, { ...base, correo_ids: ['h2'] }), no(409));
+});
+
+test('servicio: correosEnviados agrupa por conversación, filtra el mes y para al pasar el inicio', async () => {
+    const msg = (id, threadId, fecha, subject, to) => ({ id, threadId, internalDate: String(Date.parse(fecha)), payload: { headers: [{ name: 'Subject', value: subject }, { name: 'To', value: to }] } });
+    const mensajes = {
+        m1: msg('m1', 't1', '2027-11-02T15:00:00Z', 'Fuera del mes', 'x@x.co'),
+        m2: msg('m2', 't2', '2027-10-20T15:00:00Z', 'RE: Aulas', '"Pérez, Ana" <ana@x.co>'),
+        m3: msg('m3', 't2', '2027-10-05T15:00:00Z', 'Aulas', 'Soporte <soporte@x.co>, bob@x.co'),
+        m4: msg('m4', 't3', '2027-09-30T15:00:00Z', 'Mes anterior', 'y@x.co'),
+    };
+    const urls = [];
+    const fetchFn = async (url) => {
+        urls.push(url);
+        if (url.includes('/token')) return { ok: true, json: async () => ({ access_token: 'at' }) };
+        const id = url.match(/messages\/(\w+)\?/)?.[1];
+        if (id) return { ok: true, status: 200, json: async () => mensajes[id] };
+        // Primera página llega hasta un correo anterior al mes: no se pide la segunda.
+        return { ok: true, status: 200, json: async () => ({ messages: [{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }, { id: 'm4' }], nextPageToken: 'p2' }) };
+    };
+    const r = await createGoogle({ env: ENV, fetchFn }).correosEnviados('rt', Date.parse('2027-10-01T05:00:00Z'), Date.parse('2027-11-01T05:00:00Z'));
+    assert.deepStrictEqual(r, [{ id: 't2', asunto: 'Aulas', para: ['Pérez, Ana', 'Soporte', 'bob@x.co'], mensajes: 2, fecha: '2027-10-05T15:00:00.000Z' }]);
+    assert.ok(!urls.some((u) => u.includes('pageToken')));
+    assert.ok(urls.every((u) => !u.includes('format=full')));
+});
+
+test('servicio: correos sin permiso de Gmail → 409 (reconectar); API deshabilitada → 503', async () => {
+    const con = (error) => async (url) => (url.includes('/token')
+        ? { ok: true, json: async () => ({ access_token: 'at' }) }
+        : { ok: false, status: 403, json: async () => ({ error }) });
+    await assert.rejects(createGoogle({ env: ENV, fetchFn: con({ message: 'Request had insufficient authentication scopes.' }) }).correosEnviados('rt', 0, 1), (e) => e.status === 409);
+    await assert.rejects(createGoogle({ env: ENV, fetchFn: con({ message: 'Gmail API has not been used in project' }) }).correosEnviados('rt', 0, 1), (e) => e.status === 503);
+});

@@ -264,6 +264,10 @@ router.post('/registros/desde-logs', checkAuth, checkPermission(USE), saveLog(US
  *   get: { summary: Mis eventos de Google Calendar del mes aún no asignados (mes, anio), tags: [OnixReports] }
  * /onix/registros/desde-google:
  *   post: { summary: Agregar eventos de Google Calendar como subactividad (actividad_id, mes, anio, evento_ids, titulo; registro_id opcional), tags: [OnixReports] }
+ * /onix/google/correos:
+ *   get: { summary: Mis correos enviados del mes (asunto, destinatarios, fecha; sin contenido) aún no asignados (mes, anio), tags: [OnixReports] }
+ * /onix/registros/desde-correo:
+ *   post: { summary: Agregar correos enviados como subactividad (actividad_id, mes, anio, correo_ids, titulo; registro_id opcional), tags: [OnixReports] }
  */
 router.get('/google', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
     ok(req, res, await ctrl.googleEstado(actor));
@@ -304,6 +308,21 @@ router.post('/registros/desde-google', checkAuth, checkPermission(USE), saveLog(
     req._logActividad = r.actividad_nombre;
     req._logRegistroId = r.id;
     req._logCantidad = r.eventos;
+    ok(req, res, r);
+}));
+
+router.get('/google/correos', checkAuth, checkPermission(USE), run(async (req, res, actor) => {
+    ok(req, res, await ctrl.listCorreosGoogle(actor, req.query));
+}));
+
+router.post('/registros/desde-correo', checkAuth, checkPermission(USE), saveLog(USE, {
+    descripcion: (req) => `${req.body?.registro_id ? 'Agregó a una subactividad' : 'Agregó un registro desde'} ${req._logCantidad || 0} correo(s) enviados en "${req._logActividad || '—'}" (${periodo(req.body)})`,
+    entityId: (req) => req._logRegistroId,
+}), run(async (req, res, actor) => {
+    const r = await ctrl.registroDesdeCorreo(actor, req.body || {});
+    req._logActividad = r.actividad_nombre;
+    req._logRegistroId = r.id;
+    req._logCantidad = r.correos;
     ok(req, res, r);
 }));
 

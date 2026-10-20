@@ -481,6 +481,58 @@ module.exports = (injectedDB, deps = {}) => {
         return { ...r, eventos: ids.length };
     }
 
+    // ── Gmail: correos enviados del mes (asunto, destinatarios y fecha) ─────
+    // Se marcan como usados en onix_registro_eventos con el prefijo 'gmail:'
+    // (los ids de Calendar nunca lo tienen).
+    const PREFIJO_CORREO = 'gmail:';
+
+    async function correosDelMes(actor, p) {
+        const g = await data.onix.getGoogle(actor.userId);
+        if (!g) throw httpError('Conecta primero tu cuenta de Google en Configuración', 409);
+        const [desde, hasta] = rangoMes(p).map((f) => new Date(f).getTime());
+        return (await servicioGoogle()).correosEnviados(descifrar(g.refresh_token), desde, hasta);
+    }
+
+    async function correosUsados(actor) {
+        return new Set((await data.onix.listEventosUsados(actor.userId))
+            .filter((id) => id.startsWith(PREFIJO_CORREO)).map((id) => id.slice(PREFIJO_CORREO.length)));
+    }
+
+    async function listCorreosGoogle(actor, query) {
+        const p = validarPeriodo(query.mes, query.anio);
+        const usados = await correosUsados(actor);
+        return (await correosDelMes(actor, p)).filter((c) => !usados.has(c.id));
+    }
+
+    async function registroDesdeCorreo(actor, body) {
+        const act = await actividadPropia(actor, body.actividad_id);
+        const p = validarPeriodo(body.mes, body.anio);
+        const ids = [...new Set((Array.isArray(body.correo_ids) ? body.correo_ids : []).map(String))].filter((id) => id && id.length <= 200);
+        if (!ids.length) throw httpError('Selecciona al menos un correo', 400);
+        if (ids.length > 200) throw httpError('Selecciona como máximo 200 correos a la vez', 400);
+
+        // Se vuelven a leer de Gmail: solo se aceptan correos reales del mes.
+        const porId = new Map((await correosDelMes(actor, p)).map((c) => [c.id, c]));
+        const correos = ids.map((id) => porId.get(id));
+        if (correos.some((c) => !c)) throw noEncontrado();
+        const usados = await correosUsados(actor);
+        if (ids.some((id) => usados.has(id))) throw httpError('Algún correo ya fue asignado a una actividad', 409);
+
+        const desarrollo = correos
+            .map((c) => {
+                const para = c.para.slice(0, 3).join(', ') + (c.para.length > 3 ? ` y ${c.para.length - 3} más` : '');
+                const extra = [para && `a ${para}`, c.mensajes > 1 && `${c.mensajes} correos`].filter(Boolean).join(', ');
+                return `- ${fechaCorta(c.fecha)}: Correo "${c.asunto}"${extra ? ` (${extra})` : ''}`;
+            })
+            .join('\n');
+        const r = await guardarImportado({
+            actor, act, p, body, desarrollo, tituloDefecto: correos.length === 1 ? correos[0].asunto.slice(0, 200) : 'Gestión por correo electrónico',
+            enlazar: (registroId) => data.onix.insertRegistroEventos(registroId, actor.userId, ids.map((id) => PREFIJO_CORREO + id)),
+            usado: 'Algún correo ya fue asignado a una actividad',
+        });
+        return { ...r, correos: ids.length };
+    }
+
     // ── Evidencias ──────────────────────────────────────────────────────────
     async function addEvidencia(actor, body, file) {
         const r = await registroPropio(actor, body.registro_id);
@@ -635,7 +687,7 @@ module.exports = (injectedDB, deps = {}) => {
         listActividades, createActividad, updateActividad, deleteActividad,
         listRegistros, createRegistro, updateRegistro, deleteRegistro,
         listLogsDisponibles, registroDesdeLogs,
-        googleEstado, googleUrl, googleFront, googleCallback, googleDesconectar, listEventosGoogle, registroDesdeGoogle,
+        googleEstado, googleUrl, googleFront, googleCallback, googleDesconectar, listEventosGoogle, registroDesdeGoogle, listCorreosGoogle, registroDesdeCorreo,
         addEvidencia, updateEvidencia, deleteEvidencia, getEvidenciaArchivo,
         generarSubactividad, subactividadWord, documentoActividadWord, zipMes,
         listUsuariosArea,
