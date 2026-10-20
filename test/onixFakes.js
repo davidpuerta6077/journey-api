@@ -66,6 +66,8 @@ function fakeDB(seed = {}) {
                 if (ids.some((id) => st.registroLogs[id])) { const e = new Error('dup'); e.code = '23505'; throw e; }
                 ids.forEach((id) => { st.registroLogs[id] = registroId; });
             },
+            listTareasAtomDelMes: async (uid, desde, hasta) => (st.tareasAtom || [])
+                .filter((t) => t.uid === uid && t.fecha >= new Date(desde) && t.fecha < new Date(hasta)),
             getGoogle: async (uid) => st.google[uid] || null,
             upsertGoogle: async (uid, email, refresh_token) => (st.google[uid] = { user_id: uid, email, refresh_token }),
             deleteGoogle: async (uid) => { const g = st.google[uid]; delete st.google[uid]; return g || null; },

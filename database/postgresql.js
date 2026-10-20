@@ -1664,6 +1664,7 @@ const onix = {
     deleteGoogle: (userId) => queryOne(onixQueries.deleteGoogle(userId)),
     listEventosUsados: async (userId) => (await query(onixQueries.eventosUsados(userId))).map((r) => r.evento_id),
     insertRegistroEventos: (registroId, userId, ids) => query(onixQueries.insertRegistroEventos(registroId, userId, ids)),
+    listTareasAtomDelMes: (userId, desde, hasta) => query(onixQueries.tareasAtomDelMes(userId, desde, hasta)),
 };
 
 // ─── CODEX (editor de páginas para Moodle) ────────────────────────────────────

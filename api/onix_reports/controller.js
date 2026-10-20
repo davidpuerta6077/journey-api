@@ -533,6 +533,64 @@ module.exports = (injectedDB, deps = {}) => {
         return { ...r, correos: ids.length };
     }
 
+    // ── Atom: tareas trabajadas en el mes ──────────────────────────────────
+    // Una tarea larga puede reportarse en varios meses: se marca usada por mes
+    // ('atom:<id>:<anio>-<mes>' en onix_registro_eventos).
+    const claveTarea = (id, p) => `atom:${id}:${p.anio}-${p.mes}`;
+
+    async function tareasDelMes(actor, p) {
+        const [desde, hasta] = rangoMes(p);
+        return (await data.onix.listTareasAtomDelMes(actor.userId, desde, hasta)).map((t) => ({
+            id: t.id,
+            titulo: t.title,
+            descripcion: t.description || '',
+            estado: t.status,
+            prioridad: t.priority,
+            categoria: t.category || null,
+            fecha: new Date(t.fecha).toISOString(),
+            subtareas: t.subtareas,
+            subtareasHechas: t.subtareas_hechas,
+            hechas: t.hechas || '',
+        }));
+    }
+
+    async function listTareasAtom(actor, query) {
+        const p = validarPeriodo(query.mes, query.anio);
+        const usados = new Set(await data.onix.listEventosUsados(actor.userId));
+        return (await tareasDelMes(actor, p)).filter((t) => !usados.has(claveTarea(t.id, p)));
+    }
+
+    async function registroDesdeAtom(actor, body) {
+        const act = await actividadPropia(actor, body.actividad_id);
+        const p = validarPeriodo(body.mes, body.anio);
+        const ids = [...new Set((Array.isArray(body.tarea_ids) ? body.tarea_ids : []).map(Number))].filter((id) => Number.isInteger(id) && id > 0);
+        if (!ids.length) throw httpError('Selecciona al menos una tarea', 400);
+        if (ids.length > 200) throw httpError('Selecciona como máximo 200 tareas a la vez', 400);
+
+        // Se vuelven a leer: solo se aceptan tareas propias trabajadas en el mes.
+        const porId = new Map((await tareasDelMes(actor, p)).map((t) => [t.id, t]));
+        const tareas = ids.map((id) => porId.get(id));
+        if (tareas.some((t) => !t)) throw noEncontrado();
+        const claves = ids.map((id) => claveTarea(id, p));
+        const usados = new Set(await data.onix.listEventosUsados(actor.userId));
+        if (claves.some((c) => usados.has(c))) throw httpError('Alguna tarea ya fue asignada a una actividad este mes', 409);
+
+        const desarrollo = tareas
+            .sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
+            .map((t) => {
+                const extra = [t.estado, t.subtareas && `${t.subtareasHechas}/${t.subtareas} subtareas`].filter(Boolean).join(', ');
+                const detalle = [t.descripcion.trim().slice(0, 300), t.hechas && `Subtareas hechas: ${t.hechas}`].filter(Boolean).join('. ');
+                return `- ${fechaCorta(t.fecha)}: Tarea "${t.titulo}" (${extra})${detalle ? `: ${detalle}` : ''}`;
+            })
+            .join('\n');
+        const r = await guardarImportado({
+            actor, act, p, body, desarrollo, tituloDefecto: tareas.length === 1 ? tareas[0].titulo.slice(0, 200) : 'Tareas del mes',
+            enlazar: (registroId) => data.onix.insertRegistroEventos(registroId, actor.userId, claves),
+            usado: 'Alguna tarea ya fue asignada a una actividad este mes',
+        });
+        return { ...r, tareas: ids.length };
+    }
+
     // ── Evidencias ──────────────────────────────────────────────────────────
     async function addEvidencia(actor, body, file) {
         const r = await registroPropio(actor, body.registro_id);
@@ -687,7 +745,7 @@ module.exports = (injectedDB, deps = {}) => {
         listActividades, createActividad, updateActividad, deleteActividad,
         listRegistros, createRegistro, updateRegistro, deleteRegistro,
         listLogsDisponibles, registroDesdeLogs,
-        googleEstado, googleUrl, googleFront, googleCallback, googleDesconectar, listEventosGoogle, registroDesdeGoogle, listCorreosGoogle, registroDesdeCorreo,
+        googleEstado, googleUrl, googleFront, googleCallback, googleDesconectar, listEventosGoogle, registroDesdeGoogle, listCorreosGoogle, registroDesdeCorreo, listTareasAtom, registroDesdeAtom,
         addEvidencia, updateEvidencia, deleteEvidencia, getEvidenciaArchivo,
         generarSubactividad, subactividadWord, documentoActividadWord, zipMes,
         listUsuariosArea,
