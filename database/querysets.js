@@ -2110,9 +2110,281 @@ const codexQueries = {
     }),
 };
 
+// ─── ATOM (widget de tareas en el Index) ───────────────────────────────────
+// Visibilidad por defecto: cada quien ve solo lo que creó o lo que tiene
+// asignado (listTasks sin "todas"); atom_admin puede pedir "todas" para
+// estadísticas/auditoría, nunca por defecto (ver api/atom/controller.js).
+const atomQueries = {
+    actor: (email) => ({
+        text: `
+            SELECT pu.id AS user_id, pu.role_id, r.name AS role_name,
+                EXISTS (
+                    SELECT 1 FROM ${schema}.role_permissions rp
+                    JOIN ${schema}.submodules s ON s.id = rp.submodule_id
+                    WHERE rp.role_id = pu.role_id AND s.code = 'atom_admin'
+                ) AS es_admin,
+                EXISTS (
+                    SELECT 1 FROM ${schema}.role_permissions rp
+                    JOIN ${schema}.submodules s ON s.id = rp.submodule_id
+                    WHERE rp.role_id = pu.role_id AND s.code = 'atom_assign'
+                ) AS puede_asignar
+            FROM ${schema}.platform_users pu
+            JOIN ${schema}.roles r ON r.id = pu.role_id
+            WHERE pu.email = $1
+        `,
+        values: [email],
+    }),
+
+    // Filtros opcionales: estado, prioridad, asignadoA, creadoPor, q (título),
+    // desde/hasta (due_date), vencidas (bool: due_date < hoy y no cerrada).
+    // `todas`=false restringe a creado_por=userId OR assigned_to=userId.
+    listTasks: (userId, todas, f = {}) => {
+        const where = [];
+        const values = [];
+        let i = 1;
+        if (!todas) {
+            where.push(`(t.created_by = $${i} OR t.assigned_to = $${i})`);
+            values.push(userId); i++;
+        }
+        if (f.estado)      { where.push(`t.status = $${i}`); values.push(f.estado); i++; }
+        if (f.prioridad)   { where.push(`t.priority = $${i}`); values.push(f.prioridad); i++; }
+        if (f.asignadoA)   { where.push(`t.assigned_to = $${i}`); values.push(f.asignadoA); i++; }
+        if (f.creadoPor)   { where.push(`t.created_by = $${i}`); values.push(f.creadoPor); i++; }
+        if (f.q)           { where.push(`t.title ILIKE $${i}`); values.push(`%${f.q}%`); i++; }
+        if (f.desde)       { where.push(`t.due_date >= $${i}`); values.push(f.desde); i++; }
+        if (f.hasta)       { where.push(`t.due_date <= $${i}`); values.push(f.hasta); i++; }
+        if (f.hoy)         { where.push(`t.due_date = CURRENT_DATE`); }
+        if (f.vencidas)    { where.push(`t.due_date < CURRENT_DATE AND t.status NOT IN ('Completada','Cancelada')`); }
+        const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+        return {
+            text: `
+                SELECT t.*, cu.username AS created_by_nombre, au.username AS assigned_to_nombre
+                FROM ${schema}.atom_tasks t
+                JOIN ${schema}.platform_users cu ON cu.id = t.created_by
+                LEFT JOIN ${schema}.platform_users au ON au.id = t.assigned_to
+                ${whereSql}
+                ORDER BY
+                    CASE t.status WHEN 'Cancelada' THEN 1 WHEN 'Completada' THEN 1 ELSE 0 END,
+                    t.due_date NULLS LAST, t.id DESC
+            `,
+            values,
+        };
+    },
+
+    counts: (userId) => ({
+        text: `
+            SELECT
+                COUNT(*) FILTER (WHERE status NOT IN ('Completada','Cancelada')) AS pendientes,
+                COUNT(*) FILTER (WHERE due_date < CURRENT_DATE AND status NOT IN ('Completada','Cancelada')) AS vencidas,
+                COUNT(*) FILTER (WHERE status = 'Completada') AS completadas
+            FROM ${schema}.atom_tasks
+            WHERE created_by = $1 OR assigned_to = $1
+        `,
+        values: [userId],
+    }),
+
+    task: (id) => ({
+        text: `
+            SELECT t.*, cu.username AS created_by_nombre, cu.email AS created_by_email,
+                   au.username AS assigned_to_nombre, au.email AS assigned_to_email
+            FROM ${schema}.atom_tasks t
+            JOIN ${schema}.platform_users cu ON cu.id = t.created_by
+            LEFT JOIN ${schema}.platform_users au ON au.id = t.assigned_to
+            WHERE t.id = $1
+        `,
+        values: [id],
+    }),
+
+    insertTask: (d) => ({
+        text: `
+            INSERT INTO ${schema}.atom_tasks (title, description, priority, status, category, due_date, created_by, assigned_to)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *
+        `,
+        values: [d.title, d.description || null, d.priority || 'Media', d.status || 'Pendiente', d.category || null, d.due_date || null, d.created_by, d.assigned_to || null],
+    }),
+
+    updateTask: (id, d) => ({
+        text: `
+            UPDATE ${schema}.atom_tasks SET
+                title = $2, description = $3, priority = $4, status = $5, category = $6,
+                due_date = $7, assigned_to = $8, updated_at = now(),
+                completed_at = CASE WHEN $5 = 'Completada' THEN COALESCE(completed_at, now()) ELSE NULL END
+            WHERE id = $1
+            RETURNING *
+        `,
+        values: [id, d.title, d.description || null, d.priority, d.status, d.category || null, d.due_date || null, d.assigned_to || null],
+    }),
+
+    deleteTaskCheck: () => null, // Atom nunca borra físicamente: cancelar = status "Cancelada" (ver updateTask).
+
+    insertHistory: (taskId, userId, campo, anterior, actual) => ({
+        text: `
+            INSERT INTO ${schema}.atom_task_history (task_id, platform_user_id, campo, anterior, actual)
+            VALUES ($1, $2, $3, $4, $5)
+        `,
+        values: [taskId, userId, campo, anterior, actual],
+    }),
+
+    history: (taskId) => ({
+        text: `
+            SELECT h.*, pu.username AS usuario_nombre
+            FROM ${schema}.atom_task_history h
+            LEFT JOIN ${schema}.platform_users pu ON pu.id = h.platform_user_id
+            WHERE h.task_id = $1
+            ORDER BY h.created_at DESC
+        `,
+        values: [taskId],
+    }),
+
+    insertComment: (taskId, userId, body) => ({
+        text: `
+            INSERT INTO ${schema}.atom_task_comments (task_id, platform_user_id, body)
+            VALUES ($1, $2, $3)
+            RETURNING *
+        `,
+        values: [taskId, userId, body],
+    }),
+
+    comments: (taskId) => ({
+        text: `
+            SELECT c.*, pu.username AS usuario_nombre
+            FROM ${schema}.atom_task_comments c
+            JOIN ${schema}.platform_users pu ON pu.id = c.platform_user_id
+            WHERE c.task_id = $1
+            ORDER BY c.created_at ASC
+        `,
+        values: [taskId],
+    }),
+
+    insertSubtask: (taskId, title, orden) => ({
+        text: `INSERT INTO ${schema}.atom_subtasks (task_id, title, orden) VALUES ($1, $2, $3) RETURNING *`,
+        values: [taskId, title, orden || 0],
+    }),
+
+    subtasks: (taskId) => ({
+        text: `SELECT * FROM ${schema}.atom_subtasks WHERE task_id = $1 ORDER BY orden, id`,
+        values: [taskId],
+    }),
+
+    subtask: (id) => ({
+        text: `SELECT * FROM ${schema}.atom_subtasks WHERE id = $1`,
+        values: [id],
+    }),
+
+    setSubtaskDone: (id, done) => ({
+        text: `UPDATE ${schema}.atom_subtasks SET done = $2 WHERE id = $1 RETURNING *`,
+        values: [id, done],
+    }),
+
+    // Notificación de vencimiento: una tarea por día como máximo (dedup por
+    // task_id + tipo + fecha, igual patrón que el cumpleaños de platform_users).
+    tasksVencenHoyOVencidas: () => ({
+        text: `
+            SELECT id, title, created_by, assigned_to, due_date,
+                   (due_date < CURRENT_DATE) AS vencida
+            FROM ${schema}.atom_tasks
+            WHERE due_date IS NOT NULL AND due_date <= CURRENT_DATE
+              AND status NOT IN ('Completada', 'Cancelada')
+        `,
+        values: [],
+    }),
+
+    existsAtomNotificationToday: (taskId, tipo) => ({
+        text: `
+            SELECT 1 FROM ${schema}.notifications
+            WHERE type = $2 AND entity_type = 'atom_task' AND entity_id = $1
+              AND created_at::date = CURRENT_DATE
+            LIMIT 1
+        `,
+        values: [taskId, tipo],
+    }),
+
+    // Para @menciones en comentarios: usernames de Bravo Hub pueden traer
+    // espacios, así que se matchea por substring "@" + username completo
+    // (ver addComment en el controller), no por una palabra suelta.
+    usuariosActivos: () => ({
+        text: `SELECT id, username FROM ${schema}.platform_users WHERE estado = true`,
+        values: [],
+    }),
+
+    // Resumen diario: cuenta vencidas/por-vencer por destinatario (el mismo
+    // "assigned_to || created_by" que usa tasksVencenHoyOVencidas), para
+    // mandar un solo aviso agregado en vez de uno por tarea.
+    resumenVencimientosPorUsuario: () => ({
+        text: `
+            SELECT COALESCE(assigned_to, created_by) AS user_id,
+                   COUNT(*) FILTER (WHERE due_date < CURRENT_DATE) AS vencidas,
+                   COUNT(*) FILTER (WHERE due_date = CURRENT_DATE) AS por_vencer
+            FROM ${schema}.atom_tasks
+            WHERE due_date IS NOT NULL AND due_date <= CURRENT_DATE
+              AND status NOT IN ('Completada', 'Cancelada')
+            GROUP BY COALESCE(assigned_to, created_by)
+        `,
+        values: [],
+    }),
+
+    existsAtomResumenHoy: (userId) => ({
+        text: `
+            SELECT 1 FROM ${schema}.notifications
+            WHERE type = 'atom_resumen_diario' AND entity_type = 'platform_user' AND entity_id = $1
+              AND created_at::date = CURRENT_DATE
+            LIMIT 1
+        `,
+        values: [userId],
+    }),
+
+    // Estancada: sin cambios de campos ni comentarios nuevos en `dias` días,
+    // y todavía no cerrada. Se compara contra lo más reciente entre el
+    // último edit (updated_at) y el último comentario.
+    tasksEstancadas: (dias) => ({
+        text: `
+            SELECT t.id, t.title, t.created_by, t.assigned_to
+            FROM ${schema}.atom_tasks t
+            LEFT JOIN (
+                SELECT task_id, MAX(created_at) AS ultimo
+                FROM ${schema}.atom_task_comments
+                GROUP BY task_id
+            ) c ON c.task_id = t.id
+            WHERE t.status NOT IN ('Completada', 'Cancelada')
+              AND GREATEST(t.updated_at, COALESCE(c.ultimo, t.created_at)) < now() - ($1 || ' days')::interval
+        `,
+        values: [dias],
+    }),
+
+    // Dedup de "estancada" por rango de días (no por día calendario): no tiene
+    // sentido repetirla todos los días mientras sigue estancada, solo cuando
+    // vuelve a cumplirse el umbral sin que nadie haya hecho nada.
+    existsAtomNotificationRecent: (taskId, tipo, dias) => ({
+        text: `
+            SELECT 1 FROM ${schema}.notifications
+            WHERE type = $2 AND entity_type = 'atom_task' AND entity_id = $1
+              AND created_at > now() - ($3 || ' days')::interval
+            LIMIT 1
+        `,
+        values: [taskId, tipo, dias],
+    }),
+
+    statsGlobal: () => ({
+        text: `
+            SELECT
+                (SELECT COUNT(*) FROM ${schema}.atom_tasks) AS total,
+                (SELECT json_agg(json_build_object('estado', status, 'cantidad', cantidad))
+                   FROM (SELECT status, COUNT(*) AS cantidad FROM ${schema}.atom_tasks GROUP BY status) e) AS por_estado,
+                (SELECT json_agg(json_build_object('prioridad', priority, 'cantidad', cantidad))
+                   FROM (SELECT priority, COUNT(*) AS cantidad FROM ${schema}.atom_tasks GROUP BY priority) p) AS por_prioridad,
+                (SELECT json_agg(json_build_object('username', au.username, 'cantidad', cantidad))
+                   FROM (SELECT assigned_to, COUNT(*) AS cantidad FROM ${schema}.atom_tasks WHERE assigned_to IS NOT NULL GROUP BY assigned_to) a
+                   JOIN ${schema}.platform_users au ON au.id = a.assigned_to) AS por_usuario
+        `,
+        values: [],
+    }),
+};
+
 module.exports = {
     onixQueries,
     codexQueries,
+    atomQueries,
     upsertHubArchivoQuery, selectHubArchivoQuery,
     insertSicauNovedadData,
     selectSicauNovedades,

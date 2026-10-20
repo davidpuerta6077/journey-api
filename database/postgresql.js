@@ -26,7 +26,7 @@ const {
     healthCheck, checkPermissions,
     checkSubmodulePermissions,
     updateJourneyEnrollmentData,
-    selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData, onixQueries, codexQueries, upsertHubArchivoQuery, selectHubArchivoQuery,
+    selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData, onixQueries, codexQueries, atomQueries, upsertHubArchivoQuery, selectHubArchivoQuery,
     updatePlatformUserData, updatePlatformUserEstadoData, updatePlatformUserPhotoData, updatePlatformUserUsernameData,
     updatePlatformUserLastLoginData,
     selectRoles, findRoleById, insertRoleData, updateRoleData,
@@ -1676,9 +1676,37 @@ const codex = {
     deletePagina: (id) => queryOne(codexQueries.deletePagina(id)),
 };
 
+// ─── ATOM (widget de tareas en el Index) ──────────────────────────────────────
+
+const atom = {
+    getActor: (email) => queryOne(atomQueries.actor(email)),
+    listTasks: (userId, todas, filtros) => query(atomQueries.listTasks(userId, todas, filtros)),
+    counts: (userId) => queryOne(atomQueries.counts(userId)),
+    getTask: (id) => queryOne(atomQueries.task(id)),
+    insertTask: (d) => queryOne(atomQueries.insertTask(d)),
+    updateTask: (id, d) => queryOne(atomQueries.updateTask(id, d)),
+    insertHistory: (taskId, userId, campo, anterior, actual) => query(atomQueries.insertHistory(taskId, userId, campo, anterior, actual)),
+    getHistory: (taskId) => query(atomQueries.history(taskId)),
+    insertComment: (taskId, userId, body) => queryOne(atomQueries.insertComment(taskId, userId, body)),
+    getComments: (taskId) => query(atomQueries.comments(taskId)),
+    insertSubtask: (taskId, title, orden) => queryOne(atomQueries.insertSubtask(taskId, title, orden)),
+    getSubtasks: (taskId) => query(atomQueries.subtasks(taskId)),
+    getSubtask: (id) => queryOne(atomQueries.subtask(id)),
+    setSubtaskDone: (id, done) => queryOne(atomQueries.setSubtaskDone(id, done)),
+    tasksVencenHoyOVencidas: () => query(atomQueries.tasksVencenHoyOVencidas()),
+    existsAtomNotificationToday: (taskId, tipo) => query(atomQueries.existsAtomNotificationToday(taskId, tipo)).then((rows) => rows.length > 0),
+    usuariosActivos: () => query(atomQueries.usuariosActivos()),
+    resumenVencimientosPorUsuario: () => query(atomQueries.resumenVencimientosPorUsuario()),
+    existsAtomResumenHoy: (userId) => query(atomQueries.existsAtomResumenHoy(userId)).then((rows) => rows.length > 0),
+    tasksEstancadas: (dias) => query(atomQueries.tasksEstancadas(dias)),
+    existsAtomNotificationRecent: (taskId, tipo, dias) => query(atomQueries.existsAtomNotificationRecent(taskId, tipo, dias)).then((rows) => rows.length > 0),
+    statsGlobal: () => queryOne(atomQueries.statsGlobal()),
+};
+
 module.exports = {
     onix,
     codex,
+    atom,
     upsertHubArchivo, getHubArchivo,
     insertSicauNovedad,
     listSicauNovedades,
