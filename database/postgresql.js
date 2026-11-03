@@ -66,11 +66,13 @@ const {
     reportPlatformUsersDetail: qReportPlatformUsersDetail,
     reportAuditDetail: qReportAuditDetail,
     reportEnrollmentsOfCourse: qReportEnrollmentsOfCourse,
+    reportBuilderQuery,
     selectSettings, upsertSettingQuery, deleteSettingQuery,
     selectMenuLinks, selectAllMenuLinks, insertMenuLinkQuery, updateMenuLinkQuery, deleteMenuLinkQuery,
     selectRoleIdsByNames, selectPlatformUserIdsByRoles, selectPlatformUsersWithBirthdayToday, existsBirthdayNotificationTodayQuery,
     insertNotificationData, insertNotificationRecipientData,
     selectNotificationsForUser, countUnreadNotificationsQuery, markNotificationReadQuery, markAllNotificationsReadQuery,
+    incrementSicauResumenQuery, updateNotificationTextQuery, markNotificationUnreadForAllQuery,
 } = require('./querysets');
  
 const pool = new Pool({
@@ -1137,6 +1139,33 @@ function markAllNotificationsRead(platformUserId) {
     });
 }
 
+function incrementSicauResumen(nivel, dia, tipo) {
+    return new Promise((resolve, reject) => {
+        pool.query(incrementSicauResumenQuery(nivel, dia, tipo), (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0] || null);
+        });
+    });
+}
+
+function updateNotificationText(id, title, body) {
+    return new Promise((resolve, reject) => {
+        pool.query(updateNotificationTextQuery(id, title, body), (err) => {
+            if (err) return reject(err);
+            resolve();
+        });
+    });
+}
+
+function markNotificationUnreadForAll(notificationId) {
+    return new Promise((resolve, reject) => {
+        pool.query(markNotificationUnreadForAllQuery(notificationId), (err) => {
+            if (err) return reject(err);
+            resolve();
+        });
+    });
+}
+
 function checkPermissionsData(email) {
     return new Promise((resolve, reject) => {
         pool.query(checkPermissions(email), (err, result) => {
@@ -1604,6 +1633,16 @@ function reportAuditDetail(params) {
     });
 }
 
+// Constructor de reportes: def = conjunto de catalogo.js, keys = columnas validadas.
+function reportBuilderRows(def, keys) {
+    return new Promise((resolve, reject) => {
+        pool.query(reportBuilderQuery(def, keys), (err, data) => {
+            if (err) return reject(err);
+            resolve(data.rows);
+        });
+    });
+}
+
 function reportEnrollmentsOfCourse(courseid) {
     return new Promise((resolve, reject) => {
         pool.query(qReportEnrollmentsOfCourse(courseid), (err, data) => {
@@ -1869,6 +1908,7 @@ module.exports = {
     reportPlatformUsersDetail,
     reportAuditDetail,
     reportEnrollmentsOfCourse,
+    reportBuilderRows,
     // notifications
     getRoleIdsByNames,
     getPlatformUserIdsByRoles,
@@ -1880,4 +1920,7 @@ module.exports = {
     countUnreadNotifications,
     markNotificationRead,
     markAllNotificationsRead,
+    incrementSicauResumen,
+    updateNotificationText,
+    markNotificationUnreadForAll,
 };

@@ -6,6 +6,8 @@ const checkAuth = require('../../middleware/checkAuth');
 const checkPermission = require('../../middleware/checkPermissions');
 const saveLog = require('../../middleware/saveLog');
 const TIPOS = require('../../services/reports/tipos');
+const { catalogoPublico } = require('../../services/reports/builder/catalogo');
+const { RIESGO_DEFECTO } = require('../../services/reports/builder/riesgo');
 
 const PERM = 'reports';
 
@@ -31,6 +33,23 @@ const labelTipo = (tipo) => (TIPOS.find((t) => t.tipo === tipo) || {}).label || 
 router.get('/tipos', checkAuth, checkPermission(PERM), async (req, res, next) => {
     try {
         response.success(req, res, ctrl.tiposDisponibles(), 200);
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @swagger
+ * /reports/constructor/catalogo:
+ *   get:
+ *     summary: Conjuntos de datos y columnas elegibles del constructor de reportes
+ *     tags: [Reports]
+ *     responses:
+ *       200: { description: Conjuntos con sus columnas (sin SQL) y la configuración de riesgo por defecto }
+ */
+router.get('/constructor/catalogo', checkAuth, checkPermission(PERM), async (req, res, next) => {
+    try {
+        response.success(req, res, { datasets: catalogoPublico(), riesgo: RIESGO_DEFECTO }, 200);
     } catch (error) {
         next(error);
     }

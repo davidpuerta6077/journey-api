@@ -26,6 +26,9 @@ const generadores = {
     // Cruces Moodle + Nexo
     sync_discrepancies: require('./cross/syncDiscrepancies').syncDiscrepancies,
     enrollment_moodle_vs_journey: require('./cross/enrollmentMoodleVsJourney').enrollmentMoodleVsJourney,
+
+    // Constructor de reportes (columnas/filtros/riesgo elegidos por el usuario)
+    constructor: require('./builder').runConstructor,
 };
 
 async function runReport(tipo, params = {}) {

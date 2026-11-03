@@ -1,7 +1,9 @@
 // Catálogo de tipos de reporte. El front lo consume (GET /reports/tipos) para
 // armar el formulario de parámetros dinámicamente.
 // type de cada param: 'number' | 'boolean' | 'text' | 'select' (con options[]).
+// oculto: no sale en el selector de "Nuevo reporte" (tiene su propia pantalla).
 module.exports = [
+    { tipo:'constructor', label:'Constructor de reportes', fuente:'mixto', oculto:true, params:[] },
     { tipo:'moodle_courses_by_category', label:'Cursos y estudiantes por categoría (Moodle)', fuente:'moodle', params:[
         { key:'categoryId', label:'Categoría (id)', type:'number', required:false },
         { key:'incluirSubcategorias', label:'Incluir subcategorías', type:'boolean', default:true },
