@@ -1568,6 +1568,39 @@ const markNotificationReadQuery = (notificationId, platformUserId) => ({
     values: [notificationId, platformUserId]
 });
 
+// Resumen diario de novedades SICAU (un aviso por nivel y día): suma 1 al
+// total y al contador del tipo, y sube created_at para que vuelva arriba en
+// la campanita. Sin filas = todavía no existe el resumen de ese nivel/día.
+const incrementSicauResumenQuery = (nivel, dia, tipo) => ({
+    text: `
+        UPDATE ${schema}.notifications
+        SET detail = jsonb_set(
+                jsonb_set(detail, '{total}', to_jsonb(COALESCE((detail->>'total')::int, 0) + 1)),
+                ARRAY['tipos', $3::text],
+                to_jsonb(COALESCE((detail->'tipos'->>$3)::int, 0) + 1)
+            ),
+            created_at = NOW()
+        WHERE id = (
+            SELECT id FROM ${schema}.notifications
+            WHERE type = 'sicau_resumen' AND detail->>'nivel' = $1 AND detail->>'dia' = $2
+            ORDER BY id DESC LIMIT 1
+        )
+        RETURNING *
+    `,
+    values: [nivel, dia, tipo]
+});
+
+const updateNotificationTextQuery = (id, title, body) => ({
+    text: `UPDATE ${schema}.notifications SET title = $2, body = $3 WHERE id = $1`,
+    values: [id, title, body]
+});
+
+// Si el resumen ya estaba leído y llegan más novedades, vuelve a quedar sin leer.
+const markNotificationUnreadForAllQuery = (notificationId) => ({
+    text: `UPDATE ${schema}.notification_recipients SET read_at = NULL WHERE notification_id = $1`,
+    values: [notificationId]
+});
+
 const markAllNotificationsReadQuery = (platformUserId) => ({
     text: `
         UPDATE ${schema}.notification_recipients
@@ -1904,6 +1937,372 @@ const coursesDetailByCategory = ({ categoryId = null, incluirSubcategorias = tru
     };
 };
 
+
+// ─── REPORTS: CONSTRUCTOR ─────────────────────────────────────────────────────
+// SELECT armado solo con expresiones de la lista blanca de
+// services/reports/builder/catalogo.js (keys = columnas ya validadas). Sin
+// valores del usuario: los filtros se aplican después, en JS.
+const reportBuilderQuery = (def, keys) => {
+    const exprs = Object.fromEntries([
+        ...def.columnas.filter((c) => c.expr).map((c) => [c.key, c.expr]),
+        ...Object.entries(def.claves || {}),
+    ]);
+    const select = keys.map((k) => `${exprs[k]} AS "${k}"`).join(', ');
+    return { text: `SELECT ${select} FROM ${def.from.replace(/\{s\}/g, schema)}`, values: [] };
+};
+
+// Consultas por lote a la BD MySQL de Moodle para las columnas de Moodle del
+// constructor (placeholders `?` de mysql2; un array se expande a la lista del IN).
+const reportBuilderMoodle = {
+    usuarios: (usernames, documentos) => ({
+        text: `SELECT id, username, idnumber, lastaccess FROM mdl_user
+               WHERE deleted = 0 AND (username IN (?) OR idnumber IN (?))`,
+        values: [usernames, documentos],
+    }),
+    cursos: (idnumbers, shortnames) => ({
+        text: `SELECT id, idnumber, shortname FROM mdl_course WHERE idnumber IN (?) OR shortname IN (?)`,
+        values: [idnumbers, shortnames],
+    }),
+    matriculas: (courseIds) => ({
+        text: `SELECT DISTINCT ue.userid, e.courseid FROM mdl_user_enrolments ue
+               JOIN mdl_enrol e ON e.id = ue.enrolid WHERE e.courseid IN (?)`,
+        values: [courseIds],
+    }),
+    accesosCurso: (courseIds) => ({
+        text: `SELECT userid, courseid, timeaccess FROM mdl_user_lastaccess WHERE courseid IN (?)`,
+        values: [courseIds],
+    }),
+    // Total del curso (itemtype 'course'); se normaliza a 0-5 en el servicio.
+    notas: (courseIds) => ({
+        text: `SELECT gi.courseid, gg.userid, gg.finalgrade, gi.grademax
+               FROM mdl_grade_items gi JOIN mdl_grade_grades gg ON gg.itemid = gi.id
+               WHERE gi.itemtype = 'course' AND gi.courseid IN (?)`,
+        values: [courseIds],
+    }),
+    actividadesConFinalizacion: (courseIds) => ({
+        text: `SELECT course, COUNT(*) AS total FROM mdl_course_modules
+               WHERE completion > 0 AND visible = 1 AND deletioninprogress = 0 AND course IN (?)
+               GROUP BY course`,
+        values: [courseIds],
+    }),
+    actividadesCompletadas: (courseIds) => ({
+        text: `SELECT cm.course, cmc.userid, COUNT(*) AS hechas
+               FROM mdl_course_modules_completion cmc
+               JOIN mdl_course_modules cm ON cm.id = cmc.coursemoduleid
+               WHERE cmc.completionstate IN (1, 2) AND cm.completion > 0 AND cm.visible = 1
+                 AND cm.deletioninprogress = 0 AND cm.course IN (?)
+               GROUP BY cm.course, cmc.userid`,
+        values: [courseIds],
+    }),
+    // Tareas visibles con fecha de entrega ya pasada.
+    tareasVencidas: (courseIds) => ({
+        text: `SELECT a.id, a.course FROM mdl_assign a
+               JOIN mdl_modules m ON m.name = 'assign'
+               JOIN mdl_course_modules cm ON cm.instance = a.id AND cm.module = m.id
+               WHERE cm.visible = 1 AND cm.deletioninprogress = 0
+                 AND a.duedate > 0 AND a.duedate < UNIX_TIMESTAMP() AND a.course IN (?)`,
+        values: [courseIds],
+    }),
+    entregas: (assignIds) => ({
+        text: `SELECT assignment, userid FROM mdl_assign_submission
+               WHERE status = 'submitted' AND latest = 1 AND assignment IN (?)`,
+        values: [assignIds],
+    }),
+};
+
+
+// ─── ESTADÍSTICAS (Administrador > Estadísticas) ─────────────────────────────
+// $1 = días del periodo. "Anterior" = la ventana del mismo largo justo antes.
+// Los logs de SICAU (entity_type 'sicau') son integraciones, no personas: se
+// excluyen de la actividad de usuarios y se cuentan como novedades en Nexo.
+const EN_PERIODO = (col) => `${col} >= now() - make_interval(days => $1)`;
+const EN_ANTERIOR = (col) => `${col} >= now() - make_interval(days => $1 * 2) AND ${col} < now() - make_interval(days => $1)`;
+const DIA = (col) => `to_char(${col} AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD')`;
+// Aplicación de cada log: por el módulo de su submódulo y, para los entity_type
+// sueltos de Nexo (sicau, course, enrollment, *_journey, moodle_*), a mano.
+const APP_LOG = `COALESCE(m.code, CASE
+        WHEN l.entity_type IN ('sicau', 'enrollment', 'course') OR l.entity_type LIKE '%journey%' OR l.entity_type LIKE 'moodle\\_%' THEN 'nexo_sync'
+        WHEN l.entity_type = 'perfil' THEN 'admin' END, 'otros')`;
+const FROM_LOGS = `${schema}.logs l
+    LEFT JOIN ${schema}.submodules sm ON sm.code = l.entity_type
+    LEFT JOIN ${schema}.modules m ON m.id = sm.module_id`;
+const SIN_SICAU = `l.entity_type IS DISTINCT FROM 'sicau'`;
+const VIGENTE = `lower(trim(e.estado)) IN ('matriculado', 'matriculada', 'activa')`;
+
+const statisticsQueries = {
+    general: {
+        resumen: (dias) => ({
+            text: `SELECT count(*) FILTER (WHERE ${EN_PERIODO('l.date')})::int AS acciones,
+                          count(*) FILTER (WHERE ${EN_ANTERIOR('l.date')})::int AS acciones_ant,
+                          count(DISTINCT l.username) FILTER (WHERE ${EN_PERIODO('l.date')})::int AS usuarios,
+                          count(DISTINCT l.username) FILTER (WHERE ${EN_ANTERIOR('l.date')})::int AS usuarios_ant,
+                          (SELECT count(*) FROM ${schema}.platform_users WHERE estado)::int AS usuarios_hub
+                   FROM ${schema}.logs l WHERE ${SIN_SICAU}`,
+            values: [dias],
+        }),
+        porDiaYApp: (dias) => ({
+            text: `SELECT ${DIA('l.date')} AS dia, ${APP_LOG} AS app, count(*)::int AS n
+                   FROM ${FROM_LOGS} WHERE ${SIN_SICAU} AND ${EN_PERIODO('l.date')} GROUP BY 1, 2`,
+            values: [dias],
+        }),
+        topUsuarios: (dias) => ({
+            text: `SELECT l.username AS usuario, count(*)::int AS n, mode() WITHIN GROUP (ORDER BY ${APP_LOG}) AS app
+                   FROM ${FROM_LOGS} WHERE ${SIN_SICAU} AND ${EN_PERIODO('l.date')} AND l.username IS NOT NULL
+                   GROUP BY 1 ORDER BY n DESC LIMIT 8`,
+            values: [dias],
+        }),
+        ultimos: () => ({
+            text: `SELECT l.date AS fecha, l.username AS usuario, l.description AS descripcion, ${APP_LOG} AS app
+                   FROM ${FROM_LOGS} WHERE ${SIN_SICAU} ORDER BY l.date DESC LIMIT 8`,
+            values: [],
+        }),
+    },
+    nexo: {
+        conteos: () => ({
+            text: `SELECT (SELECT count(*) FROM ${schema}.users)::int AS usuarios,
+                          (SELECT count(*) FROM ${schema}.courses)::int AS cursos,
+                          (SELECT count(*) FROM ${schema}.enrollments e WHERE ${VIGENTE})::int AS matriculas,
+                          (SELECT count(*) FROM ${schema}.enrollments e WHERE ${VIGENTE} AND NOT COALESCE(e.sincronizado, false))::int AS sin_sincronizar,
+                          (SELECT count(*) FROM ${schema}.courses WHERE estado_sync = 'error')::int AS cursos_error`,
+            values: [],
+        }),
+        novedades: (dias) => ({
+            text: `SELECT count(*) FILTER (WHERE ${EN_PERIODO('fecha')})::int AS n,
+                          count(*) FILTER (WHERE ${EN_ANTERIOR('fecha')})::int AS n_ant
+                   FROM ${schema}.sicau_novedades`,
+            values: [dias],
+        }),
+        novedadesPorDia: (dias) => ({
+            text: `SELECT ${DIA('fecha')} AS dia, nivel AS serie, count(*)::int AS n
+                   FROM ${schema}.sicau_novedades WHERE ${EN_PERIODO('fecha')} GROUP BY 1, 2`,
+            values: [dias],
+        }),
+        novedadesPorTipo: (dias) => ({
+            text: `SELECT nivel, tipo, count(*)::int AS n FROM ${schema}.sicau_novedades
+                   WHERE ${EN_PERIODO('fecha')} GROUP BY 1, 2 ORDER BY n DESC`,
+            values: [dias],
+        }),
+        porPrograma: () => ({
+            text: `SELECT COALESCE(NULLIF(trim(e.programa), ''), '(sin programa)') AS nombre, count(*)::int AS n
+                   FROM ${schema}.enrollments e WHERE ${VIGENTE} AND e.role = 'student' GROUP BY 1 ORDER BY n DESC`,
+            values: [],
+        }),
+        estadoSync: () => ({
+            text: `SELECT COALESCE(e.estado_sync, CASE WHEN e.sincronizado THEN 'sincronizado' ELSE 'pendiente' END) AS nombre, count(*)::int AS n
+                   FROM ${schema}.enrollments e WHERE ${VIGENTE} GROUP BY 1 ORDER BY n DESC`,
+            values: [],
+        }),
+        topAsignaturas: () => ({
+            text: `SELECT e.nombre_asignatura AS nombre, count(*)::int AS n, count(DISTINCT e.grupo)::int AS grupos
+                   FROM ${schema}.enrollments e WHERE ${VIGENTE} AND e.role = 'student'
+                   GROUP BY 1 ORDER BY n DESC LIMIT 8`,
+            values: [],
+        }),
+    },
+    onix: {
+        conteos: (dias) => ({
+            text: `SELECT (SELECT count(*) FROM ${schema}.onix_registros WHERE ${EN_PERIODO('created_at')})::int AS registros,
+                          (SELECT count(*) FROM ${schema}.onix_registros WHERE ${EN_ANTERIOR('created_at')})::int AS registros_ant,
+                          (SELECT count(*) FROM ${schema}.onix_informes)::int AS informes,
+                          (SELECT count(*) FROM ${schema}.onix_informes WHERE ${EN_PERIODO('generado_at')})::int AS informes_periodo,
+                          (SELECT count(*) FROM ${schema}.onix_perfiles)::int AS perfiles,
+                          (SELECT count(*) FROM ${schema}.onix_evidencias WHERE ${EN_PERIODO('created_at')})::int AS evidencias`,
+            values: [dias],
+        }),
+        registrosPorDia: (dias) => ({
+            text: `SELECT ${DIA('created_at')} AS dia, 'Registros' AS serie, count(*)::int AS n
+                   FROM ${schema}.onix_registros WHERE ${EN_PERIODO('created_at')} GROUP BY 1`,
+            values: [dias],
+        }),
+        porArea: (dias) => ({
+            text: `SELECT COALESCE(a.nombre, '(sin área)') AS nombre, count(*)::int AS n
+                   FROM ${schema}.onix_registros r
+                   LEFT JOIN ${schema}.onix_perfiles p ON p.user_id = r.user_id
+                   LEFT JOIN ${schema}.onix_areas a ON a.id = p.area_id
+                   WHERE ${EN_PERIODO('r.created_at')} GROUP BY 1 ORDER BY n DESC`,
+            values: [dias],
+        }),
+        topActividades: (dias) => ({
+            text: `SELECT a.nombre, count(*)::int AS n FROM ${schema}.onix_registros r
+                   JOIN ${schema}.onix_actividades a ON a.id = r.actividad_id
+                   WHERE ${EN_PERIODO('r.created_at')} GROUP BY 1 ORDER BY n DESC LIMIT 10`,
+            values: [dias],
+        }),
+        topUsuarios: (dias) => ({
+            text: `SELECT COALESCE(p.nombre, pu.username) AS usuario, count(*)::int AS n
+                   FROM ${schema}.onix_registros r
+                   LEFT JOIN ${schema}.platform_users pu ON pu.id = r.user_id
+                   LEFT JOIN ${schema}.onix_perfiles p ON p.user_id = r.user_id
+                   WHERE ${EN_PERIODO('r.created_at')} GROUP BY 1 ORDER BY n DESC LIMIT 8`,
+            values: [dias],
+        }),
+    },
+    acudex: {
+        conteos: (dias) => ({
+            text: `SELECT (SELECT count(*) FROM ${schema}.forms WHERE deleted_at IS NULL)::int AS formularios,
+                          (SELECT count(*) FROM ${schema}.forms WHERE deleted_at IS NULL AND status = 'publicado')::int AS publicados,
+                          (SELECT count(*) FROM ${schema}.form_responses WHERE ${EN_PERIODO('submitted_at')})::int AS respuestas,
+                          (SELECT count(*) FROM ${schema}.form_responses WHERE ${EN_ANTERIOR('submitted_at')})::int AS respuestas_ant,
+                          (SELECT count(*) FROM ${schema}.form_responses)::int AS respuestas_total`,
+            values: [dias],
+        }),
+        respuestasPorDia: (dias) => ({
+            text: `SELECT ${DIA('submitted_at')} AS dia, 'Respuestas' AS serie, count(*)::int AS n
+                   FROM ${schema}.form_responses WHERE ${EN_PERIODO('submitted_at')} GROUP BY 1`,
+            values: [dias],
+        }),
+        porFormulario: () => ({
+            text: `SELECT f.title AS nombre, count(r.id)::int AS n FROM ${schema}.forms f
+                   LEFT JOIN ${schema}.form_responses r ON r.form_id = f.id
+                   WHERE f.deleted_at IS NULL GROUP BY f.id, f.title ORDER BY n DESC LIMIT 10`,
+            values: [],
+        }),
+        porModalidad: () => ({
+            text: `SELECT COALESCE(modality, '(sin modalidad)') AS nombre, count(*)::int AS n
+                   FROM ${schema}.forms WHERE deleted_at IS NULL GROUP BY 1 ORDER BY n DESC`,
+            values: [],
+        }),
+        proximos: () => ({
+            text: `SELECT f.title AS nombre, f.event_date AS fecha, f.location AS lugar, count(r.id)::int AS n
+                   FROM ${schema}.forms f LEFT JOIN ${schema}.form_responses r ON r.form_id = f.id
+                   WHERE f.deleted_at IS NULL AND f.event_date >= current_date
+                   GROUP BY f.id ORDER BY f.event_date LIMIT 6`,
+            values: [],
+        }),
+    },
+    atom: {
+        conteos: (dias) => ({
+            text: `SELECT count(*) FILTER (WHERE status <> 'Completada')::int AS abiertas,
+                          count(*) FILTER (WHERE status <> 'Completada' AND due_date < current_date)::int AS vencidas,
+                          count(*) FILTER (WHERE ${EN_PERIODO('completed_at')})::int AS completadas,
+                          count(*) FILTER (WHERE ${EN_ANTERIOR('completed_at')})::int AS completadas_ant,
+                          count(*) FILTER (WHERE completed_at IS NOT NULL AND due_date IS NOT NULL)::int AS con_fecha,
+                          count(*) FILTER (WHERE completed_at IS NOT NULL AND due_date IS NOT NULL
+                                           AND (completed_at AT TIME ZONE 'America/Bogota')::date <= due_date)::int AS a_tiempo
+                   FROM ${schema}.atom_tasks`,
+            values: [dias],
+        }),
+        porEstado: () => ({
+            text: `SELECT CASE WHEN status <> 'Completada' AND due_date < current_date THEN 'Vencida' ELSE status END AS nombre, count(*)::int AS n
+                   FROM ${schema}.atom_tasks GROUP BY 1 ORDER BY n DESC`,
+            values: [],
+        }),
+        porPrioridad: () => ({
+            text: `SELECT COALESCE(priority, '(sin prioridad)') AS nombre, count(*)::int AS n
+                   FROM ${schema}.atom_tasks WHERE status <> 'Completada' GROUP BY 1 ORDER BY n DESC`,
+            values: [],
+        }),
+        cargaPorPersona: () => ({
+            text: `SELECT COALESCE(pu.username, '(sin asignar)') AS nombre, count(*)::int AS n
+                   FROM ${schema}.atom_tasks t LEFT JOIN ${schema}.platform_users pu ON pu.id = t.assigned_to
+                   WHERE t.status <> 'Completada' GROUP BY 1 ORDER BY n DESC LIMIT 10`,
+            values: [],
+        }),
+        completadasPorDia: (dias) => ({
+            text: `SELECT ${DIA('completed_at')} AS dia, 'Completadas' AS serie, count(*)::int AS n
+                   FROM ${schema}.atom_tasks WHERE ${EN_PERIODO('completed_at')} GROUP BY 1`,
+            values: [dias],
+        }),
+    },
+    codex: {
+        conteos: (dias) => ({
+            text: `SELECT count(*)::int AS paginas,
+                          count(*) FILTER (WHERE ${EN_PERIODO('created_at')})::int AS creadas,
+                          count(*) FILTER (WHERE ${EN_ANTERIOR('created_at')})::int AS creadas_ant,
+                          count(*) FILTER (WHERE ${EN_PERIODO('updated_at')})::int AS editadas,
+                          count(DISTINCT platform_user_id)::int AS autores
+                   FROM ${schema}.codex_pages`,
+            values: [dias],
+        }),
+        porAutor: () => ({
+            text: `SELECT COALESCE(pu.username, '(desconocido)') AS nombre, count(*)::int AS n
+                   FROM ${schema}.codex_pages c LEFT JOIN ${schema}.platform_users pu ON pu.id = c.platform_user_id
+                   GROUP BY 1 ORDER BY n DESC LIMIT 10`,
+            values: [],
+        }),
+        actividadPorDia: (dias) => ({
+            text: `SELECT ${DIA('l.date')} AS dia, 'Acciones' AS serie, count(*)::int AS n
+                   FROM ${schema}.logs l WHERE l.entity_type = 'codex_use' AND ${EN_PERIODO('l.date')} GROUP BY 1`,
+            values: [dias],
+        }),
+        ultimas: () => ({
+            text: `SELECT c.nombre, pu.username AS usuario, c.updated_at AS fecha
+                   FROM ${schema}.codex_pages c LEFT JOIN ${schema}.platform_users pu ON pu.id = c.platform_user_id
+                   ORDER BY c.updated_at DESC NULLS LAST LIMIT 6`,
+            values: [],
+        }),
+    },
+};
+
+
+// Más consultas de Estadísticas: mapas de calor (día de la semana × hora, Bogotá),
+// tipos de acción, jornadas, meses y semanas.
+const CALOR = (col) => `extract(isodow FROM ${col} AT TIME ZONE 'America/Bogota')::int AS dow,
+                        extract(hour FROM ${col} AT TIME ZONE 'America/Bogota')::int AS hora, count(*)::int AS n`;
+const SEMANA = (col) => `to_char(date_trunc('week', ${col} AT TIME ZONE 'America/Bogota'), 'YYYY-MM-DD')`;
+
+Object.assign(statisticsQueries.general, {
+    calor: (dias) => ({
+        text: `SELECT ${CALOR('l.date')} FROM ${schema}.logs l WHERE ${SIN_SICAU} AND ${EN_PERIODO('l.date')} GROUP BY 1, 2`,
+        values: [dias],
+    }),
+    tiposAccion: (dias) => ({
+        text: `SELECT l.type AS nombre, count(*)::int AS n FROM ${schema}.logs l
+               WHERE ${SIN_SICAU} AND ${EN_PERIODO('l.date')} GROUP BY 1 ORDER BY n DESC`,
+        values: [dias],
+    }),
+});
+Object.assign(statisticsQueries.nexo, {
+    calorNovedades: (dias) => ({
+        text: `SELECT ${CALOR('fecha')} FROM ${schema}.sicau_novedades WHERE ${EN_PERIODO('fecha')} GROUP BY 1, 2`,
+        values: [dias],
+    }),
+    porJornada: () => ({
+        text: `SELECT COALESCE(NULLIF(trim(u.jornada), ''), '(sin jornada)') AS nombre, count(DISTINCT u.id)::int AS n
+               FROM ${schema}.enrollments e JOIN ${schema}.users u ON u.id = e.userid
+               WHERE ${VIGENTE} AND e.role = 'student' GROUP BY 1 ORDER BY n DESC`,
+        values: [],
+    }),
+    porAsignatura: () => ({
+        text: `SELECT e.nombre_asignatura AS nombre, count(*)::int AS n FROM ${schema}.enrollments e
+               WHERE ${VIGENTE} AND e.role = 'student' GROUP BY 1 ORDER BY n DESC LIMIT 20`,
+        values: [],
+    }),
+});
+Object.assign(statisticsQueries.onix, {
+    personasQueRegistran: (dias) => ({
+        text: `SELECT count(DISTINCT user_id)::int AS n FROM ${schema}.onix_registros WHERE ${EN_PERIODO('created_at')}`,
+        values: [dias],
+    }),
+    porMes: () => ({
+        text: `SELECT anio, mes, count(*)::int AS n FROM ${schema}.onix_registros
+               GROUP BY 1, 2 ORDER BY anio DESC, mes DESC LIMIT 12`,
+        values: [],
+    }),
+});
+Object.assign(statisticsQueries.acudex, {
+    calor: (dias) => ({
+        text: `SELECT ${CALOR('submitted_at')} FROM ${schema}.form_responses WHERE ${EN_PERIODO('submitted_at')} GROUP BY 1, 2`,
+        values: [dias],
+    }),
+});
+Object.assign(statisticsQueries.atom, {
+    porSemana: (dias) => ({
+        text: `SELECT ${SEMANA('created_at')} AS semana, 'Creadas' AS serie, count(*)::int AS n
+               FROM ${schema}.atom_tasks WHERE ${EN_PERIODO('created_at')} GROUP BY 1
+               UNION ALL
+               SELECT ${SEMANA('completed_at')}, 'Completadas', count(*)::int
+               FROM ${schema}.atom_tasks WHERE ${EN_PERIODO('completed_at')} GROUP BY 1`,
+        values: [dias],
+    }),
+});
+Object.assign(statisticsQueries.codex, {
+    tiposAccion: (dias) => ({
+        text: `SELECT l.type AS nombre, count(*)::int AS n FROM ${schema}.logs l
+               WHERE l.entity_type = 'codex_use' AND ${EN_PERIODO('l.date')} GROUP BY 1 ORDER BY n DESC`,
+        values: [dias],
+    }),
+});
 
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
@@ -2420,6 +2819,9 @@ module.exports = {
     countUnreadNotificationsQuery,
     markNotificationReadQuery,
     markAllNotificationsReadQuery,
+    incrementSicauResumenQuery,
+    updateNotificationTextQuery,
+    markNotificationUnreadForAllQuery,
     findEnrollmentsByCodigoJourneyQuery,
     selectAllItems,
     // users
@@ -2585,6 +2987,9 @@ module.exports = {
     reportPlatformUsersDetail,
     reportAuditDetail,
     reportEnrollmentsOfCourse,
+    reportBuilderQuery,
+    reportBuilderMoodle,
+    statisticsQueries,
 
     //Permission
     checkPermissions,

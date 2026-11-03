@@ -416,34 +416,45 @@ module.exports = (injectedDB) => {
         await notificarNovedadSicau(row);
     }
 
-    // Avisa a superadmin/gestor (Sync > Novedades) de que llegó una novedad
-    // de SICAU. Best-effort, igual que registrarNovedadSicau: si falla no
-    // debe tumbar la ingesta.
-    const NIVEL_NOVEDAD_LABEL = { usuario: 'Usuario', curso: 'Curso', matricula: 'Matrícula' };
+    // Avisa a superadmin/gestor (Sync > Novedades) de que llegaron novedades
+    // de SICAU. No es un aviso por novedad (una carga grande dejaba miles en
+    // la campanita): hay un solo aviso por nivel (usuarios/cursos/matrículas)
+    // y día que va sumando, con el desglose por tipo en el cuerpo. Si ya se
+    // había leído y llegan más, vuelve a quedar sin leer. Best-effort, igual
+    // que registrarNovedadSicau: si falla no debe tumbar la ingesta.
+    const NIVEL_NOVEDAD_PLURAL = { usuario: 'usuarios', curso: 'cursos', matricula: 'matrículas' };
     const ROLES_NOTIFICADOS = ['superadmin', 'gestor'];
 
     async function notificarNovedadSicau(row) {
         try {
-            const nivel = NIVEL_NOVEDAD_LABEL[row.nivel] || 'Novedad';
+            const nivel = NIVEL_NOVEDAD_PLURAL[row.nivel] ? row.nivel : 'otro';
             const tipo = String(row.tipo || '').replace(/_/g, ' ').trim().toLowerCase();
-            const title = `SICAU · ${nivel}${tipo ? ' · ' + tipo.charAt(0).toUpperCase() + tipo.slice(1) : ''}`;
-            const body = [row.codigo_journey || row.cedula || null, row.resultado].filter(Boolean).join(' — ') || null;
+            const tipoLabel = tipo ? tipo.charAt(0).toUpperCase() + tipo.slice(1) : 'Sin tipo';
+            const dia = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
 
-            const roleIds = await data.getRoleIdsByNames(ROLES_NOTIFICADOS);
-            const userIds = await data.getPlatformUserIdsByRoles(roleIds);
-            if (userIds.length === 0) return;
-
-            const notification = await data.insertNotification({
-                type: 'sicau_novedad',
-                title,
-                body,
-                entity_type: 'sync_enrollments_novedades',
-                link: '/sync/novedades',
-                detail: row,
-            });
-            for (const userId of userIds) {
-                await data.addNotificationRecipient(notification.id, userId);
+            let notification = await data.incrementSicauResumen(nivel, dia, tipoLabel);
+            if (notification) {
+                await data.markNotificationUnreadForAll(notification.id);
+            } else {
+                const roleIds = await data.getRoleIdsByNames(ROLES_NOTIFICADOS);
+                const userIds = await data.getPlatformUserIdsByRoles(roleIds);
+                if (userIds.length === 0) return;
+                notification = await data.insertNotification({
+                    type: 'sicau_resumen',
+                    title: 'SICAU',
+                    entity_type: 'sync_enrollments_novedades',
+                    link: `/sync/novedades?tab=sicau&nivel=${nivel}`,
+                    detail: { nivel, dia, total: 1, tipos: { [tipoLabel]: 1 } },
+                });
+                for (const userId of userIds) {
+                    await data.addNotificationRecipient(notification.id, userId);
+                }
             }
+
+            const { total, tipos } = notification.detail;
+            const title = `SICAU · ${total} novedad${total !== 1 ? 'es' : ''} de ${NIVEL_NOVEDAD_PLURAL[nivel] || 'otro tipo'}`;
+            const body = Object.entries(tipos).sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t}: ${n}`).join(' · ');
+            await data.updateNotificationText(notification.id, title, body);
         } catch (err) {
             console.error('No se pudo notificar la novedad de SICAU:', err.message);
         }

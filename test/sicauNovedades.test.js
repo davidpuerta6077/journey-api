@@ -139,3 +139,37 @@ test('si falla el registro de la novedad, la ingesta sigue', async () => {
         assert.strictEqual(result.course.status, 'unenrolled');
     } finally { console.error = original; }
 });
+
+test('novedades SICAU se agrupan en un solo aviso por nivel y día', async () => {
+    const { db, calls } = fakeDB({
+        getRoleIdsByNames: async () => [1],
+        getPlatformUserIdsByRoles: async () => [5, 7],
+        incrementSicauResumen: async () => null,
+        insertNotification: async (n) => { calls.push(['insertNotification', n]); return { id: 900, ...n }; },
+        addNotificationRecipient: async (...a) => { calls.push(['addNotificationRecipient', ...a]); },
+        markNotificationUnreadForAll: async (...a) => { calls.push(['markNotificationUnreadForAll', ...a]); },
+        updateNotificationText: async (...a) => { calls.push(['updateNotificationText', ...a]); },
+    });
+    const ctrl = createSicauCtrl(db);
+    const matricula = { cedula: '1111111124', role: 'ESTUDIANTE', codigo_asignatura: 'FB0010', periodo: '20261', grupo: 'G102', estado: 'Activa',
+        novedad: { tipo: 'CAMBIO_DE_GRUPO', cambios: [] } };
+
+    // Primera novedad del día: crea el resumen y se lo asigna a superadmin/gestor.
+    await ctrl.saveSicauMatricula(matricula, 'jor.ramirez');
+    const [, notif] = calls.find(c => c[0] === 'insertNotification');
+    assert.strictEqual(notif.type, 'sicau_resumen');
+    assert.strictEqual(notif.detail.nivel, 'matricula');
+    assert.strictEqual(notif.link, '/sync/novedades?tab=sicau&nivel=matricula');
+    assert.deepStrictEqual(calls.filter(c => c[0] === 'addNotificationRecipient').map(c => c[2]), [5, 7]);
+    assert.deepStrictEqual(calls.find(c => c[0] === 'updateNotificationText').slice(2),
+        ['SICAU · 1 novedad de matrículas', 'Cambio de grupo: 1']);
+
+    // Las siguientes del mismo día suman al existente: no crean otro aviso.
+    calls.length = 0;
+    db.incrementSicauResumen = async () => ({ id: 900, detail: { nivel: 'matricula', total: 3, tipos: { 'Cambio de grupo': 1, 'Nuevo': 2 } } });
+    await ctrl.saveSicauMatricula(matricula, 'jor.ramirez');
+    assert.ok(!calls.some(c => c[0] === 'insertNotification'));
+    assert.deepStrictEqual(calls.find(c => c[0] === 'markNotificationUnreadForAll'), ['markNotificationUnreadForAll', 900]);
+    assert.deepStrictEqual(calls.find(c => c[0] === 'updateNotificationText').slice(2),
+        ['SICAU · 3 novedades de matrículas', 'Nuevo: 2 · Cambio de grupo: 1']);
+});
