@@ -2802,10 +2802,198 @@ const atomQueries = {
     }),
 };
 
+// ─── ASIGNIA (programación académica y postulaciones de profesores) ─────────
+// verificacion del curso: vacio | asignado | aceptado | rechazado | postulado.
+// Las consultas públicas (profesor sin sesión) siempre filtran por documento +
+// correo institucional y solo tocan cursos en el estado esperado.
+const ASIGNIA_CAMPOS_CURSO = `sede, programa, plan, nivel, codigo, curso, grupo, agrupamiento,
+    creditos, horas_semana, espacio, jornada, horario, profesor_nombre, profesor_documento,
+    profesor_correo, vinculacion`;
+const ASIGNIA_RECORDSET = `sede text, programa text, plan text, nivel text, codigo text, curso text,
+    grupo text, agrupamiento text, creditos text, horas_semana text, espacio text, jornada text,
+    horario jsonb, profesor_nombre text, profesor_documento text, profesor_correo text,
+    vinculacion text, verificacion text`;
+const ASIGNIA_PUBLICO = `c.id, c.periodo, c.sede, c.programa, c.plan, c.nivel, c.codigo, c.curso, c.grupo,
+    c.creditos, c.horas_semana, c.espacio, c.jornada, c.horario, c.verificacion`;
+
+const asigniaQueries = {
+    periodos: () => ({
+        text: `SELECT periodo, COUNT(*)::int AS cursos FROM ${schema}.asignia_cursos
+               GROUP BY periodo ORDER BY periodo DESC`,
+        values: [],
+    }),
+    // Formato "AAAA-N": el máximo lexicográfico es el periodo más reciente.
+    periodoActual: () => ({
+        text: `SELECT MAX(periodo) AS periodo FROM ${schema}.asignia_cursos`,
+        values: [],
+    }),
+    cursosPeriodo: (periodo) => ({
+        text: `SELECT c.*,
+                   (SELECT COUNT(*)::int FROM ${schema}.asignia_postulaciones p
+                     WHERE p.curso_id = c.id AND p.estado = 'pendiente') AS postulaciones_pendientes
+               FROM ${schema}.asignia_cursos c
+               WHERE c.periodo = $1
+               ORDER BY c.sede, c.programa, c.codigo, c.grupo, c.agrupamiento`,
+        values: [periodo],
+    }),
+    curso: (id) => ({
+        text: `SELECT * FROM ${schema}.asignia_cursos WHERE id = $1`,
+        values: [id],
+    }),
+    insertCursos: (periodo, json) => ({
+        text: `INSERT INTO ${schema}.asignia_cursos (periodo, ${ASIGNIA_CAMPOS_CURSO}, verificacion)
+               SELECT $1, ${ASIGNIA_CAMPOS_CURSO}, verificacion
+               FROM jsonb_to_recordset($2::jsonb) AS d(${ASIGNIA_RECORDSET})
+               RETURNING id`,
+        values: [periodo, json],
+    }),
+    // d.reset = true cuando cambió el profesor: se limpian motivo y fecha de verificación.
+    updateCursos: (json) => ({
+        text: `UPDATE ${schema}.asignia_cursos c SET
+                   nivel = d.nivel, curso = d.curso, creditos = d.creditos, horas_semana = d.horas_semana,
+                   espacio = d.espacio, horario = d.horario, profesor_nombre = d.profesor_nombre,
+                   profesor_documento = d.profesor_documento, profesor_correo = d.profesor_correo,
+                   vinculacion = d.vinculacion, verificacion = d.verificacion,
+                   motivo_rechazo = CASE WHEN d.reset THEN NULL ELSE c.motivo_rechazo END,
+                   verificado_at = CASE WHEN d.reset THEN NULL ELSE c.verificado_at END,
+                   updated_at = NOW()
+               FROM jsonb_to_recordset($1::jsonb) AS d(id int, reset boolean, ${ASIGNIA_RECORDSET})
+               WHERE c.id = d.id
+               RETURNING c.id`,
+        values: [json],
+    }),
+    // Postulaciones pendientes de cursos que ya no están abiertos (p. ej. la
+    // nueva carga les puso profesor) quedan descartadas.
+    descartarPostulacionesCerradas: () => ({
+        text: `UPDATE ${schema}.asignia_postulaciones p SET estado = 'descartada', updated_at = NOW()
+               FROM ${schema}.asignia_cursos c
+               WHERE c.id = p.curso_id AND p.estado = 'pendiente'
+                 AND c.verificacion NOT IN ('vacio', 'postulado')`,
+        values: [],
+    }),
+    postulacionesCurso: (cursoId) => ({
+        text: `SELECT id, curso_id, documento, correo, nombre, estado, created_at
+               FROM ${schema}.asignia_postulaciones WHERE curso_id = $1
+               ORDER BY (estado = 'pendiente') DESC, created_at`,
+        values: [cursoId],
+    }),
+    postulacion: (id) => ({
+        text: `SELECT p.*, c.codigo, c.curso, c.grupo, c.periodo
+               FROM ${schema}.asignia_postulaciones p
+               JOIN ${schema}.asignia_cursos c ON c.id = p.curso_id
+               WHERE p.id = $1`,
+        values: [id],
+    }),
+    // Aprobar: el postulante queda como profesor con el curso "aceptado" y el
+    // resto de postulaciones pendientes de ese curso se descartan. Solo aplica
+    // si la postulación sigue pendiente y el curso sigue abierto.
+    aprobarPostulacion: (id) => ({
+        text: `WITH p AS (
+                   UPDATE ${schema}.asignia_postulaciones SET estado = 'aprobada', updated_at = NOW()
+                   WHERE id = $1 AND estado = 'pendiente'
+                     AND EXISTS (SELECT 1 FROM ${schema}.asignia_cursos c
+                                 WHERE c.id = curso_id AND c.verificacion IN ('vacio', 'postulado'))
+                   RETURNING *
+               ), c AS (
+                   UPDATE ${schema}.asignia_cursos c SET
+                       profesor_nombre = p.nombre, profesor_documento = p.documento,
+                       profesor_correo = p.correo, vinculacion = '', verificacion = 'aceptado',
+                       motivo_rechazo = NULL, verificado_at = NOW(), updated_at = NOW()
+                   FROM p WHERE c.id = p.curso_id
+                   RETURNING c.*
+               ), d AS (
+                   UPDATE ${schema}.asignia_postulaciones SET estado = 'descartada', updated_at = NOW()
+                   WHERE curso_id IN (SELECT id FROM c) AND estado = 'pendiente' AND id <> $1
+               )
+               SELECT * FROM c`,
+        values: [id],
+    }),
+    // Liberar: el curso vuelve a "vacio" sin profesor y se descartan sus pendientes.
+    liberarCurso: (id) => ({
+        text: `WITH c AS (
+                   UPDATE ${schema}.asignia_cursos SET
+                       profesor_nombre = '', profesor_documento = '', profesor_correo = '',
+                       vinculacion = '', verificacion = 'vacio', motivo_rechazo = NULL,
+                       verificado_at = NULL, updated_at = NOW()
+                   WHERE id = $1
+                   RETURNING *
+               ), d AS (
+                   UPDATE ${schema}.asignia_postulaciones SET estado = 'descartada', updated_at = NOW()
+                   WHERE curso_id = $1 AND estado = 'pendiente'
+               )
+               SELECT * FROM c`,
+        values: [id],
+    }),
+
+    // ── Públicas (profesor sin sesión) ──
+    cursosProfesor: (periodo, documento, correo) => ({
+        text: `SELECT ${ASIGNIA_PUBLICO}, c.profesor_nombre, c.motivo_rechazo, c.verificado_at
+               FROM ${schema}.asignia_cursos c
+               WHERE c.periodo = $1 AND c.profesor_documento = $2 AND LOWER(c.profesor_correo) = $3
+               ORDER BY c.codigo, c.grupo`,
+        values: [periodo, documento, correo],
+    }),
+    postulacionesProfesor: (periodo, documento, correo) => ({
+        text: `SELECT p.id AS postulacion_id, p.estado AS postulacion_estado, p.nombre, p.created_at AS postulado_at,
+                   ${ASIGNIA_PUBLICO}
+               FROM ${schema}.asignia_postulaciones p
+               JOIN ${schema}.asignia_cursos c ON c.id = p.curso_id
+               WHERE c.periodo = $1 AND p.documento = $2 AND LOWER(p.correo) = $3
+               ORDER BY p.created_at DESC`,
+        values: [periodo, documento, correo],
+    }),
+    responderAsignacion: (ids, documento, correo, estado, motivo) => ({
+        text: `UPDATE ${schema}.asignia_cursos SET
+                   verificacion = $4, motivo_rechazo = $5, verificado_at = NOW(), updated_at = NOW()
+               WHERE id = ANY($1::int[]) AND profesor_documento = $2 AND LOWER(profesor_correo) = $3
+                 AND verificacion = 'asignado'
+               RETURNING id, codigo, curso, grupo, profesor_nombre`,
+        values: [ids, documento, correo, estado, motivo],
+    }),
+    disponibles: (periodo, documento) => ({
+        text: `SELECT ${ASIGNIA_PUBLICO},
+                   EXISTS (SELECT 1 FROM ${schema}.asignia_postulaciones p
+                           WHERE p.curso_id = c.id AND p.documento = $2 AND p.estado = 'pendiente') AS ya_postulado
+               FROM ${schema}.asignia_cursos c
+               WHERE c.periodo = $1 AND c.verificacion IN ('vacio', 'postulado')
+               ORDER BY c.sede, c.programa, c.codigo, c.grupo`,
+        values: [periodo, documento],
+    }),
+    // Una postulación descartada (p. ej. tras liberar el curso) se puede renovar.
+    postular: (periodo, ids, documento, correo, nombre) => ({
+        text: `WITH ok AS (
+                   SELECT id FROM ${schema}.asignia_cursos
+                   WHERE id = ANY($2::int[]) AND periodo = $1 AND verificacion IN ('vacio', 'postulado')
+               ), ins AS (
+                   INSERT INTO ${schema}.asignia_postulaciones (curso_id, documento, correo, nombre)
+                   SELECT id, $3, $4, $5 FROM ok
+                   ON CONFLICT (curso_id, documento) DO UPDATE
+                       SET estado = 'pendiente', correo = EXCLUDED.correo, nombre = EXCLUDED.nombre, updated_at = NOW()
+                       WHERE ${schema}.asignia_postulaciones.estado = 'descartada'
+                   RETURNING curso_id
+               )
+               UPDATE ${schema}.asignia_cursos SET verificacion = 'postulado', updated_at = NOW()
+               WHERE id IN (SELECT curso_id FROM ins)
+               RETURNING id, codigo, curso, grupo`,
+        values: [periodo, ids, documento, correo, nombre],
+    }),
+    nombreProfesor: (documento, correo) => ({
+        text: `SELECT nombre FROM (
+                   SELECT profesor_nombre AS nombre, updated_at FROM ${schema}.asignia_cursos
+                   WHERE profesor_documento = $1 AND LOWER(profesor_correo) = $2 AND profesor_nombre <> ''
+                   UNION ALL
+                   SELECT nombre, updated_at FROM ${schema}.asignia_postulaciones
+                   WHERE documento = $1 AND LOWER(correo) = $2
+               ) t ORDER BY updated_at DESC LIMIT 1`,
+        values: [documento, correo],
+    }),
+};
+
 module.exports = {
     onixQueries,
     codexQueries,
     atomQueries,
+    asigniaQueries,
     upsertHubArchivoQuery, selectHubArchivoQuery,
     insertSicauNovedadData,
     selectSicauNovedades,
