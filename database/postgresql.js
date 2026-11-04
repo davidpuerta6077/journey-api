@@ -26,7 +26,7 @@ const {
     healthCheck, checkPermissions,
     checkSubmodulePermissions,
     updateJourneyEnrollmentData,
-    selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData, onixQueries, codexQueries, atomQueries, upsertHubArchivoQuery, selectHubArchivoQuery,
+    selectPlatformUsers, findPlatformUserByEmailOrUsername, findPlatformUserByEmail, insertPlatformUserData, onixQueries, codexQueries, atomQueries, asigniaQueries, upsertHubArchivoQuery, selectHubArchivoQuery,
     updatePlatformUserData, updatePlatformUserEstadoData, updatePlatformUserPhotoData, updatePlatformUserUsernameData,
     updatePlatformUserLastLoginData,
     selectRoles, findRoleById, insertRoleData, updateRoleData,
@@ -1743,10 +1743,33 @@ const atom = {
     statsGlobal: () => queryOne(atomQueries.statsGlobal()),
 };
 
+// ─── ASIGNIA (programación académica) ─────────────────────────────────────────
+
+const asignia = {
+    listPeriodos: () => query(asigniaQueries.periodos()),
+    getPeriodoActual: () => queryOne(asigniaQueries.periodoActual()).then((r) => r?.periodo || null),
+    listCursos: (periodo) => query(asigniaQueries.cursosPeriodo(periodo)),
+    getCurso: (id) => queryOne(asigniaQueries.curso(id)),
+    insertCursos: (periodo, filas) => query(asigniaQueries.insertCursos(periodo, JSON.stringify(filas))),
+    updateCursos: (filas) => query(asigniaQueries.updateCursos(JSON.stringify(filas))),
+    descartarPostulacionesCerradas: () => query(asigniaQueries.descartarPostulacionesCerradas()),
+    listPostulaciones: (cursoId) => query(asigniaQueries.postulacionesCurso(cursoId)),
+    getPostulacion: (id) => queryOne(asigniaQueries.postulacion(id)),
+    aprobarPostulacion: (id) => queryOne(asigniaQueries.aprobarPostulacion(id)),
+    liberarCurso: (id) => queryOne(asigniaQueries.liberarCurso(id)),
+    cursosProfesor: (periodo, doc, correo) => query(asigniaQueries.cursosProfesor(periodo, doc, correo)),
+    postulacionesProfesor: (periodo, doc, correo) => query(asigniaQueries.postulacionesProfesor(periodo, doc, correo)),
+    responderAsignacion: (ids, doc, correo, estado, motivo) => query(asigniaQueries.responderAsignacion(ids, doc, correo, estado, motivo)),
+    listDisponibles: (periodo, doc) => query(asigniaQueries.disponibles(periodo, doc)),
+    postular: (periodo, ids, doc, correo, nombre) => query(asigniaQueries.postular(periodo, ids, doc, correo, nombre)),
+    getNombreProfesor: (doc, correo) => queryOne(asigniaQueries.nombreProfesor(doc, correo)).then((r) => r?.nombre || null),
+};
+
 module.exports = {
     onix,
     codex,
     atom,
+    asignia,
     upsertHubArchivo, getHubArchivo,
     insertSicauNovedad,
     listSicauNovedades,

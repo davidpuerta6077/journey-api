@@ -22,6 +22,8 @@ const attendanceFormsPublic = require('./attendance_forms/networkPublic');
 const onixReports = require('./onix_reports/network');
 const codex = require('./codex/network');
 const atom = require('./atom/network');
+const asignia = require('./asignia/network');
+const asigniaPublic = require('./asignia/networkPublic');
 const ROOT = path.resolve(__dirname, '..');
 const swaggerUi   = require('swagger-ui-express');
 const swaggerSpec = require('../swagger');  
@@ -73,6 +75,8 @@ app.use('/f', attendanceFormsPublic);
 app.use('/onix', onixReports);
 app.use('/codex', codex);
 app.use('/atom', atom);
+app.use('/asignia', asignia);
+app.use('/asignia-publico', asigniaPublic);
 
 
 // ─── PÁGINAS ──────────────────────────────────────────────────────────────────
