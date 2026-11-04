@@ -74,6 +74,38 @@ router.post('/cargar', checkAuth, checkPermission(SUBMODULE), saveLog(SUBMODULE,
 
 /**
  * @swagger
+ * /asignia/profesores:
+ *   get: { summary: Base de profesores de Asignia, tags: [Asignia] }
+ * /asignia/profesores/cargar:
+ *   post:
+ *     summary: Cargar la base de profesores (pestaña "BD Profesores"; columnas Identificación/Documento, Profesor, Correo institucional, Vinculación). Campo "archivo"
+ *     tags: [Asignia]
+ */
+router.get('/profesores', checkAuth, checkPermission(SUBMODULE), run(() => ctrl.listarProfesores()));
+
+router.post('/profesores/cargar', checkAuth, checkPermission(SUBMODULE), saveLog(SUBMODULE, {
+    descripcion: () => 'Cargó la base de profesores en Asignia',
+    detalle: (req) => req._logResumen ? { archivo: req._logArchivo, ...req._logResumen } : null,
+}), async (req, res, next) => {
+    const archivo = req.files?.archivo;
+    try {
+        if (!archivo) throw Object.assign(new Error('Adjunta el archivo de profesores (.xlsx)'), { status: 400 });
+        if (path.extname(archivo.name || '').toLowerCase() !== '.xlsx') {
+            throw Object.assign(new Error('El archivo debe ser un Excel .xlsx'), { status: 400 });
+        }
+        const resumen = await ctrl.cargarProfesores(archivo.tempFilePath);
+        req._logArchivo = archivo.name;
+        req._logResumen = resumen;
+        response.success(req, res, resumen, 200);
+    } catch (error) {
+        next(error);
+    } finally {
+        if (archivo?.tempFilePath) fs.promises.unlink(archivo.tempFilePath).catch(() => {});
+    }
+});
+
+/**
+ * @swagger
  * /asignia/cursos/{id}/postulaciones:
  *   get: { summary: Postulaciones recibidas para un curso, tags: [Asignia] }
  * /asignia/cursos/{id}/liberar:

@@ -1762,6 +1762,9 @@ const asignia = {
     responderAsignacion: (ids, doc, correo, estado, motivo) => query(asigniaQueries.responderAsignacion(ids, doc, correo, estado, motivo)),
     listDisponibles: (periodo, doc) => query(asigniaQueries.disponibles(periodo, doc)),
     postular: (periodo, ids, doc, correo, nombre) => query(asigniaQueries.postular(periodo, ids, doc, correo, nombre)),
+    listProfesores: () => query(asigniaQueries.profesores()),
+    upsertProfesores: (filas) => query(asigniaQueries.upsertProfesores(JSON.stringify(filas))),
+    profesorConocido: (doc, correo) => queryOne(asigniaQueries.profesorConocido(doc, correo)).then((r) => Boolean(r?.conocido)),
     getNombreProfesor: (doc, correo) => queryOne(asigniaQueries.nombreProfesor(doc, correo)).then((r) => r?.nombre || null),
 };
 

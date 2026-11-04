@@ -2,7 +2,7 @@
 // asignia_manage) carga el Excel y gestiona postulaciones; el profesor (sin
 // sesión) se identifica con documento + correo institucional para aceptar o
 // rechazar sus cursos asignados y postularse a cursos vacíos.
-const { leerExcel } = require('./parser');
+const { leerExcel, leerProfesores } = require('./parser');
 
 const SUBMODULE = 'asignia_manage';
 const DOMINIO = '@pascualbravo.edu.co';
@@ -175,6 +175,19 @@ module.exports = function createController(data) {
         return { postulacion: p, curso };
     }
 
+    async function cargarProfesores(filePath) {
+        if (!filePath) throw httpError('Adjunta el archivo de profesores (.xlsx)', 400);
+        const { hoja, filas, omitidas } = await leerProfesores(filePath);
+        if (!filas.length) throw httpError('El archivo no tiene profesores con documento, nombre y correo', 400);
+        const rows = await db.upsertProfesores(filas);
+        const nuevos = rows.filter((r) => r.nuevo).length;
+        return { hoja, total: filas.length, nuevos, actualizados: filas.length - nuevos, omitidas };
+    }
+
+    async function listarProfesores() {
+        return db.listProfesores();
+    }
+
     async function liberarCurso(cursoId) {
         const curso = await db.liberarCurso(idValido(cursoId));
         if (!curso) throw httpError('No encontrado', 404);
@@ -183,8 +196,17 @@ module.exports = function createController(data) {
 
     // ── Profesor (público) ──
 
+    // Solo entra quien está en la base de profesores o en la programación.
+    async function identificar(body) {
+        const id = identidad(body);
+        if (!(await db.profesorConocido(id.documento, id.correo))) {
+            throw httpError('No encontramos un profesor con ese documento y correo. Si eres profesor de la institución, pide al líder que te registre en Asignia.', 404);
+        }
+        return id;
+    }
+
     async function consultar(body) {
-        const { documento, correo } = identidad(body);
+        const { documento, correo } = await identificar(body);
         const periodo = await periodoActual();
         if (!periodo) return { periodo: null, nombre: null, asignados: [], postulaciones: [] };
         const [asignados, postulaciones, nombre] = await Promise.all([
@@ -209,13 +231,13 @@ module.exports = function createController(data) {
     }
 
     async function disponibles(body) {
-        const { documento } = identidad(body);
+        const { documento } = await identificar(body);
         const periodo = await periodoActual();
         return { periodo, cursos: periodo ? await db.listDisponibles(periodo, documento) : [] };
     }
 
     async function postular(body) {
-        const { documento, correo } = identidad(body);
+        const { documento, correo } = await identificar(body);
         const ids = idsValidos(body.ids);
         const periodo = await periodoActual();
         if (!periodo) throw httpError('No hay programación cargada', 409);
@@ -231,6 +253,7 @@ module.exports = function createController(data) {
 
     return {
         cargar, listarCursos, listarPostulaciones, aprobarPostulacion, liberarCurso,
+        cargarProfesores, listarProfesores,
         consultar, responder, disponibles, postular,
     };
 };

@@ -2977,8 +2977,34 @@ const asigniaQueries = {
                RETURNING id, codigo, curso, grupo`,
         values: [periodo, ids, documento, correo, nombre],
     }),
+    profesores: () => ({
+        text: `SELECT id, documento, nombre, correo, vinculacion, updated_at
+               FROM ${schema}.asignia_profesores ORDER BY nombre`,
+        values: [],
+    }),
+    upsertProfesores: (filasJson) => ({
+        text: `INSERT INTO ${schema}.asignia_profesores (documento, nombre, correo, vinculacion)
+               SELECT documento, nombre, correo, vinculacion
+               FROM jsonb_to_recordset($1::jsonb) AS t(documento TEXT, nombre TEXT, correo TEXT, vinculacion TEXT)
+               ON CONFLICT (documento) DO UPDATE
+                   SET nombre = EXCLUDED.nombre, correo = EXCLUDED.correo,
+                       vinculacion = EXCLUDED.vinculacion, updated_at = NOW()
+               RETURNING (xmax = 0) AS nuevo`,
+        values: [filasJson],
+    }),
+    // ¿El profesor está en la base de profesores o tiene cursos/postulaciones?
+    profesorConocido: (documento, correo) => ({
+        text: `SELECT EXISTS (SELECT 1 FROM ${schema}.asignia_profesores WHERE documento = $1 AND LOWER(correo) = $2)
+                   OR EXISTS (SELECT 1 FROM ${schema}.asignia_cursos WHERE profesor_documento = $1 AND LOWER(profesor_correo) = $2)
+                   OR EXISTS (SELECT 1 FROM ${schema}.asignia_postulaciones WHERE documento = $1 AND LOWER(correo) = $2)
+               AS conocido`,
+        values: [documento, correo],
+    }),
     nombreProfesor: (documento, correo) => ({
         text: `SELECT nombre FROM (
+                   SELECT nombre, updated_at + INTERVAL '100 years' AS updated_at FROM ${schema}.asignia_profesores
+                   WHERE documento = $1 AND LOWER(correo) = $2
+                   UNION ALL
                    SELECT profesor_nombre AS nombre, updated_at FROM ${schema}.asignia_cursos
                    WHERE profesor_documento = $1 AND LOWER(profesor_correo) = $2 AND profesor_nombre <> ''
                    UNION ALL
