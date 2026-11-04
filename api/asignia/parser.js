@@ -145,32 +145,91 @@ function parseMatriz(matriz) {
     return { filas, omitidas };
 }
 
-// Prefiere la hoja "PROGRAMACIÓN"; si no existe, la primera con columnas Código y Curso.
-async function leerExcel(filePath) {
+async function abrirExcel(filePath) {
     const wb = new ExcelJS.Workbook();
     try {
         await wb.xlsx.readFile(filePath);
     } catch {
         throw httpError('No se pudo leer el archivo. Debe ser un Excel .xlsx', 400);
     }
-    const aMatriz = (ws) => {
-        const m = [];
-        ws.eachRow({ includeEmpty: true }, (row) => {
-            const celdas = [];
-            // Filas ocultas por filtro/ocultar en Excel no se cargan: solo lo que el usuario ve.
-            if (row.hidden) { m.push(celdas); return; }
-            for (let c = 1; c <= row.cellCount; c++) celdas.push(textoCelda(row.getCell(c).value));
-            m.push(celdas);
-        });
-        return m;
-    };
-    const hojas = [...wb.worksheets].sort((a, b) =>
-        Number(norm(b.name) === 'programacion') - Number(norm(a.name) === 'programacion'));
-    for (const ws of hojas) {
+    return wb;
+}
+
+// Hoja -> matriz de texto. Filas ocultas por filtro/ocultar en Excel no se
+// cargan (quedan vacías): solo lo que el usuario ve.
+function aMatriz(ws) {
+    const m = [];
+    ws.eachRow({ includeEmpty: true }, (row) => {
+        const celdas = [];
+        if (!row.hidden) for (let c = 1; c <= row.cellCount; c++) celdas.push(textoCelda(row.getCell(c).value));
+        m.push(celdas);
+    });
+    return m;
+}
+
+// Hojas ordenadas poniendo primero la de nombre preferido.
+const ordenarHojas = (wb, preferida) => [...wb.worksheets].sort((a, b) =>
+    Number(norm(b.name) === preferida) - Number(norm(a.name) === preferida));
+
+// Prefiere la hoja "PROGRAMACIÓN"; si no existe, la primera con columnas Código y Curso.
+async function leerExcel(filePath) {
+    const wb = await abrirExcel(filePath);
+    for (const ws of ordenarHojas(wb, 'programacion')) {
         const m = aMatriz(ws);
         if (ubicarEncabezado(m) >= 0) return { hoja: ws.name, ...parseMatriz(m) };
     }
     throw httpError('Ninguna hoja del archivo tiene las columnas "Código" y "Curso"', 400);
 }
 
-module.exports = { parseMatriz, parseDia, leerExcel };
+// ── Base de profesores (pestaña "BD Profesores") ──
+const COLUMNAS_PROF = {
+    documento: ['identificacion', 'documento', 'cedula', 'numero de documento'],
+    nombre: ['profesor', 'nombre', 'docente', 'nombre completo'],
+    correo: ['correo institucional', 'emailinstitucional', 'correo'],
+    vinculacion: ['vinculacion', 'tipo de vinculacion'],
+};
+
+function encabezadoProfesores(matriz) {
+    for (let i = 0; i < Math.min(matriz.length, 15); i++) {
+        const fila = matriz[i].map(norm);
+        if (COLUMNAS_PROF.documento.some((n) => fila.includes(n)) && COLUMNAS_PROF.nombre.some((n) => fila.includes(n))) return i;
+    }
+    return -1;
+}
+
+function parseProfesores(matriz) {
+    const h = encabezadoProfesores(matriz);
+    if (h < 0) throw httpError('No se encontró la fila de encabezados (debe tener "Documento" y "Profesor")', 400);
+    const enc = matriz[h].map(norm);
+    const idx = {};
+    for (const [campo, nombres] of Object.entries(COLUMNAS_PROF)) {
+        const i = enc.findIndex((e) => nombres.includes(e));
+        if (i >= 0) idx[campo] = i;
+    }
+    if (idx.correo === undefined) throw httpError('Al archivo le falta la columna Correo Institucional', 400);
+
+    const porDoc = new Map();
+    let omitidas = 0;
+    for (const celdas of matriz.slice(h + 1)) {
+        if (!celdas.some((c) => String(c ?? '').trim())) continue;
+        const v = (campo) => (idx[campo] === undefined ? '' : String(celdas[idx[campo]] ?? '').trim());
+        const documento = v('documento').replace(/\D/g, '');
+        const nombre = v('nombre').replace(/\s+/g, ' ');
+        const correo = v('correo').toLowerCase();
+        if (documento.length < 5 || !nombre || !correo.includes('@')) { omitidas++; continue; }
+        porDoc.set(documento, { documento, nombre, correo, vinculacion: v('vinculacion') });
+    }
+    return { filas: [...porDoc.values()], omitidas };
+}
+
+// Prefiere la hoja "BD Profesores"; si no existe, la primera con Documento y Profesor.
+async function leerProfesores(filePath) {
+    const wb = await abrirExcel(filePath);
+    for (const ws of ordenarHojas(wb, 'bd profesores')) {
+        const m = aMatriz(ws);
+        if (encabezadoProfesores(m) >= 0) return { hoja: ws.name, ...parseProfesores(m) };
+    }
+    throw httpError('Ninguna hoja del archivo tiene las columnas "Documento" y "Profesor"', 400);
+}
+
+module.exports = { parseMatriz, parseDia, leerExcel, parseProfesores, leerProfesores };

@@ -74,6 +74,20 @@ async function main() {
         ON ${schema}.asignia_postulaciones (curso_id, documento)
     `);
 
+    // Base de profesores (pestaña "BD Profesores"): permite entrar a la pantalla
+    // pública a profesores que no tienen cursos en la programación.
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS ${schema}.asignia_profesores (
+            id          SERIAL PRIMARY KEY,
+            documento   TEXT NOT NULL UNIQUE,
+            nombre      TEXT NOT NULL,
+            correo      TEXT NOT NULL DEFAULT '',
+            vinculacion TEXT NOT NULL DEFAULT '',
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+
     console.log(`Tablas de Asignia listas en schema '${schema}'.`);
 }
 

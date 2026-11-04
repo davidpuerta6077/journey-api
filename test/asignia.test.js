@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseMatriz, parseDia } = require('../api/asignia/parser');
+const { parseMatriz, parseDia, parseProfesores } = require('../api/asignia/parser');
 const createController = require('../api/asignia/controller');
 const { planCarga } = createController;
 
@@ -94,6 +94,7 @@ function setup() {
             cursosProfesor: async () => [],
             postulacionesProfesor: async () => [],
             getNombreProfesor: async (doc) => (doc === '111111' ? 'ANA' : null),
+            profesorConocido: async (doc) => doc !== '404040',
             responderAsignacion: async (ids, doc, correo, estado, motivo) => {
                 st.llamadas.push({ ids, doc, correo, estado, motivo });
                 return ids.filter((i) => i < 100).map((id) => ({ id, codigo: 'C' + id, curso: 'X', grupo: '1', profesor_nombre: 'ANA' }));
@@ -115,6 +116,22 @@ test('identidad pública: documento numérico y correo institucional obligatorio
     const r = await ctrl.consultar({ documento: '111.111', correo: ' ANA@pascualbravo.edu.co ' });
     assert.strictEqual(r.nombre, 'ANA');
     assert.strictEqual(r.periodo, '2027-1');
+    // Quien no está en la base de profesores ni en la programación no entra.
+    await assert.rejects(ctrl.consultar({ documento: '404040', correo: 'x@pascualbravo.edu.co' }), no(404));
+    await assert.rejects(ctrl.postular({ documento: '404040', correo: 'x@pascualbravo.edu.co', ids: [1], nombre: 'X' }), no(404));
+});
+
+test('base de profesores: el parser toma Identificación, Profesor y Correo institucional, sin duplicados', () => {
+    const r = parseProfesores([
+        ['', 'Contrato', 'Vinculación', 'Identificación', 'Profesor', 'Correo personal', 'Correo institucional'],
+        ['', '', 'Carrera', '71.366.810', 'ANA  PÉREZ', 'a@gmail.com', 'ANA@pascualbravo.edu.co'],
+        ['', '', 'Cátedra', '71366810', 'ANA PÉREZ', '', 'ana@pascualbravo.edu.co'],
+        ['', '', '', '123', 'SIN DOC', '', 'x@pascualbravo.edu.co'],
+        ['', '', '', '', '', '', ''],
+    ]);
+    assert.strictEqual(r.filas.length, 1);
+    assert.deepStrictEqual(r.filas[0], { documento: '71366810', nombre: 'ANA PÉREZ', correo: 'ana@pascualbravo.edu.co', vinculacion: 'Cátedra' });
+    assert.strictEqual(r.omitidas, 1);
 });
 
 test('responder: normaliza identidad, guarda motivo solo al rechazar, 409 si nada cambió, deja log', async () => {
