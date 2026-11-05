@@ -423,6 +423,11 @@ const updateCourseMoodleId = (id, moodleId) => ({
     values: [moodleId, id]
 });
 
+const findCourseByMoodleIdQuery = (moodleId) => ({
+    text: `SELECT * FROM ${schema}.courses WHERE moodle_id = $1 LIMIT 1`,
+    values: [moodleId]
+});
+
 const findCourseByIdnumber = (idnumber) => ({
     text: `SELECT * FROM ${schema}.courses WHERE idnumber = $1 LIMIT 1`,
     values: [idnumber]
@@ -984,10 +989,11 @@ const checkSubmodulePermissions = (email, submoduleCode) => ({
         JOIN ${schema}.roles r ON r.id = u.role_id
         JOIN ${schema}.role_permissions rp ON rp.role_id = r.id
         JOIN ${schema}.submodules s ON s.id = rp.submodule_id
-        WHERE u.email = $1 AND s.code = $2
+        WHERE u.email = $1 AND s.code = ANY($2::text[])
         LIMIT 1;
       `,
-    values: [email, submoduleCode]
+    // submoduleCode: un código o una lista (basta con tener uno de ellos).
+    values: [email, [].concat(submoduleCode)]
 });
 
 
@@ -2884,6 +2890,15 @@ const asigniaQueries = {
                WHERE p.id = $1`,
         values: [id],
     }),
+    // Bloquea el curso de una postulación hasta el fin de la transacción
+    // (ver asignia.aprobarPostulacion/rechazarPostulacion en postgresql.js).
+    bloquearCursoDePostulacion: (id) => ({
+        text: `SELECT c.id FROM ${schema}.asignia_cursos c
+               JOIN ${schema}.asignia_postulaciones p ON p.curso_id = c.id
+               WHERE p.id = $1
+               FOR UPDATE OF c`,
+        values: [id],
+    }),
     // Aprobar: el postulante queda como profesor con el curso "aceptado" y el
     // resto de postulaciones pendientes de ese curso se descartan. Solo aplica
     // si la postulación sigue pendiente y el curso sigue abierto.
@@ -2906,6 +2921,65 @@ const asigniaQueries = {
                    WHERE curso_id IN (SELECT id FROM c) AND estado = 'pendiente' AND id <> $1
                )
                SELECT * FROM c`,
+        values: [id],
+    }),
+    // Rechazar: la postulación queda 'rechazada'. Si era la última pendiente, el
+    // curso vuelve de "postulado" a "vacio". (El CTE ve el estado previo, por eso id <> $1.)
+    rechazarPostulacion: (id) => ({
+        text: `WITH p AS (
+                   UPDATE ${schema}.asignia_postulaciones SET estado = 'rechazada', updated_at = NOW()
+                   WHERE id = $1 AND estado = 'pendiente'
+                   RETURNING *
+               ), c AS (
+                   UPDATE ${schema}.asignia_cursos c SET verificacion = 'vacio', updated_at = NOW()
+                   FROM p WHERE c.id = p.curso_id AND c.verificacion = 'postulado'
+                     AND NOT EXISTS (SELECT 1 FROM ${schema}.asignia_postulaciones o
+                                     WHERE o.curso_id = p.curso_id AND o.estado = 'pendiente' AND o.id <> $1)
+               )
+               SELECT * FROM p`,
+        values: [id],
+    }),
+    bloquearCurso: (id) => ({
+        text: `SELECT id FROM ${schema}.asignia_cursos WHERE id = $1 FOR UPDATE`,
+        values: [id],
+    }),
+    // Alta manual de un curso (mismos campos que la carga por Excel).
+    crearCurso: (periodo, f) => ({
+        text: `INSERT INTO ${schema}.asignia_cursos (periodo, ${ASIGNIA_CAMPOS_CURSO}, verificacion)
+               SELECT $1, ${ASIGNIA_CAMPOS_CURSO}, verificacion
+               FROM jsonb_to_record($2::jsonb) AS d(${ASIGNIA_RECORDSET})
+               RETURNING *`,
+        values: [periodo, JSON.stringify(f)],
+    }),
+    // Edición manual. Si cambió el profesor (reset) se limpian motivo/fecha de
+    // verificación; si el curso deja de estar abierto, sus postulaciones
+    // pendientes se descartan (igual que al aprobar o recargar el Excel).
+    actualizarCurso: (id, f, reset) => ({
+        text: `WITH c AS (
+                   UPDATE ${schema}.asignia_cursos c SET
+                       sede = d.sede, programa = d.programa, plan = d.plan, nivel = d.nivel,
+                       codigo = d.codigo, curso = d.curso, grupo = d.grupo, agrupamiento = d.agrupamiento,
+                       creditos = d.creditos, horas_semana = d.horas_semana, espacio = d.espacio,
+                       jornada = d.jornada, horario = d.horario, profesor_nombre = d.profesor_nombre,
+                       profesor_documento = d.profesor_documento, profesor_correo = d.profesor_correo,
+                       vinculacion = d.vinculacion, verificacion = d.verificacion,
+                       motivo_rechazo = CASE WHEN $3 THEN NULL ELSE c.motivo_rechazo END,
+                       verificado_at = CASE WHEN $3 THEN NULL ELSE c.verificado_at END,
+                       updated_at = NOW()
+                   FROM jsonb_to_record($2::jsonb) AS d(${ASIGNIA_RECORDSET})
+                   WHERE c.id = $1
+                   RETURNING c.*
+               ), p AS (
+                   UPDATE ${schema}.asignia_postulaciones SET estado = 'descartada', updated_at = NOW()
+                   WHERE curso_id IN (SELECT id FROM c WHERE verificacion NOT IN ('vacio', 'postulado'))
+                     AND estado = 'pendiente'
+               )
+               SELECT * FROM c`,
+        values: [id, JSON.stringify(f), reset],
+    }),
+    // Borra el curso; sus postulaciones se van por ON DELETE CASCADE.
+    borrarCurso: (id) => ({
+        text: `DELETE FROM ${schema}.asignia_cursos WHERE id = $1 RETURNING *`,
         values: [id],
     }),
     // Liberar: el curso vuelve a "vacio" sin profesor y se descartan sus pendientes.
@@ -2953,17 +3027,21 @@ const asigniaQueries = {
     disponibles: (periodo, documento) => ({
         text: `SELECT ${ASIGNIA_PUBLICO},
                    EXISTS (SELECT 1 FROM ${schema}.asignia_postulaciones p
-                           WHERE p.curso_id = c.id AND p.documento = $2 AND p.estado = 'pendiente') AS ya_postulado
+                           WHERE p.curso_id = c.id AND p.documento = $2 AND p.estado IN ('pendiente', 'rechazada')) AS ya_postulado
                FROM ${schema}.asignia_cursos c
                WHERE c.periodo = $1 AND c.verificacion IN ('vacio', 'postulado')
                ORDER BY c.sede, c.programa, c.codigo, c.grupo`,
         values: [periodo, documento],
     }),
     // Una postulación descartada (p. ej. tras liberar el curso) se puede renovar.
+    // FOR UPDATE: si el líder está aprobando ese curso, espera y vuelve a revisar
+    // que siga abierto (no queda una postulación pendiente en un curso ya asignado).
     postular: (periodo, ids, documento, correo, nombre) => ({
         text: `WITH ok AS (
                    SELECT id FROM ${schema}.asignia_cursos
                    WHERE id = ANY($2::int[]) AND periodo = $1 AND verificacion IN ('vacio', 'postulado')
+                   ORDER BY id
+                   FOR UPDATE
                ), ins AS (
                    INSERT INTO ${schema}.asignia_postulaciones (curso_id, documento, correo, nombre)
                    SELECT id, $3, $4, $5 FROM ok
@@ -2991,6 +3069,26 @@ const asigniaQueries = {
                        vinculacion = EXCLUDED.vinculacion, updated_at = NOW()
                RETURNING (xmax = 0) AS nuevo`,
         values: [filasJson],
+    }),
+    profesor: (id) => ({
+        text: `SELECT * FROM ${schema}.asignia_profesores WHERE id = $1`,
+        values: [id],
+    }),
+    crearProfesor: (p) => ({
+        text: `INSERT INTO ${schema}.asignia_profesores (documento, nombre, correo, vinculacion)
+               VALUES ($1, $2, $3, $4) RETURNING *`,
+        values: [p.documento, p.nombre, p.correo, p.vinculacion],
+    }),
+    actualizarProfesor: (id, p) => ({
+        text: `UPDATE ${schema}.asignia_profesores
+               SET documento = $2, nombre = $3, correo = $4, vinculacion = $5, updated_at = NOW()
+               WHERE id = $1 RETURNING *`,
+        values: [id, p.documento, p.nombre, p.correo, p.vinculacion],
+    }),
+    // Solo quita al profesor de la base; sus cursos y postulaciones no se tocan.
+    borrarProfesor: (id) => ({
+        text: `DELETE FROM ${schema}.asignia_profesores WHERE id = $1 RETURNING *`,
+        values: [id],
     }),
     // ¿El profesor está en la base de profesores o tiene cursos/postulaciones?
     profesorConocido: (documento, correo) => ({
@@ -3069,6 +3167,7 @@ module.exports = {
     updateCourseData,
     updateCourseMoodleId,
     findCourseByIdnumber,
+    findCourseByMoodleIdQuery,
     findCourseByAsignaturaDocumento,
     findCourseByAsignaturaNombreProfesor,
     updateCourseSyncStatusQuery,

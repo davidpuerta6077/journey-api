@@ -131,6 +131,17 @@ function normalizeEnrollment(e) {
   };
 }
 
+// SICAU manda el grupo como número plano (ej. "105"), pero el código de curso
+// journey siempre debe llevar la "G" al frente (ej. "G105") para que el
+// idnumber/codigo_journey quede como FB001020261G105. Si ya viene con G
+// (mayúscula o minúscula) no se duplica.
+function normalizeGrupo(grupo) {
+  if (grupo === null || grupo === undefined) return grupo;
+  const g = String(grupo).trim();
+  if (!g) return g;
+  return /^G/i.test(g) ? `G${g.slice(1)}` : `G${g}`;
+}
+
 // Arma fullname/shortname con el mismo formato que usa la ingesta de SICAU, a
 // partir de piezas ya normalizadas (grupo ya con el prefijo "G", nombre de
 // asignatura y nombre_profesor ya en Title Case). Se usa tanto al recibir un
@@ -179,6 +190,7 @@ module.exports = {
   normalizeEnrollment,
   normalizeEstado,
   buildCourseNames,
+  normalizeGrupo,
   splitNombreCompleto,
   difiere,
 };

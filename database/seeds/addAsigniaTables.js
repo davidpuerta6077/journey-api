@@ -55,7 +55,7 @@ async function main() {
         ON ${schema}.asignia_cursos (profesor_documento)
     `);
 
-    // estado: pendiente | aprobada | descartada
+    // estado: pendiente | aprobada | descartada | rechazada
     await pool.query(`
         CREATE TABLE IF NOT EXISTS ${schema}.asignia_postulaciones (
             id          SERIAL PRIMARY KEY,
@@ -68,6 +68,12 @@ async function main() {
             created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
+    `);
+    // 'rechazada': el líder rechazó la postulación (agregado después de crear la tabla).
+    await pool.query(`
+        ALTER TABLE ${schema}.asignia_postulaciones DROP CONSTRAINT IF EXISTS asignia_postulaciones_estado_check;
+        ALTER TABLE ${schema}.asignia_postulaciones ADD CONSTRAINT asignia_postulaciones_estado_check
+            CHECK (estado IN ('pendiente', 'aprobada', 'descartada', 'rechazada'));
     `);
     await pool.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS asignia_postulaciones_curso_doc_idx

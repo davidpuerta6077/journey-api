@@ -13,7 +13,7 @@ const {
     updateUserSyncStatusQuery, updateUserUnsyncQuery,selectEnrollmentsByUserId,
     updateUserPassword,
     selectAllCourses, selectCoursesForSync, selectDistinctAsignaturas, insertCourseData, updateCourseData,
-    updateCourseMoodleId, findCourseByIdnumber, findCourseByAsignaturaDocumento, findCourseByAsignaturaNombreProfesor,
+    updateCourseMoodleId, findCourseByIdnumber, findCourseByMoodleIdQuery, findCourseByAsignaturaDocumento, findCourseByAsignaturaNombreProfesor,
     updateCourseSyncStatusQuery, updateCourseSyncingQuery, updateCourseSyncErrorQuery,
     updateCourseFromSicauQuery,
     selectAllEnrollments, selectEnrollmentsForSync, insertEnrollmentData,
@@ -101,6 +101,23 @@ function query(queryConfig) {
             resolve(data.rows);
         });
     });
+}
+
+// Corre fn(q) dentro de BEGIN/COMMIT con un mismo cliente; q(queryConfig) -> rows.
+// Si algo falla hace ROLLBACK y relanza el error.
+async function enTransaccion(fn) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const r = await fn((q) => client.query(q).then((d) => d.rows));
+        await client.query('COMMIT');
+        return r;
+    } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+    } finally {
+        client.release();
+    }
 }
 
 // ─── USERS ────────────────────────────────────────────────────────────────────
@@ -377,6 +394,10 @@ function findCourseByNombreProfesor(codigoAsignatura, periodo, nombreProfesor, g
             resolve(data.rows);
         });
     });
+}
+
+function findCourseByMoodleId(moodleId) {
+    return query(findCourseByMoodleIdQuery(moodleId));
 }
 
 function updateCourseSyncStatus(id, statusValue) {
@@ -1755,7 +1776,17 @@ const asignia = {
     descartarPostulacionesCerradas: () => query(asigniaQueries.descartarPostulacionesCerradas()),
     listPostulaciones: (cursoId) => query(asigniaQueries.postulacionesCurso(cursoId)),
     getPostulacion: (id) => queryOne(asigniaQueries.postulacion(id)),
-    aprobarPostulacion: (id) => queryOne(asigniaQueries.aprobarPostulacion(id)),
+    // Aprobar y rechazar bloquean primero la fila del curso: dos decisiones (o una
+    // decisión y una postulación nueva) sobre el mismo curso se ejecutan en fila y
+    // la segunda ve el resultado de la primera.
+    aprobarPostulacion: (id) => enTransaccion(async (q) => {
+        await q(asigniaQueries.bloquearCursoDePostulacion(id));
+        return (await q(asigniaQueries.aprobarPostulacion(id)))[0] || null;
+    }),
+    rechazarPostulacion: (id) => enTransaccion(async (q) => {
+        await q(asigniaQueries.bloquearCursoDePostulacion(id));
+        return (await q(asigniaQueries.rechazarPostulacion(id)))[0] || null;
+    }),
     liberarCurso: (id) => queryOne(asigniaQueries.liberarCurso(id)),
     cursosProfesor: (periodo, doc, correo) => query(asigniaQueries.cursosProfesor(periodo, doc, correo)),
     postulacionesProfesor: (periodo, doc, correo) => query(asigniaQueries.postulacionesProfesor(periodo, doc, correo)),
@@ -1763,6 +1794,17 @@ const asignia = {
     listDisponibles: (periodo, doc) => query(asigniaQueries.disponibles(periodo, doc)),
     postular: (periodo, ids, doc, correo, nombre) => query(asigniaQueries.postular(periodo, ids, doc, correo, nombre)),
     listProfesores: () => query(asigniaQueries.profesores()),
+    crearCurso: (periodo, f) => queryOne(asigniaQueries.crearCurso(periodo, f)),
+    // Bloquea el curso para que una aprobación/postulación simultánea no se cruce con la edición.
+    actualizarCurso: (id, f, reset) => enTransaccion(async (q) => {
+        await q(asigniaQueries.bloquearCurso(id));
+        return (await q(asigniaQueries.actualizarCurso(id, f, reset)))[0] || null;
+    }),
+    borrarCurso: (id) => queryOne(asigniaQueries.borrarCurso(id)),
+    getProfesor: (id) => queryOne(asigniaQueries.profesor(id)),
+    crearProfesor: (p) => queryOne(asigniaQueries.crearProfesor(p)),
+    actualizarProfesor: (id, p) => queryOne(asigniaQueries.actualizarProfesor(id, p)),
+    borrarProfesor: (id) => queryOne(asigniaQueries.borrarProfesor(id)),
     upsertProfesores: (filas) => query(asigniaQueries.upsertProfesores(JSON.stringify(filas))),
     profesorConocido: (doc, correo) => queryOne(asigniaQueries.profesorConocido(doc, correo)).then((r) => Boolean(r?.conocido)),
     getNombreProfesor: (doc, correo) => queryOne(asigniaQueries.nombreProfesor(doc, correo)).then((r) => r?.nombre || null),
@@ -1804,6 +1846,7 @@ module.exports = {
     getDistinctAsignaturas,
     setCourseMoodleId,
     findCourseSicau,
+    findCourseByMoodleId,
     findCourseByDocente,
     findCourseByNombreProfesor,
     updateCourseSyncStatus,

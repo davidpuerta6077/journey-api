@@ -15,8 +15,12 @@ const pool = new Pool({
 const schema = config.postgresql.schema;
 
 const MODULE = { code: 'asignia', name: 'Asignia' };
+// asignia_view: solo consulta. asignia_load: consulta + carga de Excel.
+// asignia_manage: todo (incluye asignar, rechazar y liberar cursos).
 const SUBMODULES = [
-    { code: 'asignia_manage', name: 'Asignia - Gestión de la programación' },
+    { code: 'asignia_manage', name: 'Asignia - Gestión completa (ver, cargar, asignar y rechazar)' },
+    { code: 'asignia_load', name: 'Asignia - Carga de datos (ver y cargar Excel)' },
+    { code: 'asignia_view', name: 'Asignia - Solo consulta' },
 ];
 const GRANTED_ROLE_NAME = 'superadmin';
 
@@ -43,6 +47,8 @@ async function ensureSubmodule(moduleId, submodule) {
         [submodule.code]
     );
     if (existing.rows.length > 0) {
+        // Mantiene el nombre al día (se ve en Administrador > Permisos).
+        await pool.query(`UPDATE ${schema}.submodules SET name = $2 WHERE id = $1`, [existing.rows[0].id, submodule.name]);
         console.log(`  Submódulo '${submodule.code}' ya existe (id=${existing.rows[0].id})`);
         return existing.rows[0].id;
     }
