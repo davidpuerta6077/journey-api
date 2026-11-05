@@ -6,6 +6,9 @@ const { moodleRequest } = require('../../services/moodleService');
 const syncService = require('../../services/syncService');
 const { applyCourseRule } = require('../../services/sync/applyCourseRule');
 const { createCourseManually } = require('../../services/sync/createCourseManually');
+const { procesarExcelCursos } = require('../../services/sync/bulkCourses');
+const path = require('path');
+const fs = require('fs');
 const checkAuth = require('../../middleware/checkAuth');
 const checkPermission = require('../../middleware/checkPermissions');
 const saveLog = require('../../middleware/saveLog');
@@ -654,6 +657,58 @@ router.post('/apply_rule', checkAuth, checkPermission("sync_courses"), saveLog("
         response.success(req, res, result, 200);
     } catch (error) {
         next(error);
+    }
+});
+
+// ─── CARGA MASIVA DE CURSOS ───────────────────────────────────────────────────
+// Crea cursos nuevos (pendientes de Sync) o migra cursos que ya existen en
+// Moodle sin duplicarlos (ver services/sync/bulkCourses.js).
+
+const UPLOAD_DIR = path.join(__dirname, '../../uploads');
+
+/**
+ * @swagger
+ * /courses/upload-excel:
+ *   post: { summary: Subir el Excel de carga masiva de cursos (campo "excel"), tags: [Courses] }
+ * /courses/process-excel:
+ *   post: { summary: "Procesar el Excel de cursos ({ filePath }): crea los nuevos y migra los que ya existen en Moodle", tags: [Courses] }
+ */
+router.post('/upload-excel', checkAuth, checkPermission('upload_excel_courses'), async (req, res) => {
+    const excel = req.files?.excel;
+    if (!excel) return response.error(req, res, 'No se recibió ningún archivo.', 400);
+    if (!/\.xlsx$/i.test(excel.name)) return response.error(req, res, 'El archivo debe ser .xlsx', 400);
+    try {
+        if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+        const filePath = path.join(UPLOAD_DIR, `cursos_${Date.now()}_${path.basename(excel.name)}`);
+        await excel.mv(filePath);
+        response.success(req, res, { filePath }, 200);
+    } catch (err) {
+        response.error(req, res, 'Error al subir el archivo.', 500);
+    }
+});
+
+router.post('/process-excel', checkAuth, checkPermission('process_excel_courses'), saveLog('process_excel_courses', {
+    descripcion: (req) => req._logCarga
+        ? `Procesó carga masiva de cursos: ${req._logCarga.creados} creado(s), ${req._logCarga.migrados} migrado(s), ${req._logCarga.errorCount} con error`
+        : `Procesó carga masiva de cursos desde "${path.basename(req.body?.filePath || '—')}"`,
+    detalle: (req) => req._logCarga
+        ? req._logCarga.detalle.map((d) => ({ archivo: path.basename(req.body.filePath), ...d }))
+        : [{ archivo: path.basename(req.body?.filePath || '—') }],
+}), async (req, res) => {
+    const filePath = req.body?.filePath ? path.resolve(req.body.filePath) : null;
+    // Solo se procesan archivos subidos por /upload-excel (nada fuera de uploads/).
+    if (!filePath || !filePath.startsWith(path.resolve(UPLOAD_DIR) + path.sep) || !fs.existsSync(filePath)) {
+        return response.error(req, res, 'Archivo no válido o ya procesado. Vuelve a cargarlo.', 400);
+    }
+    try {
+        const result = await procesarExcelCursos(filePath);
+        req._logCarga = result;
+        const { detalle, ...resumen } = result;
+        response.success(req, res, resumen, 200);
+    } catch (error) {
+        response.error(req, res, `Error procesando cursos: ${error.message}`, 500);
+    } finally {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 });
 

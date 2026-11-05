@@ -1,4 +1,4 @@
-const { normalizeCourse, buildCourseNames, cleanSpaces, normalizeEmail, normalizeUser, splitNombreCompleto, normalizeEstado } = require('../../services/normalize');
+const { normalizeCourse, buildCourseNames, normalizeGrupo, cleanSpaces, normalizeEmail, normalizeUser, splitNombreCompleto, normalizeEstado } = require('../../services/normalize');
 const { getDominioCorreoPermitido, emailTieneDominio } = require('../../services/emailDomain');
 const enrollmentsCtrl = require('../enrollments/index');
 
@@ -17,16 +17,7 @@ const CAMPOS_NOVEDAD = [
     'fecha_nacimiento', 'jornada', 'departamento_academico', 'plan_estudios', 'city', 'estado'
 ];
 
-// SICAU manda el grupo como número plano (ej. "105"), pero el código de curso
-// journey siempre debe llevar la "G" al frente (ej. "G105") para que el
-// idnumber/codigo_journey quede como FB001020261G105. Si ya viene con G
-// (mayúscula o minúscula) no se duplica.
-function normalizeGrupo(grupo) {
-    if (grupo === null || grupo === undefined) return grupo;
-    const g = String(grupo).trim();
-    if (!g) return g;
-    return /^G/i.test(g) ? `G${g.slice(1)}` : `G${g}`;
-}
+// normalizeGrupo vive en services/normalize.js (también lo usa la carga masiva de cursos).
 
 module.exports = (injectedDB) => {
     let data = injectedDB;

@@ -1,5 +1,6 @@
 const postgresql = require('../database/postgresql');
 
+// submoduleCode: un código o una lista de códigos (basta con tener uno).
 function checkPermission(submoduleCode) {
   console.log("Submodule code:", submoduleCode);
   return async (req, res, next) => {
@@ -8,7 +9,8 @@ function checkPermission(submoduleCode) {
       console.log("Email del usuario:", email);
       const result = await postgresql.checkSubmodulesPermissionsData(email, submoduleCode);
 
-      if (result[0]['?column?'] === 0) {
+      // Sin fila = el rol no tiene ninguno de los submódulos pedidos.
+      if (!result.length) {
         return res.status(403).json({ message: "No tienes permiso para este recurso" });
       }
 

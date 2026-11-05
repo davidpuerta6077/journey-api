@@ -175,6 +175,14 @@ module.exports = function createController(data) {
         return { postulacion: p, curso };
     }
 
+    async function rechazarPostulacion(postulacionId) {
+        const p = await db.getPostulacion(idValido(postulacionId));
+        if (!p) throw httpError('No encontrado', 404);
+        const r = await db.rechazarPostulacion(p.id);
+        if (!r) throw httpError('La postulación ya no está pendiente', 409);
+        return p;
+    }
+
     async function cargarProfesores(filePath) {
         if (!filePath) throw httpError('Adjunta el archivo de profesores (.xlsx)', 400);
         const { hoja, filas, omitidas } = await leerProfesores(filePath);
@@ -186,6 +194,113 @@ module.exports = function createController(data) {
 
     async function listarProfesores() {
         return db.listProfesores();
+    }
+
+    // Mismas reglas de limpieza que la carga por Excel (parser.parseProfesores).
+    function datosProfesor(body = {}) {
+        const p = {
+            documento: String(body.documento ?? '').replace(/\D/g, ''),
+            nombre: String(body.nombre ?? '').replace(/\s+/g, ' ').trim().slice(0, 150),
+            correo: String(body.correo ?? '').trim().toLowerCase().slice(0, 150),
+            vinculacion: String(body.vinculacion ?? '').replace(/\s+/g, ' ').trim().slice(0, 100),
+        };
+        if (p.documento.length < 5 || p.documento.length > 15) throw httpError('El documento debe tener entre 5 y 15 dígitos', 400);
+        if (!p.nombre) throw httpError('Escribe el nombre del profesor', 400);
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.correo)) throw httpError('Escribe un correo válido', 400);
+        return p;
+    }
+
+    const dupProfesor = (err) => {
+        if (err.code === '23505') throw httpError('Ya existe un profesor con ese documento', 409);
+        throw err;
+    };
+
+    async function crearProfesor(body) {
+        return db.crearProfesor(datosProfesor(body)).catch(dupProfesor);
+    }
+
+    async function actualizarProfesor(id, body) {
+        const antes = await db.getProfesor(idValido(id));
+        if (!antes) throw httpError('No encontrado', 404);
+        const despues = await db.actualizarProfesor(antes.id, datosProfesor(body)).catch(dupProfesor);
+        return { antes, despues };
+    }
+
+    async function borrarProfesor(id) {
+        const p = await db.borrarProfesor(idValido(id));
+        if (!p) throw httpError('No encontrado', 404);
+        return p;
+    }
+
+    // ── Alta / edición / borrado manual de cursos de la programación ──
+    const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    const txt = (v, max = 200) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+
+    function datosCurso(body = {}) {
+        const f = {};
+        for (const k of ['sede', 'programa', 'plan', 'nivel', 'codigo', 'curso', 'grupo', 'agrupamiento',
+            'creditos', 'horas_semana', 'espacio', 'jornada', 'vinculacion']) f[k] = txt(body[k]);
+        f.codigo = f.codigo.toUpperCase();
+        if (!f.codigo) throw httpError('Escribe el código del curso', 400);
+        if (!f.curso) throw httpError('Escribe el nombre del curso', 400);
+
+        const horario = Array.isArray(body.horario) ? body.horario.slice(0, 14) : [];
+        f.horario = horario
+            .map((h) => ({ dia: txt(h?.dia, 20), hora: txt(h?.hora, 40), aula: txt(h?.aula, 60) }))
+            .filter((h) => h.dia || h.hora || h.aula);
+        if (f.horario.some((h) => !DIAS.includes(h.dia) || !h.hora)) {
+            throw httpError('Cada franja del horario necesita día y hora', 400);
+        }
+
+        f.profesor_nombre = txt(body.profesor_nombre, 150);
+        f.profesor_documento = String(body.profesor_documento ?? '').replace(/\D/g, '');
+        f.profesor_correo = txt(body.profesor_correo, 150).toLowerCase();
+        if (f.profesor_nombre) {
+            if (f.profesor_documento.length < 5 || f.profesor_documento.length > 15) {
+                throw httpError('El documento del profesor debe tener entre 5 y 15 dígitos', 400);
+            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.profesor_correo)) throw httpError('Escribe un correo válido para el profesor', 400);
+        } else {
+            f.profesor_documento = ''; f.profesor_correo = ''; f.vinculacion = '';
+        }
+        return f;
+    }
+
+    const dupCurso = (err) => {
+        if (err.code === '23505') {
+            throw httpError('Ya existe en ese periodo un curso con la misma sede, programa, plan, código, grupo, agrupamiento y jornada', 409);
+        }
+        throw err;
+    };
+
+    async function crearCurso(body = {}) {
+        const periodo = periodoValido(body.periodo);
+        const f = datosCurso(body);
+        f.verificacion = f.profesor_nombre ? 'asignado' : 'vacio';
+        return db.crearCurso(periodo, f).catch(dupCurso);
+    }
+
+    // Misma regla que recargar el Excel: si el profesor no cambió se conserva el
+    // estado (aceptado/rechazado/asignado/postulado); si cambió, queda "asignado"
+    // (o "vacio" si se quitó) y se limpia la verificación anterior.
+    async function actualizarCurso(id, body) {
+        const antes = await db.getCurso(idValido(id));
+        if (!antes) throw httpError('No encontrado', 404);
+        const f = datosCurso(body);
+        const mismoProfesor = f.profesor_nombre === antes.profesor_nombre
+            && f.profesor_documento === antes.profesor_documento
+            && f.profesor_correo === antes.profesor_correo;
+        const reset = !mismoProfesor;
+        f.verificacion = mismoProfesor ? antes.verificacion : (f.profesor_nombre ? 'asignado' : 'vacio');
+        const despues = await db.actualizarCurso(antes.id, f, reset).catch(dupCurso);
+        if (!despues) throw httpError('No encontrado', 404);
+        return { antes, despues };
+    }
+
+    async function borrarCurso(id) {
+        const c = await db.borrarCurso(idValido(id));
+        if (!c) throw httpError('No encontrado', 404);
+        return c;
     }
 
     async function liberarCurso(cursoId) {
@@ -252,8 +367,9 @@ module.exports = function createController(data) {
     }
 
     return {
-        cargar, listarCursos, listarPostulaciones, aprobarPostulacion, liberarCurso,
-        cargarProfesores, listarProfesores,
+        cargar, listarCursos, listarPostulaciones, aprobarPostulacion, rechazarPostulacion, liberarCurso,
+        cargarProfesores, listarProfesores, crearProfesor, actualizarProfesor, borrarProfesor,
+        crearCurso, actualizarCurso, borrarCurso,
         consultar, responder, disponibles, postular,
     };
 };
